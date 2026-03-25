@@ -1,0 +1,68 @@
+export type WorkspaceRow = { id: string; name: string; slug: string; created_at: string }
+export type InstanceRow = {
+    id: string
+    status: string
+    phone_number: string | null
+    last_connected_at: string | null
+    updated_at?: string
+} | null
+
+export type AiConfigRow = {
+    enabled: boolean
+    provider: string
+    model: string
+    temperature: number
+    system_prompt: string
+    max_messages_per_conversation: number
+    context_max_messages?: number
+    human_handoff_enabled?: boolean
+    transfer_tool_description?: string | null
+    handoff_default_reply?: string | null
+    whatsapp_formatting_extra?: string | null
+    send_delay_ms?: number
+    send_presence?: string | null
+    handoff_keywords?: string | null
+    label_team?: string
+    label_assistant?: string
+    buffer_delay_seconds?: number
+    greeting_message?: string | null
+    n8n_webhook_url?: string | null
+    n8n_webhook_enabled?: boolean
+    n8n_webhook_timeout_seconds?: number
+    n8n_tool_description?: string | null
+    n8n_tools?: unknown
+    inactivity_timeout_hours?: number
+    ai_followup_enabled?: boolean
+    ai_followup_steps?: unknown
+    elevenlabs_voice_enabled?: boolean
+    elevenlabs_voice_id?: string | null
+    elevenlabs_model_id?: string | null
+    elevenlabs_voice_tool_description?: string | null
+    /** API: chave não é devolvida; só indica se existe valor na BD. */
+    openai_api_key_set?: boolean
+    google_api_key_set?: boolean
+    ai_chunk_messages_enabled?: boolean
+    ai_chunk_split_mode?: string | null
+    ai_chunk_max_parts?: number
+}
+
+export type MessageRow = {
+    id: string
+    body: string | null
+    sender_type: string
+    status: string
+    created_at: string
+    contact_id: string
+}
+
+export type N8nToolUiRow = {
+    id: string
+    slug: string
+    url: string
+    timeout_seconds: number
+    description: string
+}
+
+export type DashboardTab = 'workspaces' | 'connection' | 'config' | 'workspace_settings'
+
+export type WorkspaceMembershipRow = { workspace_slug: string; role: string }

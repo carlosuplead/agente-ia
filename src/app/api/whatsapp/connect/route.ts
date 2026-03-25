@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
 import * as uazapi from '@/lib/uazapi'
 
 export async function POST(request: Request) {
     try {
         const supabase = await createClient()
-        
-        // Em um sistema real standalone teríamos auth do usuário atual.
-        // Aqui buscamos a instância atrelada a esse workspace.
         const body = await request.json()
         const { workspace_slug } = body
-        
+
         if (!workspace_slug) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
         }
+
+        const access = await requireWorkspaceMember(supabase, workspace_slug)
+        if (!access.ok) return access.response
 
         const { data: instance } = await supabase
             .from('whatsapp_instances')

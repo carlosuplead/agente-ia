@@ -19,6 +19,7 @@ import { configToN8nUiRows, newN8nToolRow } from '@/lib/dashboard/n8n-ui'
 import type {
     AiConfigRow,
     DashboardTab,
+    GoogleCalendarPickerItem,
     GoogleCalendarStatus,
     InstanceRow,
     MessageRow,
@@ -123,6 +124,9 @@ export function useDashboardController() {
     const [tokenUsageForbidden, setTokenUsageForbidden] = useState(false)
     const [tokenUsageDays, setTokenUsageDays] = useState(30)
     const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarStatus | null>(null)
+    const [googleCalendarCalendars, setGoogleCalendarCalendars] = useState<GoogleCalendarPickerItem[] | null>(null)
+    const [googleCalendarCalendarsLoading, setGoogleCalendarCalendarsLoading] = useState(false)
+    const [googleCalendarCalendarsError, setGoogleCalendarCalendarsError] = useState<string | null>(null)
     const [oauthGoogleCalendarRedirect, setOauthGoogleCalendarRedirect] = useState<{
         workspace?: string
         tab?: string
@@ -396,15 +400,73 @@ export function useDashboardController() {
             return
         }
         const j = (await res.json().catch(() => ({}))) as Record<string, unknown>
+        const connected = !!j.connected
         setGoogleCalendar({
             oauth_configured: !!j.oauth_configured,
-            connected: !!j.connected,
+            connected,
             account_email: typeof j.account_email === 'string' ? j.account_email : null,
             calendar_id: typeof j.calendar_id === 'string' ? j.calendar_id : null,
             default_timezone: typeof j.default_timezone === 'string' ? j.default_timezone : null,
             updated_at: typeof j.updated_at === 'string' ? j.updated_at : null
         })
+        if (!connected) {
+            setGoogleCalendarCalendars(null)
+            setGoogleCalendarCalendarsError(null)
+        }
     }, [])
+
+    const loadGoogleCalendarCalendars = useCallback(async (slug: string) => {
+        setGoogleCalendarCalendarsLoading(true)
+        setGoogleCalendarCalendarsError(null)
+        const res = await fetch(
+            `/api/workspace/google-calendar/calendars?workspace_slug=${encodeURIComponent(slug)}`,
+            { credentials: 'include' }
+        )
+        const j = (await res.json().catch(() => ({}))) as {
+            error?: string
+            calendars?: GoogleCalendarPickerItem[]
+        }
+        setGoogleCalendarCalendarsLoading(false)
+        if (!res.ok) {
+            setGoogleCalendarCalendars([])
+            setGoogleCalendarCalendarsError(j.error || 'Falha ao carregar agendas')
+            return
+        }
+        setGoogleCalendarCalendars(Array.isArray(j.calendars) ? j.calendars : [])
+    }, [])
+
+    const updateGoogleCalendarId = useCallback(
+        async (slug: string, calendar_id: string) => {
+            setBusy(true)
+            const res = await fetch('/api/workspace/google-calendar', {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workspace_slug: slug, calendar_id })
+            })
+            setBusy(false)
+            const j = (await res.json().catch(() => ({}))) as { error?: string; calendar_id?: string }
+            if (!res.ok) {
+                setToast({
+                    message: j.error || 'Falha ao guardar a agenda selecionada',
+                    variant: 'error'
+                })
+                return false
+            }
+            setGoogleCalendar(prev =>
+                prev
+                    ? {
+                          ...prev,
+                          calendar_id: typeof j.calendar_id === 'string' ? j.calendar_id : calendar_id,
+                          updated_at: new Date().toISOString()
+                      }
+                    : prev
+            )
+            setToast({ message: 'Agenda do agente atualizada.', variant: 'success' })
+            return true
+        },
+        []
+    )
 
     const setters = useMemo(
         () => ({
@@ -502,33 +564,97 @@ export function useDashboardController() {
     }, [oauthGoogleCalendarRedirect, requestWorkspaceSlug, requestTab, loadGoogleCalendar])
 
     const loadAiConfig = useCallback(
-        async (slug: string) => {
+        async (slug: string, signal?: AbortSignal) => {
             loadedConfigSlugRef.current = null
-            const res = await fetch(`/api/ai/config?workspace_slug=${encodeURIComponent(slug)}`, {
-                credentials: 'include'
-            })
-            const json = (await res.json().catch(() => ({}))) as { error?: string; config?: AiConfigRow | null }
+            const isAbortError = (e: unknown) =>
+                (e instanceof DOMException && e.name === 'AbortError') ||
+                (e instanceof Error && e.name === 'AbortError')
 
             const applyMerged = (merged: AiConfigRow) => {
                 if (selectedSlugRef.current !== slug) return
+                if (signal?.aborted) return
                 loadedConfigSlugRef.current = slug
                 setAiConfig(merged)
-                applyAiConfigToForm(merged, setters)
+                try {
+                    applyAiConfigToForm(merged, setters)
+                } catch (formErr) {
+                    console.error('applyAiConfigToForm', formErr)
+                }
             }
 
-            if (!res.ok) {
-                const hint =
-                    typeof json.error === 'string'
-                        ? json.error
-                        : 'Falha ao ler a config IA. Verifica DATABASE_URL no .env.local (password real do Postgres no Supabase, não o placeholder).'
-                setLoadError(hint)
-                applyMerged(AI_CONFIG_FALLBACK)
-                return
-            }
+            const inner = new AbortController()
+            let timedOut = false
+            /* Pedido prioritário + carga sequencial no dashboard (ver efeito do selectedSlug). */
+            const tid = setTimeout(() => {
+                timedOut = true
+                inner.abort()
+            }, 180_000)
+            const onParentAbort = () => inner.abort()
+            signal?.addEventListener('abort', onParentAbort, { once: true })
 
-            setLoadError('')
-            const merged = normalizeAiConfig(json.config ?? undefined)
-            applyMerged(merged)
+            try {
+                const res = await fetch(`/api/ai/config?workspace_slug=${encodeURIComponent(slug)}`, {
+                    credentials: 'include',
+                    signal: inner.signal,
+                    priority: 'high' as RequestPriority
+                })
+                clearTimeout(tid)
+                signal?.removeEventListener('abort', onParentAbort)
+
+                if (signal?.aborted) return
+                const json = (await res.json().catch(() => ({}))) as {
+                    error?: string
+                    config?: AiConfigRow | null
+                }
+
+                if (!res.ok) {
+                    const hint =
+                        typeof json.error === 'string'
+                            ? json.error
+                            : 'Falha ao ler a config IA. Verifica DATABASE_URL no .env.local (password real do Postgres no Supabase, não o placeholder).'
+                    setLoadError(hint)
+                    applyMerged(AI_CONFIG_FALLBACK)
+                    return
+                }
+
+                setLoadError('')
+                const merged = normalizeAiConfig(json.config ?? undefined)
+                applyMerged(merged)
+            } catch (e) {
+                clearTimeout(tid)
+                signal?.removeEventListener('abort', onParentAbort)
+
+                if (isAbortError(e)) {
+                    if (signal?.aborted) return
+                    if (timedOut && selectedSlugRef.current === slug) {
+                        setLoadError(prev =>
+                            prev ||
+                            'O pedido da config IA excedeu o tempo limite (3 min). Se messages for grande, aplica a migração 20260328160000 (índice created_at) e/ou POSTGRES_STATEMENT_TIMEOUT_SEC no .env.local.'
+                        )
+                        loadedConfigSlugRef.current = slug
+                        setAiConfig(AI_CONFIG_FALLBACK)
+                        try {
+                            applyAiConfigToForm(AI_CONFIG_FALLBACK, setters)
+                        } catch {
+                            /* ignore */
+                        }
+                    }
+                    return
+                }
+                console.error('loadAiConfig', e)
+                if (selectedSlugRef.current !== slug) return
+                setLoadError(prev =>
+                    prev ||
+                    'Falha de rede ao ler a config IA. Verifica a ligação ou recarrega a página.'
+                )
+                loadedConfigSlugRef.current = slug
+                setAiConfig(AI_CONFIG_FALLBACK)
+                try {
+                    applyAiConfigToForm(AI_CONFIG_FALLBACK, setters)
+                } catch {
+                    /* ignore */
+                }
+            }
         },
         [setters]
     )
@@ -638,29 +764,63 @@ export function useDashboardController() {
             setTokenUsageLoadFailed(false)
             setTokenUsageForbidden(false)
             setGoogleCalendar(null)
-            return
+            setGoogleCalendarCalendars(null)
+            setGoogleCalendarCalendarsError(null)
         }
+    }, [selectedSlug])
+
+    /**
+     * Config IA primeiro (await), depois o resto — evita fila HTTP (~6 ligações) e contenção do pool
+     * com recent/stats/token-stats a bloquear /api/ai/config.
+     */
+    useEffect(() => {
+        if (!selectedSlug) return
+        const slug = selectedSlug
+        const rangeDays = statsDays
+        const tokDays = tokenUsageDays
         setLoadError('')
         setAiConfig(null)
         setCfgFieldErrors({})
-        loadInstance(selectedSlug)
-        loadMessages(selectedSlug)
-        void loadAiConfig(selectedSlug)
-        void loadStats(selectedSlug, statsDays)
-        void loadTokenUsage(selectedSlug, tokenUsageDays)
-        void loadMetaPendingPhones()
-        void loadGoogleCalendar(selectedSlug)
+        setGoogleCalendarCalendars(null)
+        setGoogleCalendarCalendarsError(null)
+        const ac = new AbortController()
+        let cancelled = false
+        ;(async () => {
+            await loadAiConfig(slug, ac.signal)
+            if (cancelled || selectedSlugRef.current !== slug) return
+            loadInstance(slug)
+            loadMessages(slug)
+            void loadMetaPendingPhones(slug)
+            void loadGoogleCalendar(slug)
+            void loadStats(slug, rangeDays)
+            void loadTokenUsage(slug, tokDays)
+        })()
+        return () => {
+            cancelled = true
+            ac.abort()
+        }
     }, [
         selectedSlug,
-        statsDays,
-        tokenUsageDays,
         loadInstance,
         loadAiConfig,
         loadMessages,
+        loadGoogleCalendar,
         loadStats,
-        loadTokenUsage,
-        loadGoogleCalendar
+        loadTokenUsage
     ])
+
+    /** Só mudança de intervalo — mudança de workspace trata loadStats no efeito do slug. */
+    useEffect(() => {
+        const slug = selectedSlugRef.current
+        if (!slug) return
+        void loadStats(slug, statsDays)
+    }, [statsDays, loadStats])
+
+    useEffect(() => {
+        const slug = selectedSlugRef.current
+        if (!slug) return
+        void loadTokenUsage(slug, tokenUsageDays)
+    }, [tokenUsageDays, loadTokenUsage])
 
     async function logout() {
         const sb = createBrowserSupabaseClient()
@@ -740,7 +900,8 @@ export function useDashboardController() {
         window.location.href = `/api/auth/meta/whatsapp/start?workspace_slug=${encodeURIComponent(selectedSlug)}`
     }
 
-    async function loadMetaPendingPhones() {
+    async function loadMetaPendingPhones(expectedSlug?: string | null) {
+        const slug = expectedSlug ?? selectedSlug
         const res = await fetch('/api/whatsapp/meta/pending-phones', { credentials: 'include' })
         if (!res.ok) {
             setMetaPendingPhones([])
@@ -750,7 +911,7 @@ export function useDashboardController() {
             workspace_slug?: string
             phones?: Array<{ phone_number_id: string; display_phone_number?: string; verified_name?: string }>
         }
-        if (!selectedSlug || j.workspace_slug !== selectedSlug) {
+        if (!slug || j.workspace_slug !== slug) {
             setMetaPendingPhones([])
             return
         }
@@ -879,6 +1040,11 @@ export function useDashboardController() {
         loadError,
         setLoadError,
         googleCalendar,
+        googleCalendarCalendars,
+        googleCalendarCalendarsLoading,
+        googleCalendarCalendarsError,
+        loadGoogleCalendarCalendars,
+        updateGoogleCalendarId,
         canGoogleCalendarConnect,
         startGoogleCalendarOAuth,
         disconnectGoogleCalendar,

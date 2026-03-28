@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 
+function pgErrorCode(e: unknown): string {
+    if (typeof e !== 'object' || e === null || !('code' in e)) return ''
+    return String((e as { code: unknown }).code)
+}
+
 export async function GET(request: Request) {
     try {
         const supabase = await createClient()
@@ -29,6 +34,10 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ messages: messages || [] })
     } catch (e) {
+        if (pgErrorCode(e) === '57014') {
+            console.error('messages recent', e)
+            return NextResponse.json({ messages: [] })
+        }
         console.error('messages recent', e)
         const msg = e instanceof Error ? e.message : 'Internal Server Error'
         return NextResponse.json({ error: msg }, { status: 500 })

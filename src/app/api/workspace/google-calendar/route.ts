@@ -60,3 +60,44 @@ export async function DELETE(request: Request) {
     }
     return NextResponse.json({ ok: true })
 }
+
+export async function PATCH(request: Request) {
+    let body: { workspace_slug?: string; calendar_id?: string } = {}
+    try {
+        body = (await request.json()) as { workspace_slug?: string; calendar_id?: string }
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+    const workspace_slug = typeof body.workspace_slug === 'string' ? body.workspace_slug.trim() : ''
+    const calendar_id = typeof body.calendar_id === 'string' ? body.calendar_id.trim() : ''
+    if (!workspace_slug) return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
+    if (!calendar_id) return NextResponse.json({ error: 'calendar_id is required' }, { status: 400 })
+
+    const supabase = await createClient()
+    const access = await requireWorkspaceRole(supabase, workspace_slug, ['owner', 'admin'])
+    if (!access.ok) return access.response
+
+    const admin = await createAdminClient()
+    const { data: existing, error: selErr } = await admin
+        .from('workspace_google_calendar')
+        .select('workspace_slug')
+        .eq('workspace_slug', workspace_slug)
+        .maybeSingle()
+    if (selErr) {
+        console.error('workspace_google_calendar patch select', selErr)
+        return NextResponse.json({ error: 'Falha ao verificar ligação' }, { status: 500 })
+    }
+    if (!existing) {
+        return NextResponse.json({ error: 'Google Agenda não ligada' }, { status: 400 })
+    }
+
+    const { error } = await admin
+        .from('workspace_google_calendar')
+        .update({ calendar_id, updated_at: new Date().toISOString() })
+        .eq('workspace_slug', workspace_slug)
+    if (error) {
+        console.error('workspace_google_calendar patch', error)
+        return NextResponse.json({ error: 'Falha ao guardar agenda' }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true, calendar_id })
+}

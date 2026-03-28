@@ -48,6 +48,31 @@ function buildDailyFromRows(
     return Array.from(byDate.entries()).map(([date, v]) => ({ date, ...v }))
 }
 
+function pgErrorCode(e: unknown): string {
+    if (typeof e !== 'object' || e === null || !('code' in e)) return ''
+    return String((e as { code: unknown }).code)
+}
+
+function isMissingTenantRelation(e: unknown): boolean {
+    const c = pgErrorCode(e)
+    return c === '42P01' || c === '3F000'
+}
+
+function isStatementTimeout(e: unknown): boolean {
+    return pgErrorCode(e) === '57014'
+}
+
+function emptyTokenPayload(rangeDays: number): TokenUsagePayload {
+    return {
+        range_days: rangeDays,
+        grand_total_tokens: 0,
+        by_model: [],
+        by_day: buildDailyFromRows([], rangeDays),
+        by_month: buildMonthlyFromRows([], rangeDays),
+        by_conversation: []
+    }
+}
+
 function buildMonthlyFromRows(
     rows: { ym: string; model: string; t: string | number | bigint }[],
     rangeDays: number
@@ -74,15 +99,16 @@ function buildMonthlyFromRows(
 }
 
 export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url)
+    const workspace_slug = searchParams.get('workspace_slug')
+    const rangeDays = Math.min(90, Math.max(7, Number(searchParams.get('days')) || 7))
+
+    if (!workspace_slug) {
+        return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
+    }
+
     try {
         const supabase = await createClient()
-        const { searchParams } = new URL(request.url)
-        const workspace_slug = searchParams.get('workspace_slug')
-        const rangeDays = Math.min(90, Math.max(7, Number(searchParams.get('days')) || 7))
-
-        if (!workspace_slug) {
-            return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
-        }
 
         const access = await requireWorkspaceInternal(supabase, workspace_slug)
         if (!access.ok) return access.response
@@ -90,59 +116,58 @@ export async function GET(request: Request) {
         const sql = getTenantSql()
         const sch = quotedSchema(workspace_slug)
 
-        const [totalRow, modelRows, dayRows, monthRows, convRows] = await Promise.all([
-            sql.unsafe(
-                `SELECT COALESCE(SUM(total_tokens), 0)::bigint AS g
-                 FROM ${sch}.llm_usage
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')`,
-                [rangeDays]
-            ),
-            sql.unsafe(
-                `SELECT provider, model,
-                        SUM(prompt_tokens)::bigint AS prompt_tokens,
-                        SUM(completion_tokens)::bigint AS completion_tokens,
-                        SUM(total_tokens)::bigint AS total_tokens
-                 FROM ${sch}.llm_usage
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
-                 GROUP BY provider, model
-                 ORDER BY SUM(total_tokens) DESC`,
-                [rangeDays]
-            ),
-            sql.unsafe(
-                `SELECT (created_at AT TIME ZONE 'UTC')::date::text AS d,
-                        model,
-                        SUM(total_tokens)::bigint AS t
-                 FROM ${sch}.llm_usage
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
-                 GROUP BY 1, 2
-                 ORDER BY 1, 2`,
-                [rangeDays]
-            ),
-            sql.unsafe(
-                `SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS ym,
-                        model,
-                        SUM(total_tokens)::bigint AS t
-                 FROM ${sch}.llm_usage
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
-                 GROUP BY 1, 2
-                 ORDER BY 1, 2`,
-                [rangeDays]
-            ),
-            sql.unsafe(
-                `SELECT u.ai_conversation_id::text AS ai_conversation_id,
-                        COALESCE(c.name, '') AS contact_name,
-                        COALESCE(c.phone, '') AS contact_phone,
-                        SUM(u.total_tokens)::bigint AS total_tokens,
-                        MAX(u.created_at)::text AS last_activity_at
-                 FROM ${sch}.llm_usage u
-                 JOIN ${sch}.contacts c ON c.id = u.contact_id
-                 WHERE u.created_at >= NOW() - ($1::int * INTERVAL '1 day')
-                 GROUP BY u.ai_conversation_id, c.name, c.phone
-                 ORDER BY SUM(u.total_tokens) DESC NULLS LAST
-                 LIMIT 50`,
-                [rangeDays]
-            )
-        ])
+        /* Em série: evita 5 queries em paralelo a competirem pelo pool e rejeições órfãs no Promise.all. */
+        const totalRow = await sql.unsafe(
+            `SELECT COALESCE(SUM(total_tokens), 0)::bigint AS g
+             FROM ${sch}.llm_usage
+             WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')`,
+            [rangeDays]
+        )
+        const modelRows = await sql.unsafe(
+            `SELECT provider, model,
+                    SUM(prompt_tokens)::bigint AS prompt_tokens,
+                    SUM(completion_tokens)::bigint AS completion_tokens,
+                    SUM(total_tokens)::bigint AS total_tokens
+             FROM ${sch}.llm_usage
+             WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+             GROUP BY provider, model
+             ORDER BY SUM(total_tokens) DESC`,
+            [rangeDays]
+        )
+        const dayRows = await sql.unsafe(
+            `SELECT (created_at AT TIME ZONE 'UTC')::date::text AS d,
+                    model,
+                    SUM(total_tokens)::bigint AS t
+             FROM ${sch}.llm_usage
+             WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+             GROUP BY 1, 2
+             ORDER BY 1, 2`,
+            [rangeDays]
+        )
+        const monthRows = await sql.unsafe(
+            `SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS ym,
+                    model,
+                    SUM(total_tokens)::bigint AS t
+             FROM ${sch}.llm_usage
+             WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+             GROUP BY 1, 2
+             ORDER BY 1, 2`,
+            [rangeDays]
+        )
+        const convRows = await sql.unsafe(
+            `SELECT u.ai_conversation_id::text AS ai_conversation_id,
+                    COALESCE(c.name, '') AS contact_name,
+                    COALESCE(c.phone, '') AS contact_phone,
+                    SUM(u.total_tokens)::bigint AS total_tokens,
+                    MAX(u.created_at)::text AS last_activity_at
+             FROM ${sch}.llm_usage u
+             JOIN ${sch}.contacts c ON c.id = u.contact_id
+             WHERE u.created_at >= NOW() - ($1::int * INTERVAL '1 day')
+             GROUP BY u.ai_conversation_id, c.name, c.phone
+             ORDER BY SUM(u.total_tokens) DESC NULLS LAST
+             LIMIT 50`,
+            [rangeDays]
+        )
 
         const grand = Number((totalRow[0] as unknown as { g: string | number | bigint } | undefined)?.g ?? 0)
 
@@ -185,6 +210,9 @@ export async function GET(request: Request) {
 
         return NextResponse.json(payload)
     } catch (e) {
+        if (isMissingTenantRelation(e) || isStatementTimeout(e)) {
+            return NextResponse.json(emptyTokenPayload(rangeDays))
+        }
         console.error('messages token-stats', e)
         const msg = e instanceof Error ? e.message : 'Internal Server Error'
         return NextResponse.json({ error: msg }, { status: 500 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import {
     MODEL_CUSTOM,
     modelSelectValue,
@@ -19,6 +20,12 @@ function FieldError({ id, message }: { id?: string; message?: string | undefined
 export function AgentConfigTab() {
     const d = useDashboard()
     const err = d.cfgFieldErrors
+
+    const { selectedSlug, googleCalendar, loadGoogleCalendarCalendars } = d
+    useEffect(() => {
+        if (!selectedSlug || !googleCalendar?.connected) return
+        void loadGoogleCalendarCalendars(selectedSlug)
+    }, [selectedSlug, googleCalendar?.connected, loadGoogleCalendarCalendars])
     const presets = presetsForProvider(d.cfgProvider) as readonly string[]
     const modelSel = modelSelectValue(d.cfgProvider, d.cfgModel)
 
@@ -627,32 +634,105 @@ export function AgentConfigTab() {
                                     </p>
                                 )}
                                 {d.googleCalendar.connected ? (
-                                    <div
-                                        style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}
-                                    >
-                                        <p style={{ margin: 0, fontSize: 14 }}>
-                                            Ligado como{' '}
-                                            <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
-                                            {d.googleCalendar.default_timezone ? (
-                                                <>
-                                                    {' '}
-                                                    · fuso{' '}
-                                                    <code className="inline-code">
-                                                        {d.googleCalendar.default_timezone}
-                                                    </code>
-                                                </>
-                                            ) : null}
-                                        </p>
-                                        {d.canGoogleCalendarConnect && (
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                disabled={d.busy}
-                                                onClick={() => void d.disconnectGoogleCalendar()}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: 12,
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <p style={{ margin: 0, fontSize: 14 }}>
+                                                Ligado como{' '}
+                                                <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
+                                                {d.googleCalendar.default_timezone ? (
+                                                    <>
+                                                        {' '}
+                                                        · fuso{' '}
+                                                        <code className="inline-code">
+                                                            {d.googleCalendar.default_timezone}
+                                                        </code>
+                                                    </>
+                                                ) : null}
+                                            </p>
+                                            {d.canGoogleCalendarConnect && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    disabled={d.busy}
+                                                    onClick={() => void d.disconnectGoogleCalendar()}
+                                                >
+                                                    Desligar
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="input-group" style={{ maxWidth: 420 }}>
+                                            <label className="input-label" htmlFor="google-agent-calendar">
+                                                Agenda usada pelo agente
+                                            </label>
+                                            <p
+                                                style={{
+                                                    fontSize: 12,
+                                                    color: 'var(--text-secondary)',
+                                                    margin: '0 0 8px'
+                                                }}
                                             >
-                                                Desligar
-                                            </button>
-                                        )}
+                                                Disponibilidade e novos eventos usam esta agenda (só calendários com
+                                                permissão de edição).
+                                            </p>
+                                            {d.googleCalendarCalendarsLoading ? (
+                                                <p className="config-loading" role="status" style={{ fontSize: 13 }}>
+                                                    <span className="config-loading-spinner" aria-hidden="true" />A
+                                                    carregar agendas…
+                                                </p>
+                                            ) : d.googleCalendarCalendarsError ? (
+                                                <p className="field-error" role="alert">
+                                                    {d.googleCalendarCalendarsError}
+                                                </p>
+                                            ) : (
+                                                <select
+                                                    id="google-agent-calendar"
+                                                    className="input"
+                                                    disabled={
+                                                        d.busy ||
+                                                        !d.canGoogleCalendarConnect ||
+                                                        d.googleCalendarCalendarsLoading
+                                                    }
+                                                    value={d.googleCalendar?.calendar_id || 'primary'}
+                                                    onChange={e => {
+                                                        const v = e.target.value
+                                                        const cur = d.googleCalendar?.calendar_id || 'primary'
+                                                        if (!d.selectedSlug || v === cur) return
+                                                        void d.updateGoogleCalendarId(d.selectedSlug, v)
+                                                    }}
+                                                >
+                                                    <option value="primary">Principal (primary)</option>
+                                                    {(d.googleCalendarCalendars || []).map(c => {
+                                                        if (c.id === 'primary') return null
+                                                        const label = c.primary ? `${c.summary} (principal)` : c.summary
+                                                        return (
+                                                            <option key={c.id} value={c.id}>
+                                                                {label}
+                                                            </option>
+                                                        )
+                                                    })}
+                                                </select>
+                                            )}
+                                            {d.googleCalendar?.calendar_id &&
+                                                d.googleCalendarCalendars &&
+                                                !d.googleCalendarCalendars.some(
+                                                    x => x.id === d.googleCalendar?.calendar_id
+                                                ) &&
+                                                d.googleCalendar?.calendar_id !== 'primary' && (
+                                                    <p className="field-error" role="status" style={{ marginTop: 8 }}>
+                                                        A agenda guardada (
+                                                        <code className="inline-code">{d.googleCalendar?.calendar_id}</code>)
+                                                        não aparece na lista — pode ter sido removida ou revogada.
+                                                        Escolhe outra.
+                                                    </p>
+                                                )}
+                                        </div>
                                     </div>
                                 ) : (
                                     <div

@@ -3,9 +3,33 @@ import postgres from 'postgres'
 const globalForSql = globalThis as unknown as { tenantPostgres?: ReturnType<typeof postgres> }
 
 /**
+ * Pool pequeno: em Vercel/serverless o modo Session do Supabase (5432) esgota rápido
+ * ("MaxClientsInSessionMode"). Usa Transaction pooler (6543) em DATABASE_URL e, em prod, max 1.
+ */
+function resolvePoolMax(): number {
+    const raw = process.env.POSTGRES_POOL_MAX?.trim()
+    if (raw) {
+        const n = Number(raw)
+        if (Number.isFinite(n) && n >= 1 && n <= 20) return Math.floor(n)
+    }
+    return process.env.VERCEL ? 1 : 8
+}
+
+/** Startup GUC: pedido ao Postgres no handshake (útil com tabelas grandes / Supabase). */
+function resolvePgConnectionParams(): Record<string, string> {
+    const raw = process.env.POSTGRES_STATEMENT_TIMEOUT_SEC?.trim()
+    if (!raw) return {}
+    const sec = Number(raw)
+    if (!Number.isFinite(sec) || sec < 1 || sec > 3600) return {}
+    return {
+        options: `-c statement_timeout=${Math.floor(sec)}s`
+    }
+}
+
+/**
  * Ligação direta ao Postgres (schemas por tenant não são expostos no PostgREST por defeito).
  * Usa a mesma base que o Supabase: Settings → Database → Connection string (URI).
- * Com pooler em modo Transaction, usa `prepare: false`.
+ * Com PgBouncer (Transaction pooler), `prepare: false` é obrigatório.
  */
 export function getTenantSql() {
     const url = process.env.DATABASE_URL
@@ -17,9 +41,13 @@ export function getTenantSql() {
     if (!globalForSql.tenantPostgres) {
         const isLocal = url.includes('127.0.0.1') || url.includes('localhost')
         globalForSql.tenantPostgres = postgres(url, {
-            max: 10,
+            max: resolvePoolMax(),
             prepare: false,
-            ssl: isLocal ? false : 'require'
+            ssl: isLocal ? false : 'require',
+            connection: {
+                application_name: 'agente-central-tenant',
+                ...resolvePgConnectionParams()
+            }
         })
     }
     return globalForSql.tenantPostgres

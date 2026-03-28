@@ -180,3 +180,39 @@ export async function fetchGoogleAccountEmail(accessToken: string): Promise<stri
     const j = (await res.json()) as { email?: string }
     return typeof j.email === 'string' ? j.email : null
 }
+
+export type GoogleCalendarPickerItem = {
+    id: string
+    summary: string
+    primary?: boolean
+}
+
+/** Agendas com permissão de escrita (sugestão de slots + criação de eventos). */
+export async function listWritableCalendars(refreshToken: string): Promise<GoogleCalendarPickerItem[]> {
+    const auth = createCalendarOAuth2(refreshToken)
+    const cal = google.calendar({ version: 'v3', auth })
+    const out: GoogleCalendarPickerItem[] = []
+    let pageToken: string | undefined
+    do {
+        const res = await cal.calendarList.list({
+            minAccessRole: 'writer',
+            maxResults: 250,
+            pageToken
+        })
+        for (const it of res.data.items || []) {
+            if (!it.id) continue
+            out.push({
+                id: it.id,
+                summary: (it.summaryOverride || it.summary || it.id).trim() || it.id,
+                primary: it.primary === true
+            })
+        }
+        pageToken = res.data.nextPageToken || undefined
+    } while (pageToken)
+
+    return out.sort((a, b) => {
+        if (a.primary && !b.primary) return -1
+        if (!a.primary && b.primary) return 1
+        return a.summary.localeCompare(b.summary, undefined, { sensitivity: 'base' })
+    })
+}

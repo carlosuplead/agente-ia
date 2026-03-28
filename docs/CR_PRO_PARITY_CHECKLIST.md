@@ -11,6 +11,17 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 - [ ] Mídia sem texto: corpo fallback “Mídia enviada” e eventual inclusão de URL/caption no contexto da IA
 - [ ] Eventos de ligação (`connection`, `status`, `phone` / `owner`)
 
+## Meta Cloud API (official)
+
+- [x] OAuth start/callback com descoberta de `phone_number_id`
+- [x] Webhook verify token (`hub.challenge`) e assinatura `x-hub-signature-256`
+- [x] Deduplicação por `whatsapp_id`
+- [x] Atualização de status (`sent`, `delivered`, `read`, `failed`)
+- [x] Entrada Meta -> buffer IA -> resposta enviada
+- [x] `meta_token_obtained_at` ao guardar token (OAuth / complete-pick / configure-official) + aviso no dashboard (>50 dias)
+- [x] Listagem de templates (`GET /api/whatsapp/meta/templates`) e validação APPROVED ao criar campanha
+- [x] Envio em massa só via API oficial: fila `whatsapp_broadcast_queue` + `GET /api/cron/whatsapp-broadcast-queue` (Bearer `INTERNAL_AI_SECRET`)
+
 ## Envio / API Uazapi
 
 - [ ] `sendTextMessage`: formato de `number`, `delay`, `presence`
@@ -35,6 +46,7 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 
 - [ ] URL de webhook configurada na Uazapi por instância
 - [ ] Rotação de `instance_token`
-- [ ] Filas ou workers adicionais no CR Pro (substituídos aqui por `after()` + locks em SQL)
+- [ ] Filas ou workers adicionais no CR Pro (campanhas UAZAPI no CR Pro; aqui disparos Meta usam cron da fila + locks em SQL no processamento IA)
+- [ ] Rollback por workspace: `provider=official` -> `provider=uazapi` sem downtime
 
 Quando tiveres acesso ao repositório CR Pro, cruza cada ficheiro de webhook, router LLM e cliente Uazapi com os caminhos equivalentes em `src/app/api/whatsapp/` e `src/lib/ai-agent/`.

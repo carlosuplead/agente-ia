@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
-import * as uazapi from '@/lib/uazapi'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 
 export async function POST(request: Request) {
     try {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
         const { data: instance } = await supabase
             .from('whatsapp_instances')
-            .select('id, instance_token, status')
+            .select('id, instance_token, status, provider')
             .eq('workspace_slug', workspace_slug)
             .single()
 
@@ -31,11 +31,12 @@ export async function POST(request: Request) {
         }
 
         try {
-            const connectResult = await uazapi.connect(instance.instance_token)
+            const { provider } = await getProviderForWorkspace(supabase, workspace_slug)
+            const connectResult = await provider.connect(instance.instance_token)
             
             await supabase
                 .from('whatsapp_instances')
-                .update({ status: 'connecting' })
+                .update({ status: connectResult.status === 'connected' ? 'connected' : 'connecting' })
                 .eq('id', instance.id)
 
             return NextResponse.json({

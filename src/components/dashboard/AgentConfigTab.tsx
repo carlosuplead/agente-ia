@@ -603,6 +603,87 @@ export function AgentConfigTab() {
 
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
+                            Google Agenda
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                            Liga uma conta Google para o agente consultar disponibilidade (
+                            <code className="inline-code">google_calendar_suggest_slots</code>) e criar eventos (
+                            <code className="inline-code">google_calendar_create_event</code>) após o cliente
+                            confirmar. Requer variáveis OAuth no servidor (ver <code className="inline-code">.env.example</code>
+                            ).
+                        </p>
+                        {d.googleCalendar === null ? (
+                            <p className="config-loading" role="status" style={{ fontSize: 13 }}>
+                                <span className="config-loading-spinner" aria-hidden="true" />A carregar estado da
+                                agenda…
+                            </p>
+                        ) : (
+                            <>
+                                {!d.googleCalendar.oauth_configured && (
+                                    <p className="field-error" role="status">
+                                        OAuth Google não configurado: define{' '}
+                                        <code className="inline-code">GOOGLE_CALENDAR_CLIENT_ID</code> e{' '}
+                                        <code className="inline-code">GOOGLE_CALENDAR_CLIENT_SECRET</code> no .env.
+                                    </p>
+                                )}
+                                {d.googleCalendar.connected ? (
+                                    <div
+                                        style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}
+                                    >
+                                        <p style={{ margin: 0, fontSize: 14 }}>
+                                            Ligado como{' '}
+                                            <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
+                                            {d.googleCalendar.default_timezone ? (
+                                                <>
+                                                    {' '}
+                                                    · fuso{' '}
+                                                    <code className="inline-code">
+                                                        {d.googleCalendar.default_timezone}
+                                                    </code>
+                                                </>
+                                            ) : null}
+                                        </p>
+                                        {d.canGoogleCalendarConnect && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                disabled={d.busy}
+                                                onClick={() => void d.disconnectGoogleCalendar()}
+                                            >
+                                                Desligar
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div
+                                        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary"
+                                            disabled={
+                                                d.busy ||
+                                                !d.selectedSlug ||
+                                                !d.canGoogleCalendarConnect ||
+                                                !d.googleCalendar.oauth_configured
+                                            }
+                                            onClick={d.startGoogleCalendarOAuth}
+                                        >
+                                            Ligar Google Agenda
+                                        </button>
+                                        {!d.canGoogleCalendarConnect && (
+                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                Só owner ou admin do workspace pode ligar.
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    <div className="card">
+                        <div className="card-title" style={{ marginBottom: 16 }}>
                             Voz ElevenLabs (WhatsApp)
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>

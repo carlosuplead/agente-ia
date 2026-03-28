@@ -5,7 +5,7 @@ import { addToBuffer } from '@/lib/ai-agent/buffer'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { resetFollowupAnchorForContact, setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
-import * as uazapi from '@/lib/uazapi'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 
 export async function POST(request: Request) {
     try {
@@ -23,12 +23,15 @@ export async function POST(request: Request) {
 
         const { data: instance } = await supabase
             .from('whatsapp_instances')
-            .select('id, workspace_slug, status, phone_number')
+            .select('id, workspace_slug, status, phone_number, provider')
             .eq('instance_token', instanceToken)
             .single()
 
         if (!instance) {
             return NextResponse.json({ error: 'Invalid instance token' }, { status: 401 })
+        }
+        if (instance.provider === 'official') {
+            return NextResponse.json({ success: true })
         }
 
         const workspaceSlug = instance.workspace_slug
@@ -196,7 +199,8 @@ export async function POST(request: Request) {
                                 .maybeSingle()
                             if (inst?.instance_token) {
                                 const textOut = parseMessageForWhatsApp(gm)
-                                await uazapi.sendTextMessage(inst.instance_token, rawPhone, textOut, {
+                                const { provider } = await getProviderForWorkspace(supabase, workspaceSlug)
+                                await provider.sendText(inst.instance_token, rawPhone, textOut, {
                                     delayMs: 800,
                                     presence: 'composing'
                                 })

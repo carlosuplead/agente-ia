@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { parseFollowupStepsFromConfig } from '@/lib/ai-agent/followup-steps'
-import * as uazapi from '@/lib/uazapi'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from '@/lib/ai-agent/types'
 
 function sleep(ms: number) {
@@ -131,7 +131,8 @@ export async function processFollowupsForWorkspace(
             )
             const savedMsg = savedRows[0] as unknown as { id: string } | undefined
             try {
-                const sendRes = (await uazapi.sendTextMessage(
+                const { provider } = await getProviderForWorkspace(supabase, workspaceSlug)
+                const sendRes = (await provider.sendText(
                     instance.instance_token,
                     row.phone,
                     textToSend,

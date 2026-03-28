@@ -1,10 +1,27 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { ClientPortalStats } from '@/components/client-portal/ClientPortalStats'
 import { TokenUsageSection } from '@/components/dashboard/TokenUsageSection'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 import { useDashboard } from './dashboard-context'
+
+function MetaTokenAgeNotice({ obtainedAt }: { obtainedAt: string }) {
+    const days = useMemo(() => {
+        const t = new Date(obtainedAt).getTime()
+        if (!Number.isFinite(t)) return 0
+        return Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000))
+    }, [obtainedAt])
+    if (days < 50) return null
+    return (
+        <div className="card alert-card" role="status" style={{ marginBottom: 12 }}>
+            <p className="alert-card-text" style={{ margin: 0 }}>
+                O token Meta foi obtido há {days} dias. Tokens de longa duração expiram por volta de 60 dias — volta a
+                ligar com &quot;Conectar Meta Oficial&quot; antes de expirar para não interromper envios e disparos.
+            </p>
+        </div>
+    )
+}
 
 export function WhatsAppTab() {
     const d = useDashboard()
@@ -53,6 +70,12 @@ export function WhatsAppTab() {
                                 {d.instance.phone_number}
                             </p>
                         )}
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                            Provider: <strong>{d.instance?.provider || 'uazapi'}</strong>
+                        </p>
+                        {d.instance?.provider === 'official' && d.instance?.meta_token_obtained_at && (
+                            <MetaTokenAgeNotice obtainedAt={d.instance.meta_token_obtained_at} />
+                        )}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                             {!d.instance && (
                                 <button
@@ -77,6 +100,14 @@ export function WhatsAppTab() {
                             <button
                                 type="button"
                                 className="btn btn-secondary"
+                                disabled={d.busy}
+                                onClick={d.startMetaOfficialOAuth}
+                            >
+                                Conectar Meta Oficial
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
                                 disabled={d.busy || !d.instance}
                                 onClick={() => d.selectedSlug && d.loadInstance(d.selectedSlug)}
                             >
@@ -93,11 +124,34 @@ export function WhatsAppTab() {
                                 )}
                             </div>
                         )}
+                        {d.metaPendingPhones.length > 0 && (
+                            <div style={{ marginTop: 16 }}>
+                                <p style={{ fontSize: 13, marginBottom: 8 }}>Escolha o número oficial:</p>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {d.metaPendingPhones.map(p => (
+                                        <button
+                                            key={p.phone_number_id}
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => d.completeMetaPhonePick(p.phone_number_id)}
+                                        >
+                                            {p.display_phone_number || p.verified_name || p.phone_number_id}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
                             Webhook (Uazapi):{' '}
                             <code style={{ wordBreak: 'break-all' }}>
                                 {typeof window !== 'undefined' ? window.location.origin : ''}
                                 /api/whatsapp/webhook?token=INSTANCE_TOKEN
+                            </code>
+                            <br />
+                            Webhook (Meta oficial):{' '}
+                            <code style={{ wordBreak: 'break-all' }}>
+                                {typeof window !== 'undefined' ? window.location.origin : ''}
+                                /api/whatsapp/webhook/official
                             </code>
                         </p>
                     </div>

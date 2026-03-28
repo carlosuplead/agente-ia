@@ -6,6 +6,7 @@ import { useDashboard } from './dashboard-context'
 const baseTabs: { id: DashboardTab; label: string; emoji: string }[] = [
     { id: 'workspaces', label: 'Workspaces', emoji: '🏢' },
     { id: 'connection', label: 'WhatsApp', emoji: '📱' },
+    { id: 'disparos', label: 'Disparos', emoji: '📣' },
     { id: 'config', label: 'Agente IA', emoji: '🤖' }
 ]
 

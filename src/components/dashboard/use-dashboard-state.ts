@@ -19,6 +19,7 @@ import { configToN8nUiRows, newN8nToolRow } from '@/lib/dashboard/n8n-ui'
 import type {
     AiConfigRow,
     DashboardTab,
+    GoogleCalendarStatus,
     InstanceRow,
     MessageRow,
     N8nToolUiRow,
@@ -121,12 +122,22 @@ export function useDashboardController() {
     const [tokenUsageLoadFailed, setTokenUsageLoadFailed] = useState(false)
     const [tokenUsageForbidden, setTokenUsageForbidden] = useState(false)
     const [tokenUsageDays, setTokenUsageDays] = useState(30)
+    const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarStatus | null>(null)
+    const [oauthGoogleCalendarRedirect, setOauthGoogleCalendarRedirect] = useState<{
+        workspace?: string
+        tab?: string
+        status: string
+        error?: string
+    } | null>(null)
     const [loadError, setLoadError] = useState('')
     const [busy, setBusy] = useState(false)
     const [showNewWs, setShowNewWs] = useState(false)
     const [newWsName, setNewWsName] = useState('')
     const [newWsSlug, setNewWsSlug] = useState('')
     const [qrPayload, setQrPayload] = useState<{ qrcode?: string; pairingCode?: string } | null>(null)
+    const [metaPendingPhones, setMetaPendingPhones] = useState<
+        Array<{ phone_number_id: string; display_phone_number?: string; verified_name?: string }>
+    >([])
     const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
     const [cfgFieldErrors, setCfgFieldErrors] = useState<AiConfigFieldErrors>({})
     const [baselineConfigSnapshot, setBaselineConfigSnapshot] = useState('')
@@ -205,6 +216,13 @@ export function useDashboardController() {
         },
         [isPlatformAdmin, memberships]
     )
+
+    const canGoogleCalendarConnect = useMemo(() => {
+        if (!selectedSlug) return false
+        if (isPlatformAdmin) return true
+        const m = memberships.find(x => x.workspace_slug === selectedSlug)
+        return m?.role === 'owner' || m?.role === 'admin'
+    }, [isPlatformAdmin, memberships, selectedSlug])
 
     const snapshotInput = useMemo(
         () => ({
@@ -362,6 +380,32 @@ export function useDashboardController() {
         setInstance(json.instance ?? null)
     }, [])
 
+    const loadGoogleCalendar = useCallback(async (slug: string) => {
+        const res = await fetch(`/api/workspace/google-calendar?workspace_slug=${encodeURIComponent(slug)}`, {
+            credentials: 'include'
+        })
+        if (!res.ok) {
+            setGoogleCalendar({
+                oauth_configured: false,
+                connected: false,
+                account_email: null,
+                calendar_id: null,
+                default_timezone: null,
+                updated_at: null
+            })
+            return
+        }
+        const j = (await res.json().catch(() => ({}))) as Record<string, unknown>
+        setGoogleCalendar({
+            oauth_configured: !!j.oauth_configured,
+            connected: !!j.connected,
+            account_email: typeof j.account_email === 'string' ? j.account_email : null,
+            calendar_id: typeof j.calendar_id === 'string' ? j.calendar_id : null,
+            default_timezone: typeof j.default_timezone === 'string' ? j.default_timezone : null,
+            updated_at: typeof j.updated_at === 'string' ? j.updated_at : null
+        })
+    }, [])
+
     const setters = useMemo(
         () => ({
             setCfgEnabled,
@@ -438,6 +482,24 @@ export function useDashboardController() {
         },
         [selectedSlug, isConfigDirty, aiConfig, setters, closeMobileNav]
     )
+
+    useEffect(() => {
+        if (!oauthGoogleCalendarRedirect) return
+        const { workspace, tab, status, error } = oauthGoogleCalendarRedirect
+        setOauthGoogleCalendarRedirect(null)
+        if (workspace) {
+            void requestWorkspaceSlug(workspace)
+        }
+        if (tab === 'config') {
+            void requestTab('config')
+        }
+        if (status === 'success') {
+            setToast({ message: 'Google Agenda ligada ao workspace.', variant: 'success' })
+            if (workspace) void loadGoogleCalendar(workspace)
+        } else {
+            setToast({ message: error || 'Não foi possível ligar a Google Agenda.', variant: 'error' })
+        }
+    }, [oauthGoogleCalendarRedirect, requestWorkspaceSlug, requestTab, loadGoogleCalendar])
 
     const loadAiConfig = useCallback(
         async (slug: string) => {
@@ -546,6 +608,25 @@ export function useDashboardController() {
         refreshWorkspaces()
     }, [loadMe, refreshWorkspaces])
 
+    useLayoutEffect(() => {
+        if (typeof window === 'undefined') return
+        const sp = new URLSearchParams(window.location.search)
+        const st = sp.get('google_calendar_oauth')
+        if (!st) return
+        setOauthGoogleCalendarRedirect({
+            workspace: sp.get('workspace') || undefined,
+            tab: sp.get('tab') || undefined,
+            status: st,
+            error: sp.get('google_calendar_oauth_error') || undefined
+        })
+        const u = new URL(window.location.href)
+        for (const k of ['google_calendar_oauth', 'google_calendar_oauth_error', 'workspace', 'tab']) {
+            u.searchParams.delete(k)
+        }
+        const qs = u.searchParams.toString()
+        window.history.replaceState({}, '', qs ? `${u.pathname}?${qs}` : u.pathname)
+    }, [])
+
     useEffect(() => {
         if (!selectedSlug) {
             setInstance(null)
@@ -556,6 +637,7 @@ export function useDashboardController() {
             setTokenUsage(null)
             setTokenUsageLoadFailed(false)
             setTokenUsageForbidden(false)
+            setGoogleCalendar(null)
             return
         }
         setLoadError('')
@@ -566,6 +648,8 @@ export function useDashboardController() {
         void loadAiConfig(selectedSlug)
         void loadStats(selectedSlug, statsDays)
         void loadTokenUsage(selectedSlug, tokenUsageDays)
+        void loadMetaPendingPhones()
+        void loadGoogleCalendar(selectedSlug)
     }, [
         selectedSlug,
         statsDays,
@@ -574,7 +658,8 @@ export function useDashboardController() {
         loadAiConfig,
         loadMessages,
         loadStats,
-        loadTokenUsage
+        loadTokenUsage,
+        loadGoogleCalendar
     ])
 
     async function logout() {
@@ -648,6 +733,68 @@ export function useDashboardController() {
             })
         }
         await loadInstance(selectedSlug)
+    }
+
+    function startMetaOfficialOAuth() {
+        if (!selectedSlug) return
+        window.location.href = `/api/auth/meta/whatsapp/start?workspace_slug=${encodeURIComponent(selectedSlug)}`
+    }
+
+    async function loadMetaPendingPhones() {
+        const res = await fetch('/api/whatsapp/meta/pending-phones', { credentials: 'include' })
+        if (!res.ok) {
+            setMetaPendingPhones([])
+            return
+        }
+        const j = (await res.json().catch(() => ({}))) as {
+            workspace_slug?: string
+            phones?: Array<{ phone_number_id: string; display_phone_number?: string; verified_name?: string }>
+        }
+        if (!selectedSlug || j.workspace_slug !== selectedSlug) {
+            setMetaPendingPhones([])
+            return
+        }
+        setMetaPendingPhones(Array.isArray(j.phones) ? j.phones : [])
+    }
+
+    async function completeMetaPhonePick(phone_number_id: string) {
+        const res = await fetch('/api/whatsapp/meta/complete-pick', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone_number_id })
+        })
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            setLoadError((j as { error?: string }).error || 'Falha ao concluir ligação oficial')
+            return
+        }
+        setMetaPendingPhones([])
+        if (selectedSlug) await loadInstance(selectedSlug)
+    }
+
+    function startGoogleCalendarOAuth() {
+        if (!selectedSlug) return
+        window.location.href = `/api/auth/google/calendar/start?workspace_slug=${encodeURIComponent(selectedSlug)}`
+    }
+
+    async function disconnectGoogleCalendar() {
+        if (!selectedSlug) return
+        setBusy(true)
+        const res = await fetch('/api/workspace/google-calendar', {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspace_slug: selectedSlug })
+        })
+        setBusy(false)
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            setToast({ message: (j as { error?: string }).error || 'Falha ao desligar a Google Agenda', variant: 'error' })
+            return
+        }
+        setToast({ message: 'Google Agenda desligada.', variant: 'success' })
+        await loadGoogleCalendar(selectedSlug)
     }
 
     async function saveAiConfig() {
@@ -731,6 +878,10 @@ export function useDashboardController() {
         loadTokenUsage,
         loadError,
         setLoadError,
+        googleCalendar,
+        canGoogleCalendarConnect,
+        startGoogleCalendarOAuth,
+        disconnectGoogleCalendar,
         busy,
         showNewWs,
         setShowNewWs,
@@ -751,6 +902,9 @@ export function useDashboardController() {
         createWorkspace,
         provisionInstance,
         connectWhatsapp,
+        startMetaOfficialOAuth,
+        metaPendingPhones,
+        completeMetaPhonePick,
         saveAiConfig,
         cfgEnabled,
         setCfgEnabled,

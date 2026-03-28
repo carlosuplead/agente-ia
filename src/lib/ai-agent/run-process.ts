@@ -5,7 +5,7 @@ import { callLLM } from '@/lib/ai-agent/llm-router'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { splitAiResponseForChunks, type AiChunkSplitMode } from '@/lib/ai-agent/split-ai-response'
 import { setFollowupAnchorForConversation } from '@/lib/ai-agent/followup-anchor'
-import * as uazapi from '@/lib/uazapi'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from './types'
 
 const EMPTY_LLM_FALLBACK =
@@ -178,6 +178,27 @@ export async function runAiProcess(
         return { ok: false, status: 400, error: 'No instance connected' }
     }
 
+    type CalConn = {
+        refresh_token: string | null
+        calendar_id: string | null
+        default_timezone: string | null
+    }
+    const { data: calRow } = await supabase
+        .from('workspace_google_calendar')
+        .select('refresh_token, calendar_id, default_timezone')
+        .eq('workspace_slug', workspace_slug)
+        .maybeSingle()
+
+    const cal = calRow as CalConn | null
+    const rt = cal?.refresh_token?.trim()
+    const googleCalendar = rt
+        ? {
+              refreshToken: rt,
+              calendarId: (cal?.calendar_id || 'primary').trim() || 'primary',
+              defaultTimezone: (cal?.default_timezone || 'America/Sao_Paulo').trim() || 'America/Sao_Paulo'
+          }
+        : undefined
+
     const handoffOn = config.human_handoff_enabled !== false
     if (handoffOn && config.handoff_keywords?.trim()) {
         const lastRows = await sql.unsafe(
@@ -207,7 +228,8 @@ export async function runAiProcess(
             )
             const savedMsg = savedRows[0] as unknown as { id: string } | undefined
             try {
-                const sendRes = await uazapi.sendTextMessage(
+                const { provider } = await getProviderForWorkspace(supabase, workspace_slug)
+                const sendRes = await provider.sendText(
                     instance.instance_token,
                     contactPhone,
                     textToSend,
@@ -268,7 +290,8 @@ export async function runAiProcess(
     const response = await callLLM(config, context, {
         conversationId,
         workspaceSlug: workspace_slug,
-        whatsappInstanceToken: instance.instance_token
+        whatsappInstanceToken: instance.instance_token,
+        googleCalendar
     })
 
     if (response.usage && response.usage.total_tokens > 0) {
@@ -349,7 +372,8 @@ export async function runAiProcess(
             )
             const savedMsg = savedRows[0] as unknown as { id: string } | undefined
             try {
-                const sendRes = await uazapi.sendTextMessage(
+                const { provider } = await getProviderForWorkspace(supabase, workspace_slug)
+                const sendRes = await provider.sendText(
                     instance.instance_token,
                     context.contactPhone,
                     textToSend,

@@ -13,6 +13,8 @@
     "@google/generative-ai": "^0.24.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.0",
+    "googleapis": "^171.4.0",
+    "luxon": "^3.7.2",
     "next": "^15.5.14",
     "openai": "^4.85.0",
     "postgres": "^3.4.8",
@@ -20,6 +22,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/luxon": "^3.7.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

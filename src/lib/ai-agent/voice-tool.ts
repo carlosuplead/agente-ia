@@ -1,6 +1,7 @@
-import * as uazapi from '@/lib/uazapi'
 import { textToSpeechMp3 } from '@/lib/elevenlabs'
 import type { AiAgentConfig, BuiltContext, VoiceDeliveryRecord } from '@/lib/ai-agent/types'
+import { createAdminClient } from '@/lib/supabase/server'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 
 const TOOL_NAME = 'send_voice_message'
 
@@ -25,6 +26,7 @@ export function resolveElevenLabsVoiceId(config: AiAgentConfig, override?: strin
 export async function executeSendVoiceMessage(args: {
     config: AiAgentConfig
     context: BuiltContext
+    workspaceSlug: string
     instanceToken: string
     text: string
     voiceIdOverride?: string | null
@@ -50,9 +52,10 @@ export async function executeSendVoiceMessage(args: {
     }
 
     try {
-        const sent = await uazapi.sendMediaAudio(args.instanceToken, args.context.contactPhone, audio, {
-            delayMs: args.delayMs,
-            uazapiType: 'audio'
+        const supabase = await createAdminClient()
+        const { provider } = await getProviderForWorkspace(supabase, args.workspaceSlug)
+        const sent = await provider.sendAudio(args.instanceToken, args.context.contactPhone, audio, {
+            delayMs: args.delayMs
         })
         return {
             toolResult: sent.messageId

@@ -6,6 +6,15 @@ import { callN8nWebhook, type N8nWebhookPayload } from '@/lib/ai-agent/n8n-webho
 import { parseN8nToolsFromConfig, type N8nToolDef } from '@/lib/ai-agent/n8n-tools'
 import type { AiAgentConfig, BuiltContext, LLMResponse, LlmUsageSnapshot, VoiceDeliveryRecord } from './types'
 import {
+    calendarGeminiFunctionDeclarations,
+    calendarOpenAiTools,
+    calendarToolsPromptBlock,
+    CALENDAR_CREATE_EVENT_TOOL,
+    CALENDAR_SUGGEST_SLOTS_TOOL,
+    executeCalendarToolCall
+} from '@/lib/ai-agent/calendar-tools'
+import type { GoogleCalendarMeta } from '@/lib/ai-agent/calendar-tools'
+import {
     executeSendVoiceMessage,
     VOICE_MESSAGE_TOOL_NAME,
     voiceToolDescription
@@ -19,6 +28,8 @@ export type LlmContactMeta = {
     workspaceSlug: string
     /** Token da instância WhatsApp (envio de áudio /send/media). */
     whatsappInstanceToken?: string
+    /** Conta Google Calendar ligada ao workspace (OAuth refresh token). */
+    googleCalendar?: GoogleCalendarMeta
 }
 
 function elevenLabsVoiceLayerOn(config: AiAgentConfig, meta?: LlmContactMeta): boolean {
@@ -122,7 +133,8 @@ function buildUserContent(
     config: AiAgentConfig,
     context: BuiltContext,
     n8nToolsInPrompt: N8nToolDef[],
-    elevenlabsVoiceOn: boolean
+    elevenlabsVoiceOn: boolean,
+    googleCalendarOn: boolean
 ): string {
     const handoffOn = config.human_handoff_enabled !== false
     const extraFmt = config.whatsapp_formatting_extra?.trim()
@@ -140,6 +152,7 @@ function buildUserContent(
         elevenlabsVoiceOn
             ? `Você tem a ferramenta "${VOICE_MESSAGE_TOOL_NAME}": ${voiceToolDescription(config)}`
             : '',
+        googleCalendarOn ? calendarToolsPromptBlock : '',
         'FORMATAÇÃO PARA WHATSAPP:',
         '- Evite blocos únicos de texto longos. Use quebras de linha.',
         '- Use *negrito* para dar ênfase (ex: *R$ 100,00*).',
@@ -169,17 +182,18 @@ export async function callLLM(
             : []
     const n8nOn = n8nList.length > 0
     const voiceOn = elevenLabsVoiceLayerOn(config, meta)
+    const calendarOn = Boolean(meta?.googleCalendar?.refreshToken?.trim())
 
-    const userContent = buildUserContent(config, context, n8nOn ? n8nList : [], voiceOn)
+    const userContent = buildUserContent(config, context, n8nOn ? n8nList : [], voiceOn, calendarOn)
 
-    if (!handoffOn && !n8nOn && !voiceOn) {
+    if (!handoffOn && !n8nOn && !voiceOn && !calendarOn) {
         return plainCompletion(config, userContent)
     }
 
     if (config.provider === 'openai') {
-        return callOpenAIWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, meta)
+        return callOpenAIWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, meta)
     }
-    return callGeminiWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, meta)
+    return callGeminiWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, meta)
 }
 
 async function plainCompletion(config: AiAgentConfig, userContent: string): Promise<LLMResponse> {
@@ -232,6 +246,7 @@ async function callGeminiWithTools(
     handoffOn: boolean,
     n8nList: N8nToolDef[],
     elevenlabsVoiceOn: boolean,
+    googleCalendarOn: boolean,
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveGoogleApiKey(config)
@@ -287,6 +302,9 @@ async function callGeminiWithTools(
             }
         })
     }
+    if (googleCalendarOn) {
+        declarations.push(...calendarGeminiFunctionDeclarations())
+    }
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
@@ -339,6 +357,27 @@ async function callGeminiWithTools(
             const delayMs = config.send_delay_ms ?? 1200
 
             for (const call of otherCalls) {
+                if (
+                    googleCalendarOn &&
+                    meta?.googleCalendar &&
+                    (call.name === CALENDAR_SUGGEST_SLOTS_TOOL || call.name === CALENDAR_CREATE_EVENT_TOOL)
+                ) {
+                    let result: string
+                    try {
+                        result = await executeCalendarToolCall(
+                            call.name,
+                            (call.args || {}) as Record<string, unknown>,
+                            meta.googleCalendar,
+                            context
+                        )
+                    } catch (e) {
+                        result = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
+                    }
+                    functionResponseParts.push({
+                        functionResponse: { name: call.name, response: { result } }
+                    })
+                    continue
+                }
                 if (call.name === VOICE_MESSAGE_TOOL_NAME) {
                     if (!elevenlabsVoiceOn || !instanceTok) {
                         functionResponseParts.push({
@@ -353,6 +392,7 @@ async function callGeminiWithTools(
                     const exec = await executeSendVoiceMessage({
                         config,
                         context,
+                        workspaceSlug: meta.workspaceSlug,
                         instanceToken: instanceTok,
                         text: String(va?.text || ''),
                         voiceIdOverride: typeof va?.voice_id === 'string' ? va.voice_id : null,
@@ -437,6 +477,7 @@ async function callOpenAIWithTools(
     handoffOn: boolean,
     n8nList: N8nToolDef[],
     elevenlabsVoiceOn: boolean,
+    googleCalendarOn: boolean,
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveOpenAiApiKey(config)
@@ -487,6 +528,9 @@ async function callOpenAIWithTools(
                 }
             }
         })
+    }
+    if (googleCalendarOn) {
+        tools.push(...calendarOpenAiTools())
     }
 
     const openai = new OpenAI({ apiKey })
@@ -556,7 +600,23 @@ async function callOpenAIWithTools(
                 if (fnName === TOOL_NAME_TRANSFER) continue
 
                 let toolContent: string
-                if (fnName === VOICE_MESSAGE_TOOL_NAME && meta) {
+                if (
+                    googleCalendarOn &&
+                    meta?.googleCalendar &&
+                    (fnName === CALENDAR_SUGGEST_SLOTS_TOOL || fnName === CALENDAR_CREATE_EVENT_TOOL)
+                ) {
+                    try {
+                        let raw: Record<string, unknown> = {}
+                        try {
+                            raw = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
+                        } catch {
+                            raw = {}
+                        }
+                        toolContent = await executeCalendarToolCall(fnName, raw, meta.googleCalendar, context)
+                    } catch (e) {
+                        toolContent = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
+                    }
+                } else if (fnName === VOICE_MESSAGE_TOOL_NAME && meta) {
                     if (!elevenlabsVoiceOn || !instanceTok) {
                         toolContent = 'Função de áudio não disponível neste contexto.'
                     } else {
@@ -575,6 +635,7 @@ async function callOpenAIWithTools(
                         const exec = await executeSendVoiceMessage({
                             config,
                             context,
+                            workspaceSlug: meta.workspaceSlug,
                             instanceToken: instanceTok,
                             text,
                             voiceIdOverride: voiceId,

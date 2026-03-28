@@ -10,6 +10,7 @@ export async function POST(request: Request) {
         const body = await request.json()
         const workspace_slug = body.workspace_slug as string | undefined
         const display_name = (body.display_name as string | undefined) || workspace_slug
+        const provider = (body.provider as 'uazapi' | 'official' | undefined) || 'uazapi'
 
         if (!workspace_slug) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
@@ -33,6 +34,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Workspace já tem instância WhatsApp' }, { status: 409 })
         }
 
+        if (provider !== 'uazapi') {
+            return NextResponse.json({ error: 'Use o fluxo OAuth para provider official' }, { status: 400 })
+        }
+
         const { token } = await uazapi.createRemoteInstance(display_name || workspace_slug)
 
         const { data: row, error } = await supabase
@@ -40,6 +45,7 @@ export async function POST(request: Request) {
             .insert({
                 workspace_slug,
                 instance_token: token,
+                provider: 'uazapi',
                 status: 'disconnected'
             })
             .select('id, workspace_slug, status')
@@ -77,7 +83,9 @@ export async function GET(request: Request) {
 
         const { data: instance, error } = await supabase
             .from('whatsapp_instances')
-            .select('id, status, phone_number, last_connected_at, updated_at')
+            .select(
+                'id, status, phone_number, last_connected_at, updated_at, provider, phone_number_id, waba_id, meta_token_obtained_at'
+            )
             .eq('workspace_slug', workspace_slug)
             .maybeSingle()
 

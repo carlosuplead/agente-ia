@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceInternal } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
-import * as uazapi from '@/lib/uazapi'
 import { setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 
 export async function POST(request: Request) {
     try {
@@ -66,7 +66,8 @@ export async function POST(request: Request) {
         }
 
         try {
-            const result = await uazapi.sendTextMessage(instance.instance_token, contact.phone, message)
+            const { provider } = await getProviderForWorkspace(supabase, workspace_slug)
+            const result = await provider.sendText(instance.instance_token, contact.phone, message)
 
             await sql.unsafe(
                 `UPDATE ${sch}.messages SET status = 'sent', whatsapp_id = $2 WHERE id = $1::uuid`,

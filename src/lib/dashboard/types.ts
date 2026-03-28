@@ -2,7 +2,11 @@ export type WorkspaceRow = { id: string; name: string; slug: string; created_at:
 export type InstanceRow = {
     id: string
     status: string
+    provider?: 'uazapi' | 'official' | null
     phone_number: string | null
+    phone_number_id?: string | null
+    waba_id?: string | null
+    meta_token_obtained_at?: string | null
     last_connected_at: string | null
     updated_at?: string
 } | null
@@ -63,6 +67,15 @@ export type N8nToolUiRow = {
     description: string
 }
 
-export type DashboardTab = 'workspaces' | 'connection' | 'config' | 'workspace_settings'
+export type GoogleCalendarStatus = {
+    oauth_configured: boolean
+    connected: boolean
+    account_email: string | null
+    calendar_id: string | null
+    default_timezone: string | null
+    updated_at: string | null
+}
+
+export type DashboardTab = 'workspaces' | 'connection' | 'disparos' | 'config' | 'workspace_settings'
 
 export type WorkspaceMembershipRow = { workspace_slug: string; role: string }

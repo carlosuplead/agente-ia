@@ -19,6 +19,13 @@ import {
     VOICE_MESSAGE_TOOL_NAME,
     voiceToolDescription
 } from '@/lib/ai-agent/voice-tool'
+import {
+    executeNotifyTeamWhatsApp,
+    NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+    notifyTeamWhatsAppToolDescription,
+    teamNotificationLayerOn
+} from '@/lib/ai-agent/team-notification-tool'
+import { normalizedAllowlistPhones } from '@/lib/ai-agent/test-mode-allowlist'
 
 const LLM_TIMEOUT_MS = 30_000
 const TOOL_NAME_TRANSFER = 'transfer_to_human'
@@ -129,12 +136,23 @@ function resolveGoogleApiKey(config: AiAgentConfig): string {
     return process.env.GOOGLE_API_KEY?.trim() || ''
 }
 
+function sendOptsFromConfig(config: AiAgentConfig): { delayMs: number; presence: string | null } {
+    const delayMs = config.send_delay_ms ?? 1200
+    const p = config.send_presence
+    if (p === undefined || p === null || String(p).trim() === '' || String(p).toLowerCase() === 'none') {
+        return { delayMs, presence: null }
+    }
+    return { delayMs, presence: String(p) }
+}
+
 function buildUserContent(
     config: AiAgentConfig,
     context: BuiltContext,
     n8nToolsInPrompt: N8nToolDef[],
     elevenlabsVoiceOn: boolean,
-    googleCalendarOn: boolean
+    googleCalendarOn: boolean,
+    teamNotificationOn: boolean,
+    teamAuthorizedPhonesLine: string
 ): string {
     const handoffOn = config.human_handoff_enabled !== false
     const extraFmt = config.whatsapp_formatting_extra?.trim()
@@ -153,6 +171,9 @@ function buildUserContent(
             ? `Você tem a ferramenta "${VOICE_MESSAGE_TOOL_NAME}": ${voiceToolDescription(config)}`
             : '',
         googleCalendarOn ? calendarToolsPromptBlock : '',
+        teamNotificationOn
+            ? `Ferramenta "${NOTIFY_TEAM_WHATSAPP_TOOL_NAME}": ${notifyTeamWhatsAppToolDescription(config)}\n${teamAuthorizedPhonesLine}`
+            : '',
         'FORMATAÇÃO PARA WHATSAPP:',
         '- Evite blocos únicos de texto longos. Use quebras de linha.',
         '- Use *negrito* para dar ênfase (ex: *R$ 100,00*).',
@@ -183,17 +204,52 @@ export async function callLLM(
     const n8nOn = n8nList.length > 0
     const voiceOn = elevenLabsVoiceLayerOn(config, meta)
     const calendarOn = Boolean(meta?.googleCalendar?.refreshToken?.trim())
+    const teamNotifOn = teamNotificationLayerOn(config, meta)
+    const authorizedTeam = teamNotifOn
+        ? normalizedAllowlistPhones(config.team_notification_allowlist_phones)
+        : []
+    const teamAuthorizedPhonesLine = teamNotifOn
+        ? `Números autorizados para recipient_phone (usa um destes valores): ${authorizedTeam.join(', ')}.`
+        : ''
 
-    const userContent = buildUserContent(config, context, n8nOn ? n8nList : [], voiceOn, calendarOn)
+    const userContent = buildUserContent(
+        config,
+        context,
+        n8nOn ? n8nList : [],
+        voiceOn,
+        calendarOn,
+        teamNotifOn,
+        teamAuthorizedPhonesLine
+    )
 
-    if (!handoffOn && !n8nOn && !voiceOn && !calendarOn) {
+    if (!handoffOn && !n8nOn && !voiceOn && !calendarOn && !teamNotifOn) {
         return plainCompletion(config, userContent)
     }
 
     if (config.provider === 'openai') {
-        return callOpenAIWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, meta)
+        return callOpenAIWithTools(
+            config,
+            context,
+            userContent,
+            handoffOn,
+            n8nList,
+            voiceOn,
+            calendarOn,
+            teamNotifOn,
+            meta
+        )
     }
-    return callGeminiWithTools(config, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, meta)
+    return callGeminiWithTools(
+        config,
+        context,
+        userContent,
+        handoffOn,
+        n8nList,
+        voiceOn,
+        calendarOn,
+        teamNotifOn,
+        meta
+    )
 }
 
 async function plainCompletion(config: AiAgentConfig, userContent: string): Promise<LLMResponse> {
@@ -247,6 +303,7 @@ async function callGeminiWithTools(
     n8nList: N8nToolDef[],
     elevenlabsVoiceOn: boolean,
     googleCalendarOn: boolean,
+    teamNotificationOn: boolean,
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveGoogleApiKey(config)
@@ -304,6 +361,30 @@ async function callGeminiWithTools(
     }
     if (googleCalendarOn) {
         declarations.push(...calendarGeminiFunctionDeclarations())
+    }
+    if (teamNotificationOn) {
+        declarations.push({
+            name: NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+            description: notifyTeamWhatsAppToolDescription(config),
+            parameters: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    recipient_phone: {
+                        type: SchemaType.STRING,
+                        description: 'Telefone do destinatário (autorizado no painel; mesmo formato que a lista no prompt)'
+                    },
+                    summary: {
+                        type: SchemaType.STRING,
+                        description: 'Resumo do que foi concluído e informação útil para a equipa'
+                    },
+                    stage_label: {
+                        type: SchemaType.STRING,
+                        description: 'Opcional: nome curto da etapa (ex. Agendamento confirmado)'
+                    }
+                },
+                required: ['recipient_phone', 'summary']
+            }
+        })
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
@@ -408,6 +489,40 @@ async function callGeminiWithTools(
                     continue
                 }
 
+                if (call.name === NOTIFY_TEAM_WHATSAPP_TOOL_NAME) {
+                    if (!teamNotificationOn || !instanceTok || !meta?.workspaceSlug) {
+                        functionResponseParts.push({
+                            functionResponse: {
+                                name: NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+                                response: { result: 'Notificação interna não disponível neste contexto.' }
+                            }
+                        })
+                        continue
+                    }
+                    const na = call.args as {
+                        recipient_phone?: string
+                        summary?: string
+                        stage_label?: string
+                    }
+                    const toolResult = await executeNotifyTeamWhatsApp({
+                        config,
+                        context,
+                        workspaceSlug: meta.workspaceSlug,
+                        instanceToken: instanceTok,
+                        recipientPhoneRaw: String(na?.recipient_phone || ''),
+                        summary: String(na?.summary || ''),
+                        stageLabel: typeof na?.stage_label === 'string' ? na.stage_label : undefined,
+                        sendOpts: sendOptsFromConfig(config)
+                    })
+                    functionResponseParts.push({
+                        functionResponse: {
+                            name: NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+                            response: { result: toolResult }
+                        }
+                    })
+                    continue
+                }
+
                 const def = n8nList.find(t => t.tool_name === call.name)
                 if (def) {
                     const payload = String((call.args as { payload?: string })?.payload || '')
@@ -478,6 +593,7 @@ async function callOpenAIWithTools(
     n8nList: N8nToolDef[],
     elevenlabsVoiceOn: boolean,
     googleCalendarOn: boolean,
+    teamNotificationOn: boolean,
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveOpenAiApiKey(config)
@@ -531,6 +647,33 @@ async function callOpenAIWithTools(
     }
     if (googleCalendarOn) {
         tools.push(...calendarOpenAiTools())
+    }
+    if (teamNotificationOn) {
+        tools.push({
+            type: 'function',
+            function: {
+                name: NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+                description: notifyTeamWhatsAppToolDescription(config),
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        recipient_phone: {
+                            type: 'string',
+                            description: 'Telefone do destinatário (autorizado no painel)'
+                        },
+                        summary: {
+                            type: 'string',
+                            description: 'Resumo do que foi concluído para a equipa'
+                        },
+                        stage_label: {
+                            type: 'string',
+                            description: 'Opcional: etiqueta da etapa'
+                        }
+                    },
+                    required: ['recipient_phone', 'summary']
+                }
+            }
+        })
     }
 
     const openai = new OpenAI({ apiKey })
@@ -643,6 +786,36 @@ async function callOpenAIWithTools(
                         })
                         if (exec.delivery) voiceDeliveries.push(exec.delivery)
                         toolContent = exec.toolResult
+                    }
+                } else if (fnName === NOTIFY_TEAM_WHATSAPP_TOOL_NAME && meta) {
+                    if (!teamNotificationOn || !instanceTok) {
+                        toolContent = 'Notificação interna não disponível neste contexto.'
+                    } else {
+                        let recipient = ''
+                        let summary = ''
+                        let stageLabel: string | undefined
+                        try {
+                            const args = JSON.parse(tc.function.arguments || '{}') as {
+                                recipient_phone?: string
+                                summary?: string
+                                stage_label?: string
+                            }
+                            recipient = args.recipient_phone || ''
+                            summary = args.summary || ''
+                            stageLabel = typeof args.stage_label === 'string' ? args.stage_label : undefined
+                        } catch {
+                            /* empty */
+                        }
+                        toolContent = await executeNotifyTeamWhatsApp({
+                            config,
+                            context,
+                            workspaceSlug: meta.workspaceSlug,
+                            instanceToken: instanceTok,
+                            recipientPhoneRaw: recipient,
+                            summary,
+                            stageLabel,
+                            sendOpts: sendOptsFromConfig(config)
+                        })
                     }
                 } else {
                     const def = n8nList.find(t => t.tool_name === fnName)

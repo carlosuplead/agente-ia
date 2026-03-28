@@ -58,6 +58,16 @@ export type AiAgentConfig = {
     ai_chunk_split_mode?: string | null
     /** Máximo de mensagens por turno (1–20 no servidor). */
     ai_chunk_max_parts?: number
+    /** Só números na allowlist recebem mensagens gravadas e respostas da IA (com lista válida). */
+    ai_test_mode?: boolean
+    /** Texto livre: linhas ou separadores vírgula/; — normalizado como contacts.phone. */
+    ai_test_allowlist_phones?: string | null
+    /** Tool `notify_team_whatsapp`: envia texto da instância para números autorizados. */
+    team_notification_enabled?: boolean
+    team_notification_allowlist_phones?: string | null
+    team_notification_tool_description?: string | null
+    /** Se true (default), anexa excerto recente do transcript à notificação. */
+    team_notification_append_transcript?: boolean
 }
 
 export type VoiceDeliveryRecord = {

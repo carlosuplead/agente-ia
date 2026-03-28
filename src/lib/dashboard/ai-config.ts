@@ -34,7 +34,13 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     google_api_key_set: false,
     ai_chunk_messages_enabled: false,
     ai_chunk_split_mode: 'paragraph',
-    ai_chunk_max_parts: 8
+    ai_chunk_max_parts: 8,
+    ai_test_mode: false,
+    ai_test_allowlist_phones: null,
+    team_notification_enabled: false,
+    team_notification_allowlist_phones: null,
+    team_notification_tool_description: null,
+    team_notification_append_transcript: true
 }
 
 export function normalizeAiConfig(c: Partial<AiConfigRow> | null | undefined): AiConfigRow {

@@ -61,6 +61,12 @@ function applyAiConfigToForm(
         setCfgChunkMessages: (v: boolean) => void
         setCfgChunkSplitMode: (v: string) => void
         setCfgChunkMaxParts: (v: number) => void
+        setCfgTestMode: (v: boolean) => void
+        setCfgTestAllowlist: (v: string) => void
+        setCfgTeamNotify: (v: boolean) => void
+        setCfgTeamNotifyAllowlist: (v: string) => void
+        setCfgTeamNotifyDesc: (v: string) => void
+        setCfgTeamNotifyAppendTranscript: (v: boolean) => void
     }
 ) {
     setters.setCfgEnabled(merged.enabled)
@@ -99,6 +105,12 @@ function applyAiConfigToForm(
             ? merged.ai_chunk_max_parts
             : 8
     )
+    setters.setCfgTestMode(merged.ai_test_mode === true)
+    setters.setCfgTestAllowlist(merged.ai_test_allowlist_phones ?? '')
+    setters.setCfgTeamNotify(merged.team_notification_enabled === true)
+    setters.setCfgTeamNotifyAllowlist(merged.team_notification_allowlist_phones ?? '')
+    setters.setCfgTeamNotifyDesc(merged.team_notification_tool_description ?? '')
+    setters.setCfgTeamNotifyAppendTranscript(merged.team_notification_append_transcript !== false)
 }
 
 export function useDashboardController() {
@@ -177,6 +189,12 @@ export function useDashboardController() {
     const [cfgChunkMessages, setCfgChunkMessages] = useState(false)
     const [cfgChunkSplitMode, setCfgChunkSplitMode] = useState('paragraph')
     const [cfgChunkMaxParts, setCfgChunkMaxParts] = useState(8)
+    const [cfgTestMode, setCfgTestMode] = useState(false)
+    const [cfgTestAllowlist, setCfgTestAllowlist] = useState('')
+    const [cfgTeamNotify, setCfgTeamNotify] = useState(false)
+    const [cfgTeamNotifyAllowlist, setCfgTeamNotifyAllowlist] = useState('')
+    const [cfgTeamNotifyDesc, setCfgTeamNotifyDesc] = useState('')
+    const [cfgTeamNotifyAppendTranscript, setCfgTeamNotifyAppendTranscript] = useState(true)
 
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
 
@@ -261,7 +279,13 @@ export function useDashboardController() {
             cfgClearGoogleKey,
             cfgChunkMessages,
             cfgChunkSplitMode,
-            cfgChunkMaxParts
+            cfgChunkMaxParts,
+            cfgTestMode,
+            cfgTestAllowlist,
+            cfgTeamNotify,
+            cfgTeamNotifyAllowlist,
+            cfgTeamNotifyDesc,
+            cfgTeamNotifyAppendTranscript
         }),
         [
             selectedSlug,
@@ -295,7 +319,13 @@ export function useDashboardController() {
             cfgClearGoogleKey,
             cfgChunkMessages,
             cfgChunkSplitMode,
-            cfgChunkMaxParts
+            cfgChunkMaxParts,
+            cfgTestMode,
+            cfgTestAllowlist,
+            cfgTeamNotify,
+            cfgTeamNotifyAllowlist,
+            cfgTeamNotifyDesc,
+            cfgTeamNotifyAppendTranscript
         ]
     )
 
@@ -499,7 +529,13 @@ export function useDashboardController() {
             setCfgClearGoogleKey,
             setCfgChunkMessages,
             setCfgChunkSplitMode,
-            setCfgChunkMaxParts
+            setCfgChunkMaxParts,
+            setCfgTestMode,
+            setCfgTestAllowlist,
+            setCfgTeamNotify,
+            setCfgTeamNotifyAllowlist,
+            setCfgTeamNotifyDesc,
+            setCfgTeamNotifyAppendTranscript
         }),
         []
     )
@@ -972,7 +1008,11 @@ export function useDashboardController() {
             cfgN8nTools,
             cfgFollowup,
             cfgFollowupSteps,
-            cfgChunkMaxParts
+            cfgChunkMaxParts,
+            cfgTestMode,
+            cfgTestAllowlist,
+            cfgTeamNotify,
+            cfgTeamNotifyAllowlist
         })
         if (!v.ok) {
             setCfgFieldErrors(v.errors)
@@ -1132,6 +1172,18 @@ export function useDashboardController() {
         setCfgChunkSplitMode,
         cfgChunkMaxParts,
         setCfgChunkMaxParts,
+        cfgTestMode,
+        setCfgTestMode,
+        cfgTestAllowlist,
+        setCfgTestAllowlist,
+        cfgTeamNotify,
+        setCfgTeamNotify,
+        cfgTeamNotifyAllowlist,
+        setCfgTeamNotifyAllowlist,
+        cfgTeamNotifyDesc,
+        setCfgTeamNotifyDesc,
+        cfgTeamNotifyAppendTranscript,
+        setCfgTeamNotifyAppendTranscript,
         newN8nToolRow,
         newFollowupStepRow
     }

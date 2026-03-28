@@ -1,5 +1,6 @@
 import type { N8nToolUiRow } from './types'
 import type { FollowupStepUi } from '@/lib/ai-agent/followup-steps'
+import { hasValidAllowlistEntry } from '@/lib/ai-agent/test-mode-allowlist'
 
 export type AiConfigFieldErrors = Partial<
     Record<
@@ -11,7 +12,9 @@ export type AiConfigFieldErrors = Partial<
         | 'cfgModel'
         | 'n8nTools'
         | 'followupSteps'
-        | 'cfgChunkMax',
+        | 'cfgChunkMax'
+        | 'cfgTestAllowlist'
+        | 'cfgTeamNotifyAllowlist',
         string
     >
 >
@@ -28,6 +31,10 @@ export function validateAiConfigForm(input: {
     cfgFollowup: boolean
     cfgFollowupSteps: FollowupStepUi[]
     cfgChunkMaxParts: number
+    cfgTestMode: boolean
+    cfgTestAllowlist: string
+    cfgTeamNotify: boolean
+    cfgTeamNotifyAllowlist: string
 }): { ok: true } | { ok: false; errors: AiConfigFieldErrors } {
     const errors: AiConfigFieldErrors = {}
 
@@ -77,6 +84,16 @@ export function validateAiConfigForm(input: {
                 break
             }
         }
+    }
+
+    if (input.cfgTestMode && !hasValidAllowlistEntry(input.cfgTestAllowlist)) {
+        errors.cfgTestAllowlist =
+            'Modo testes: indica pelo menos um número válido (um por linha ou separados por vírgula).'
+    }
+
+    if (input.cfgTeamNotify && !hasValidAllowlistEntry(input.cfgTeamNotifyAllowlist)) {
+        errors.cfgTeamNotifyAllowlist =
+            'Notificações à equipa: indica pelo menos um número válido (um por linha ou separados por vírgula).'
     }
 
     if (input.cfgFollowup) {

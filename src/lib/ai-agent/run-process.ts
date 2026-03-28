@@ -7,6 +7,7 @@ import { splitAiResponseForChunks, type AiChunkSplitMode } from '@/lib/ai-agent/
 import { setFollowupAnchorForConversation } from '@/lib/ai-agent/followup-anchor'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from './types'
+import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 
 const EMPTY_LLM_FALLBACK =
     'Desculpe, não consegui gerar uma resposta agora. Pode repetir a sua pergunta?'
@@ -68,6 +69,14 @@ export async function runAiProcess(
 
     if (!config || !config.enabled) {
         return { ok: true, reason: 'AI disabled' }
+    }
+
+    const phoneRows = await sql.unsafe(`SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`, [
+        contact_id
+    ])
+    const contactPhone = (phoneRows[0] as unknown as { phone?: string } | undefined)?.phone ?? ''
+    if (!shouldAcceptInboundForTestMode(config, contactPhone)) {
+        return { ok: true, reason: 'Test mode allowlist' }
     }
 
     const convRows = await sql.unsafe(

@@ -6,6 +6,7 @@ import { addToBuffer } from '@/lib/ai-agent/buffer'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { resetFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { parseMetaWebhookPayload } from '@/lib/whatsapp/providers/official.provider'
+import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || ''
 
@@ -59,6 +60,16 @@ export async function POST(request: Request) {
                 if (dup.length) continue
                 const normalized = normalizePhoneForBrazil(m.fromPhone)
                 if (!normalized || isWhatsAppGroup(normalized.replace(/\D/g, ''))) continue
+                const testCfgRows = await sql.unsafe(
+                    `SELECT ai_test_mode, ai_test_allowlist_phones FROM ${sch}.ai_agent_config LIMIT 1`,
+                    []
+                )
+                const testCfg = testCfgRows[0] as
+                    | { ai_test_mode?: boolean | null; ai_test_allowlist_phones?: string | null }
+                    | undefined
+                if (!shouldAcceptInboundForTestMode(testCfg ?? {}, normalized)) {
+                    continue
+                }
                 const variants = generateBrazilianPhoneVariants(normalized)
                 const rows = await sql.unsafe(`SELECT id FROM ${sch}.contacts WHERE phone = ANY($1::text[]) LIMIT 1`, [variants])
                 let contactId = (rows[0] as { id?: string } | undefined)?.id

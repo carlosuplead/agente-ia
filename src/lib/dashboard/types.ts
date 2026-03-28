@@ -48,6 +48,12 @@ export type AiConfigRow = {
     ai_chunk_messages_enabled?: boolean
     ai_chunk_split_mode?: string | null
     ai_chunk_max_parts?: number
+    ai_test_mode?: boolean
+    ai_test_allowlist_phones?: string | null
+    team_notification_enabled?: boolean
+    team_notification_allowlist_phones?: string | null
+    team_notification_tool_description?: string | null
+    team_notification_append_transcript?: boolean
 }
 
 export type MessageRow = {

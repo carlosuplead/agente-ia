@@ -35,6 +35,12 @@ export type AiConfigFormSnapshotInput = {
     cfgChunkMessages: boolean
     cfgChunkSplitMode: string
     cfgChunkMaxParts: number
+    cfgTestMode: boolean
+    cfgTestAllowlist: string
+    cfgTeamNotify: boolean
+    cfgTeamNotifyAllowlist: string
+    cfgTeamNotifyDesc: string
+    cfgTeamNotifyAppendTranscript: boolean
 }
 
 export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
@@ -87,7 +93,13 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         elevenlabs_voice_tool_description: i.cfgElevenVoiceDesc.trim() || null,
         ai_chunk_messages_enabled: i.cfgChunkMessages,
         ai_chunk_split_mode: i.cfgChunkSplitMode,
-        ai_chunk_max_parts: i.cfgChunkMaxParts
+        ai_chunk_max_parts: i.cfgChunkMaxParts,
+        ai_test_mode: i.cfgTestMode,
+        ai_test_allowlist_phones: i.cfgTestAllowlist.trim() || null,
+        team_notification_enabled: i.cfgTeamNotify,
+        team_notification_allowlist_phones: i.cfgTeamNotifyAllowlist.trim() || null,
+        team_notification_tool_description: i.cfgTeamNotifyDesc.trim() || null,
+        team_notification_append_transcript: i.cfgTeamNotifyAppendTranscript
     }
     if (i.cfgClearOpenaiKey) {
         out.openai_api_key = null

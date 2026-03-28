@@ -77,6 +77,48 @@ export function AgentConfigTab() {
                             />
                             <label htmlFor="cfg-ia-ativa">IA ativa</label>
                         </div>
+                        <div className="checkbox-row" style={{ marginTop: 12 }}>
+                            <input
+                                id="cfg-test-mode"
+                                type="checkbox"
+                                checked={d.cfgTestMode}
+                                onChange={e => d.setCfgTestMode(e.target.checked)}
+                            />
+                            <label htmlFor="cfg-test-mode">Modo testes (só números permitidos)</label>
+                        </div>
+                        {d.cfgTestMode ? (
+                            <div className="input-group" style={{ marginTop: 12 }}>
+                                <label className="input-label" htmlFor="cfg-test-allowlist">
+                                    Números permitidos
+                                </label>
+                                <textarea
+                                    id="cfg-test-allowlist"
+                                    className="input"
+                                    rows={4}
+                                    value={d.cfgTestAllowlist}
+                                    onChange={e => d.setCfgTestAllowlist(e.target.value)}
+                                    placeholder="Um número por linha, ou separados por vírgula (ex. +5511999999999 ou 11999999999)"
+                                    aria-invalid={!!err.cfgTestAllowlist}
+                                    aria-describedby={
+                                        err.cfgTestAllowlist ? 'err-cfg-test-allowlist' : undefined
+                                    }
+                                />
+                                <FieldError
+                                    id="err-cfg-test-allowlist"
+                                    message={err.cfgTestAllowlist}
+                                />
+                                <p
+                                    style={{
+                                        color: 'var(--text-secondary)',
+                                        fontSize: 13,
+                                        marginTop: 8
+                                    }}
+                                >
+                                    Com modo testes ligado, só estes números têm mensagens recebidas gravadas e
+                                    respostas da IA. Os restantes são ignorados pelo webhook (HTTP 200).
+                                </p>
+                            </div>
+                        ) : null}
                         <div className="two-cols">
                             <div className="input-group">
                                 <label className="input-label" htmlFor="cfg-provider">
@@ -819,6 +861,76 @@ export function AgentConfigTab() {
                                         value={d.cfgElevenVoiceDesc}
                                         onChange={e => d.setCfgElevenVoiceDesc(e.target.value)}
                                         placeholder="Quando usar áudio em vez de texto…"
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="card">
+                        <div className="card-title" style={{ marginBottom: 16 }}>
+                            Notificações à equipa (WhatsApp)
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                            Expõe a ferramenta <code className="inline-code">notify_team_whatsapp</code> ao modelo. Quando a
+                            IA a chamar, o número da instância envia um texto aos destinatários autorizados (resumo + opcional
+                            excerto da conversa). Na API oficial da Meta, o destinatário pode precisar de janela de conversa
+                            ou template; com UAZAPI aplica-se o comportamento habitual do cliente.
+                        </p>
+                        <div className="checkbox-row" style={{ marginBottom: 16 }}>
+                            <input
+                                id="cfg-team-notify"
+                                type="checkbox"
+                                checked={d.cfgTeamNotify}
+                                onChange={e => d.setCfgTeamNotify(e.target.checked)}
+                            />
+                            <label htmlFor="cfg-team-notify">Ativar notificações internas por WhatsApp</label>
+                        </div>
+                        {d.cfgTeamNotify && (
+                            <>
+                                <div className="input-group" style={{ marginBottom: 12 }}>
+                                    <label className="input-label" htmlFor="cfg-team-notify-allow">
+                                        Números autorizados (destinatários)
+                                    </label>
+                                    <textarea
+                                        id="cfg-team-notify-allow"
+                                        className="input"
+                                        rows={4}
+                                        value={d.cfgTeamNotifyAllowlist}
+                                        onChange={e => d.setCfgTeamNotifyAllowlist(e.target.value)}
+                                        placeholder="Um número por linha ou separados por vírgula (ex. +5511999999999)"
+                                        aria-invalid={!!err.cfgTeamNotifyAllowlist}
+                                        aria-describedby={
+                                            err.cfgTeamNotifyAllowlist ? 'err-cfg-team-notify-allow' : undefined
+                                        }
+                                    />
+                                    <FieldError
+                                        id="err-cfg-team-notify-allow"
+                                        message={err.cfgTeamNotifyAllowlist}
+                                    />
+                                </div>
+                                <div className="checkbox-row" style={{ marginBottom: 12 }}>
+                                    <input
+                                        id="cfg-team-notify-transcript"
+                                        type="checkbox"
+                                        checked={d.cfgTeamNotifyAppendTranscript}
+                                        onChange={e => d.setCfgTeamNotifyAppendTranscript(e.target.checked)}
+                                    />
+                                    <label htmlFor="cfg-team-notify-transcript">
+                                        Incluir excerto recente do transcript na mensagem
+                                    </label>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label" htmlFor="cfg-team-notify-desc">
+                                        Descrição da tool para a IA (opcional)
+                                    </label>
+                                    <textarea
+                                        id="cfg-team-notify-desc"
+                                        className="input textarea"
+                                        rows={3}
+                                        value={d.cfgTeamNotifyDesc}
+                                        onChange={e => d.setCfgTeamNotifyDesc(e.target.value)}
+                                        placeholder="Quando chamar notify_team_whatsapp (ex.: após agendar)…"
                                     />
                                 </div>
                             </>

@@ -6,6 +6,7 @@ import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { resetFollowupAnchorForContact, setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
+import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 
 export async function POST(request: Request) {
     try {
@@ -80,6 +81,18 @@ export async function POST(request: Request) {
             if (!rawPhone) return NextResponse.json({ success: true })
 
             const isFromMe = msg.fromMe || false
+            if (!isFromMe) {
+                const testCfgRows = await sql.unsafe(
+                    `SELECT ai_test_mode, ai_test_allowlist_phones FROM ${sch}.ai_agent_config LIMIT 1`,
+                    []
+                )
+                const testCfg = testCfgRows[0] as
+                    | { ai_test_mode?: boolean | null; ai_test_allowlist_phones?: string | null }
+                    | undefined
+                if (!shouldAcceptInboundForTestMode(testCfg ?? {}, rawPhone)) {
+                    return NextResponse.json({ success: true })
+                }
+            }
             const contactName = isFromMe
                 ? rawPhone
                 : (msg.senderName || chat?.name || chat?.wa_contactName || rawPhone)

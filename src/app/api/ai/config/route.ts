@@ -5,6 +5,7 @@ import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { defaultN8nToolDescription, normalizeToolNameFromUi } from '@/lib/ai-agent/n8n-tools'
 import { parseFollowupStepsFromBody } from '@/lib/ai-agent/followup-steps'
 import { sanitizeAiConfigForClient } from '@/lib/dashboard/ai-config'
+import { hasValidAllowlistEntry } from '@/lib/ai-agent/test-mode-allowlist'
 
 type N8nToolRow = {
     tool_name: string
@@ -118,7 +119,13 @@ export async function POST(request: Request) {
             elevenlabs_voice_tool_description,
             ai_chunk_messages_enabled,
             ai_chunk_split_mode,
-            ai_chunk_max_parts
+            ai_chunk_max_parts,
+            ai_test_mode,
+            ai_test_allowlist_phones,
+            team_notification_enabled,
+            team_notification_allowlist_phones,
+            team_notification_tool_description,
+            team_notification_append_transcript
         } = body
 
         if (
@@ -198,6 +205,38 @@ export async function POST(request: Request) {
 
         const n8nToolsJson = JSON.stringify(n8nToolsClean)
 
+        const testModeOn = ai_test_mode === true
+        const allowlistText =
+            typeof ai_test_allowlist_phones === 'string' ? ai_test_allowlist_phones.trim() : ''
+        const allowlistStore = allowlistText ? allowlistText : null
+        if (testModeOn && !hasValidAllowlistEntry(allowlistText)) {
+            return NextResponse.json(
+                {
+                    error:
+                        'Modo testes ativo: indica pelo menos um número válido na allowlist (um por linha ou separados por vírgula).'
+                },
+                { status: 400 }
+            )
+        }
+
+        const teamNotifyOn = team_notification_enabled === true
+        const teamAllowText =
+            typeof team_notification_allowlist_phones === 'string'
+                ? team_notification_allowlist_phones.trim()
+                : ''
+        const teamAllowStore = teamAllowText ? teamAllowText : null
+        if (teamNotifyOn && !hasValidAllowlistEntry(teamAllowText)) {
+            return NextResponse.json(
+                {
+                    error:
+                        'Notificações à equipa ativas: indica pelo menos um número válido na lista de destinatários.'
+                },
+                { status: 400 }
+            )
+        }
+        const teamNotifyDesc = trimOrNull(team_notification_tool_description)
+        const teamAppendTranscript = team_notification_append_transcript !== false
+
         const rows = await sql.unsafe(
             `INSERT INTO ${sch}.ai_agent_config (
                singleton_key, enabled, provider, model, temperature, system_prompt, max_messages_per_conversation,
@@ -207,9 +246,12 @@ export async function POST(request: Request) {
                n8n_tool_description, inactivity_timeout_hours, ai_followup_enabled, ai_followup_steps, n8n_tools,
                elevenlabs_voice_enabled, elevenlabs_voice_id, elevenlabs_model_id, elevenlabs_voice_tool_description,
                ai_chunk_messages_enabled, ai_chunk_split_mode, ai_chunk_max_parts,
+               ai_test_mode, ai_test_allowlist_phones,
+               team_notification_enabled, team_notification_allowlist_phones,
+               team_notification_tool_description, team_notification_append_transcript,
                updated_at
              )
-             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26::jsonb, $27, $28, $29, $30, $31, $32, $33, now())
+             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26::jsonb, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, now())
              ON CONFLICT (singleton_key) DO UPDATE SET
                enabled = EXCLUDED.enabled,
                provider = EXCLUDED.provider,
@@ -244,6 +286,12 @@ export async function POST(request: Request) {
                ai_chunk_messages_enabled = EXCLUDED.ai_chunk_messages_enabled,
                ai_chunk_split_mode = EXCLUDED.ai_chunk_split_mode,
                ai_chunk_max_parts = EXCLUDED.ai_chunk_max_parts,
+               ai_test_mode = EXCLUDED.ai_test_mode,
+               ai_test_allowlist_phones = EXCLUDED.ai_test_allowlist_phones,
+               team_notification_enabled = EXCLUDED.team_notification_enabled,
+               team_notification_allowlist_phones = EXCLUDED.team_notification_allowlist_phones,
+               team_notification_tool_description = EXCLUDED.team_notification_tool_description,
+               team_notification_append_transcript = EXCLUDED.team_notification_append_transcript,
                updated_at = now()
              RETURNING *`,
             [
@@ -279,7 +327,13 @@ export async function POST(request: Request) {
                 elevenVoiceDesc,
                 chunkMsgOn,
                 chunkMode,
-                chunkMaxParts
+                chunkMaxParts,
+                testModeOn,
+                allowlistStore,
+                teamNotifyOn,
+                teamAllowStore,
+                teamNotifyDesc,
+                teamAppendTranscript
             ]
         )
 

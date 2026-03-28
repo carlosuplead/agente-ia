@@ -4,6 +4,7 @@ import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { parseFollowupStepsFromConfig } from '@/lib/ai-agent/followup-steps'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from '@/lib/ai-agent/types'
+import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 
 function sleep(ms: number) {
     return new Promise<void>(resolve => setTimeout(resolve, ms))
@@ -98,6 +99,9 @@ export async function processFollowupsForWorkspace(
         const p = Number(row.ai_followup_progress)
         const step = steps[p]
         if (!step) continue
+        if (!shouldAcceptInboundForTestMode(config, row.phone)) {
+            continue
+        }
 
         let lockAcquired = false
         for (let attempt = 0; attempt < 8 && !lockAcquired; attempt++) {

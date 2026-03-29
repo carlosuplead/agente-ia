@@ -7,16 +7,52 @@ import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { resetFollowupAnchorForContact, setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
+/**
+ * Valida assinatura HMAC-SHA256 do webhook Uazapi.
+ * Se WHATSAPP_WEBHOOK_HMAC_SECRET não estiver definido, passa sem validação (retrocompatível).
+ */
+function verifyHmacSignature(rawBody: string, request: Request): NextResponse | null {
+    const secret = process.env.WHATSAPP_WEBHOOK_HMAC_SECRET?.trim()
+    if (!secret) return null // HMAC não configurado — modo legado
+
+    const signature = request.headers.get('x-hmac-signature')
+    if (!signature) {
+        console.warn('[webhook] Sem header x-hmac-signature e HMAC está ativo')
+        return NextResponse.json({ error: 'Missing HMAC signature' }, { status: 401 })
+    }
+
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
+    const sigBuf = Buffer.from(signature, 'hex')
+    const expBuf = Buffer.from(expected, 'hex')
+
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
+        console.warn('[webhook] Assinatura HMAC inválida')
+        return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 401 })
+    }
+    return null
+}
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json()
+        // Ler raw body primeiro para validação HMAC
+        const rawBody = await request.text()
+        const hmacError = verifyHmacSignature(rawBody, request)
+        if (hmacError) return hmacError
+
+        const body = JSON.parse(rawBody)
         const supabase = await createAdminClient()
 
+        // Token via header ou body; query string aceite com log de deprecação
+        const queryToken = new URL(request.url).searchParams.get('token')
+        if (queryToken) {
+            console.warn('[webhook] Token via query string está deprecado — migre para header x-instance-token')
+        }
         const instanceToken =
             body.token ||
             request.headers.get('x-instance-token') ||
-            new URL(request.url).searchParams.get('token')
+            queryToken
 
         if (!instanceToken) {
             return NextResponse.json({ error: 'Missing instance token' }, { status: 401 })
@@ -104,15 +140,27 @@ export async function POST(request: Request) {
             )
             let contactId = (found[0] as unknown as { id: string } | undefined)?.id
 
+            let isNewContact = false
             if (!contactId) {
                 try {
+                    // Tenta INSERT puro; se já existe, faz fallback para SELECT
                     const ins = await sql.unsafe(
                         `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2)
-                         ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
+                         ON CONFLICT (phone) DO NOTHING
                          RETURNING id`,
                         [rawPhone, contactName]
                     )
-                    contactId = (ins[0] as unknown as { id: string }).id
+                    if (ins.length > 0) {
+                        contactId = (ins[0] as unknown as { id: string }).id
+                        isNewContact = true
+                    } else {
+                        // Contato já existe — buscar
+                        const existing = await sql.unsafe(
+                            `SELECT id FROM ${sch}.contacts WHERE phone = $1 LIMIT 1`,
+                            [rawPhone]
+                        )
+                        contactId = (existing[0] as unknown as { id: string } | undefined)?.id
+                    }
                 } catch (e: unknown) {
                     const err = e as { code?: string }
                     if (err.code === '23505') {
@@ -171,9 +219,10 @@ export async function POST(request: Request) {
                     ]
                 )
                 insertedMsg = ins[0] as unknown as { id: string }
-                if (isFromMe) {
-                    await setFollowupAnchorForContact(workspaceSlug, contactId).catch(() => {})
-                }
+                // Nota: NÃO setar followup anchor para mensagens fromMe (equipe).
+                // O anchor só deve ser setado quando a IA responde (em run-process.ts)
+                // ou durante follow-ups automáticos. Evita follow-ups redundantes
+                // sobre mensagens manuais da equipe.
             } catch (e: unknown) {
                 const err = e as { code?: string }
                 if (err.code === '23505' && messageId) {
@@ -197,33 +246,27 @@ export async function POST(request: Request) {
                         | { greeting_message?: string | null; enabled?: boolean }
                         | undefined
                     const gm = cfg?.greeting_message?.trim()
-                    if (gm && cfg?.enabled !== false) {
-                        const cntRows = await sql.unsafe(
-                            `SELECT COUNT(*)::int AS c FROM ${sch}.messages WHERE contact_id = $1::uuid`,
-                            [contactId]
-                        )
-                        const c = (cntRows[0] as unknown as { c: number } | undefined)?.c ?? 0
-                        if (c === 1) {
-                            const { data: inst } = await supabase
-                                .from('whatsapp_instances')
-                                .select('instance_token')
-                                .eq('workspace_slug', workspaceSlug)
-                                .eq('status', 'connected')
-                                .maybeSingle()
-                            if (inst?.instance_token) {
-                                const textOut = parseMessageForWhatsApp(gm)
-                                const { provider } = await getProviderForWorkspace(supabase, workspaceSlug)
-                                await provider.sendText(inst.instance_token, rawPhone, textOut, {
-                                    delayMs: 800,
-                                    presence: 'composing'
-                                })
-                                await sql.unsafe(
-                                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status) VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent')`,
-                                    [contactId, activeAiConversationId, gm]
-                                )
-                                await setFollowupAnchorForContact(workspaceSlug, contactId).catch(() => {})
-                                skipBuffer = true
-                            }
+                    // Usa flag atômica (isNewContact) em vez de COUNT(*) — evita race condition
+                    if (gm && cfg?.enabled !== false && isNewContact) {
+                        const { data: inst } = await supabase
+                            .from('whatsapp_instances')
+                            .select('instance_token')
+                            .eq('workspace_slug', workspaceSlug)
+                            .eq('status', 'connected')
+                            .maybeSingle()
+                        if (inst?.instance_token) {
+                            const textOut = parseMessageForWhatsApp(gm)
+                            const { provider } = await getProviderForWorkspace(supabase, workspaceSlug)
+                            await provider.sendText(inst.instance_token, rawPhone, textOut, {
+                                delayMs: 800,
+                                presence: 'composing'
+                            })
+                            await sql.unsafe(
+                                `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status) VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent')`,
+                                [contactId, activeAiConversationId, gm]
+                            )
+                            await setFollowupAnchorForContact(workspaceSlug, contactId).catch(() => {})
+                            skipBuffer = true
                         }
                     }
                 } catch (e) {

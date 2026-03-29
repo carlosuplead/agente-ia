@@ -44,16 +44,29 @@ export function useClientPortalState() {
         setUserEmail(json.user?.email ?? null)
     }, [])
 
-    const loadInstance = useCallback(async (slug: string) => {
-        const res = await fetch(`/api/whatsapp/instances?workspace_slug=${encodeURIComponent(slug)}`, {
-            credentials: 'include'
-        })
+    const loadInstance = useCallback(async (slug: string, opts?: { syncUazapi?: boolean }) => {
+        const params = new URLSearchParams({ workspace_slug: slug })
+        if (opts?.syncUazapi) {
+            params.set('sync_uazapi', '1')
+        }
+        const res = await fetch(`/api/whatsapp/instances?${params}`, { credentials: 'include' })
         if (!res.ok) {
             setInstance(null)
             return
         }
-        const json = await res.json()
+        const json = (await res.json()) as {
+            instance?: InstanceRow | null
+            uazapi_live?: { qrcode?: string; pairingCode?: string } | null
+        }
         setInstance(json.instance ?? null)
+        if (json.instance?.status === 'connected') {
+            setQrPayload(null)
+        } else if (json.uazapi_live?.qrcode || json.uazapi_live?.pairingCode) {
+            setQrPayload({
+                qrcode: json.uazapi_live.qrcode,
+                pairingCode: json.uazapi_live.pairingCode
+            })
+        }
     }, [])
 
     const loadMessages = useCallback(async (slug: string) => {
@@ -104,10 +117,20 @@ export function useClientPortalState() {
             return
         }
         setLoadError('')
-        loadInstance(selectedSlug)
+        loadInstance(selectedSlug, { syncUazapi: true })
         loadMessages(selectedSlug)
         void loadStats(selectedSlug, statsDays)
     }, [selectedSlug, loadInstance, loadMessages, loadStats, statsDays])
+
+    useEffect(() => {
+        if (!selectedSlug || !instance || instance.provider === 'official') return
+        if (instance.status !== 'connecting') return
+        const slug = selectedSlug
+        const id = window.setInterval(() => {
+            void loadInstance(slug, { syncUazapi: true })
+        }, 4000)
+        return () => window.clearInterval(id)
+    }, [selectedSlug, instance?.provider, instance?.status, loadInstance])
 
     async function logout() {
         const sb = createBrowserSupabaseClient()
@@ -128,13 +151,24 @@ export function useClientPortalState() {
         })
         setBusy(false)
         if (!res.ok) {
-            const j = await res.json().catch(() => ({}))
-            setLoadError((j as { error?: string }).error || 'Não foi possível preparar a ligação.')
+            const j = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+            if (res.status === 409) {
+                await loadInstance(selectedSlug, { syncUazapi: true })
+                setLoadError('')
+                setToast({
+                    message:
+                        j.error ||
+                        'Este workspace já tinha uma instância. O estado foi atualizado — usa «Mostrar QR Code» se ainda não estiver ligado.',
+                    variant: 'success'
+                })
+                return
+            }
+            setLoadError(j.error || 'Não foi possível preparar a ligação.')
             setToast({ message: 'Falha ao preparar WhatsApp.', variant: 'error' })
             return
         }
         setToast({ message: 'Ligação preparada. Gera o QR Code para associar o telemóvel.', variant: 'success' })
-        await loadInstance(selectedSlug)
+        await loadInstance(selectedSlug, { syncUazapi: true })
     }
 
     async function connectWhatsapp() {
@@ -160,7 +194,7 @@ export function useClientPortalState() {
                 pairingCode: (j as { pairingCode?: string }).pairingCode
             })
         }
-        await loadInstance(selectedSlug)
+        await loadInstance(selectedSlug, { syncUazapi: true })
     }
 
     const qrSrc =

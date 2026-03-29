@@ -252,6 +252,11 @@ button.nav-item {
   color: #d70015;
 }
 
+.status-badge.connecting {
+  background: rgba(255, 149, 0, 0.14);
+  color: #c93400;
+}
+
 .status-dot {
   width: 7px;
   height: 7px;

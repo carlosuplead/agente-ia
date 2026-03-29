@@ -43,14 +43,7 @@ function aiReplyChunks(text: string, config: AiAgentConfig): string[] {
     return splitAiResponseForChunks(t, mode, maxParts)
 }
 
-function sendOptionsFromConfig(config: AiAgentConfig): { delayMs: number; presence: string | null } {
-    const delayMs = config.send_delay_ms ?? 1200
-    const p = config.send_presence
-    if (p === undefined || p === null || String(p).trim() === '' || String(p).toLowerCase() === 'none') {
-        return { delayMs, presence: null }
-    }
-    return { delayMs, presence: String(p) }
-}
+import { sendOptionsFromConfig } from '@/lib/ai-agent/send-options'
 
 export type RunAiProcessResult =
     | { ok: true; reason?: string }

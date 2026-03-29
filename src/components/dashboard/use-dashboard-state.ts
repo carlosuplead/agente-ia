@@ -402,16 +402,29 @@ export function useDashboardController() {
         setUserEmail(json.user?.email ?? null)
     }, [])
 
-    const loadInstance = useCallback(async (slug: string) => {
-        const res = await fetch(`/api/whatsapp/instances?workspace_slug=${encodeURIComponent(slug)}`, {
-            credentials: 'include'
-        })
+    const loadInstance = useCallback(async (slug: string, opts?: { syncUazapi?: boolean }) => {
+        const params = new URLSearchParams({ workspace_slug: slug })
+        if (opts?.syncUazapi) {
+            params.set('sync_uazapi', '1')
+        }
+        const res = await fetch(`/api/whatsapp/instances?${params}`, { credentials: 'include' })
         if (!res.ok) {
             setInstance(null)
             return
         }
-        const json = await res.json()
+        const json = (await res.json()) as {
+            instance?: InstanceRow | null
+            uazapi_live?: { qrcode?: string; pairingCode?: string } | null
+        }
         setInstance(json.instance ?? null)
+        if (json.instance?.status === 'connected') {
+            setQrPayload(null)
+        } else if (json.uazapi_live?.qrcode || json.uazapi_live?.pairingCode) {
+            setQrPayload({
+                qrcode: json.uazapi_live.qrcode,
+                pairingCode: json.uazapi_live.pairingCode
+            })
+        }
     }, [])
 
     const loadGoogleCalendar = useCallback(async (slug: string) => {
@@ -824,7 +837,7 @@ export function useDashboardController() {
         ;(async () => {
             await loadAiConfig(slug, ac.signal)
             if (cancelled || selectedSlugRef.current !== slug) return
-            loadInstance(slug)
+            loadInstance(slug, { syncUazapi: true })
             loadMessages(slug)
             void loadMetaPendingPhones(slug)
             void loadGoogleCalendar(slug)
@@ -899,11 +912,49 @@ export function useDashboardController() {
         })
         setBusy(false)
         if (!res.ok) {
-            const j = await res.json().catch(() => ({}))
-            setLoadError((j as { error?: string }).error || 'Falha ao criar instância')
+            const j = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+            if (res.status === 409) {
+                await loadInstance(selectedSlug, { syncUazapi: true })
+                setLoadError('')
+                setToast({
+                    message:
+                        j.error ||
+                        'Este workspace já tinha uma instância guardada. O estado foi atualizado — usa «Gerar QR Code» se ainda não estiver ligado, ou «Remover ligação Uazapi» para criar outra.',
+                    variant: 'success'
+                })
+                return
+            }
+            setLoadError(j.error || 'Falha ao criar instância')
             return
         }
-        await loadInstance(selectedSlug)
+        await loadInstance(selectedSlug, { syncUazapi: true })
+    }
+
+    async function removeUazapiInstance() {
+        if (!selectedSlug) return
+        if (
+            !window.confirm(
+                'Isto apaga o registo desta instância no Agente Central e tenta remover na Uazapi. Depois podes criar uma instância nova. Continuar?'
+            )
+        ) {
+            return
+        }
+        setBusy(true)
+        setLoadError('')
+        const res = await fetch(
+            `/api/whatsapp/instances?workspace_slug=${encodeURIComponent(selectedSlug)}`,
+            { method: 'DELETE', credentials: 'include' }
+        )
+        setBusy(false)
+        const j = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) {
+            setLoadError(j.error || 'Falha ao remover a instância')
+            setToast({ message: j.error || 'Não foi possível remover.', variant: 'error' })
+            return
+        }
+        setInstance(null)
+        setQrPayload(null)
+        setToast({ message: 'Ligação Uazapi removida. Podes criar uma instância nova.', variant: 'success' })
     }
 
     async function connectWhatsapp() {
@@ -917,9 +968,14 @@ export function useDashboardController() {
             body: JSON.stringify({ workspace_slug: selectedSlug })
         })
         setBusy(false)
-        const j = await res.json().catch(() => ({}))
+        const j = (await res.json().catch(() => ({}))) as {
+            error?: string
+            hint?: string
+            code?: string
+        }
         if (!res.ok) {
-            setLoadError((j as { error?: string }).error || 'Falha ao pedir QR')
+            const base = j.error || 'Falha ao pedir QR'
+            setLoadError(j.hint ? `${base}\n\n${j.hint}` : base)
             return
         }
         if ((j as { qrcode?: string }).qrcode || (j as { pairingCode?: string }).pairingCode) {
@@ -928,7 +984,7 @@ export function useDashboardController() {
                 pairingCode: (j as { pairingCode?: string }).pairingCode
             })
         }
-        await loadInstance(selectedSlug)
+        await loadInstance(selectedSlug, { syncUazapi: true })
     }
 
     function startMetaOfficialOAuth() {
@@ -967,7 +1023,7 @@ export function useDashboardController() {
             return
         }
         setMetaPendingPhones([])
-        if (selectedSlug) await loadInstance(selectedSlug)
+        if (selectedSlug) await loadInstance(selectedSlug, { syncUazapi: true })
     }
 
     function startGoogleCalendarOAuth() {
@@ -1107,6 +1163,7 @@ export function useDashboardController() {
         logout,
         createWorkspace,
         provisionInstance,
+        removeUazapiInstance,
         connectWhatsapp,
         startMetaOfficialOAuth,
         metaPendingPhones,

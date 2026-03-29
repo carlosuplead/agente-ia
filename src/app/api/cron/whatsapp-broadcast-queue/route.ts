@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireInternalAiSecret } from '@/lib/auth/internal'
+import { requireInternalBroadcastCronSecret } from '@/lib/auth/internal'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processBroadcastQueueBatch } from '@/lib/whatsapp/broadcast-worker'
 
@@ -9,7 +9,7 @@ function parsePositiveInt(v: string | null, fallback: number): number {
 }
 
 export async function GET(request: Request) {
-    const denied = requireInternalAiSecret(request)
+    const denied = requireInternalBroadcastCronSecret(request)
     if (denied) return denied
 
     try {

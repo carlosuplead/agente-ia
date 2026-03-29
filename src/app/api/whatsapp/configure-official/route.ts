@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceRole } from '@/lib/auth/workspace-access'
+import { verifyOfficialWhatsAppCredentials } from '@/lib/meta/verify-official-credentials'
 
 export async function POST(request: Request) {
     try {
@@ -13,32 +14,61 @@ export async function POST(request: Request) {
             phone_number?: string
         }
 
-        if (!body.workspace_slug || !body.phone_number_id || !body.waba_id || !body.meta_access_token) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+        const workspace_slug = body.workspace_slug?.trim()
+        const phone_number_id = body.phone_number_id?.trim()
+        const waba_id = body.waba_id?.trim()
+        const meta_access_token = body.meta_access_token?.trim()
+
+        if (!workspace_slug || !phone_number_id || !waba_id || !meta_access_token) {
+            return NextResponse.json({ error: 'Faltam campos obrigatórios.' }, { status: 400 })
         }
 
-        const access = await requireWorkspaceRole(supabase, body.workspace_slug, ['owner', 'admin'])
+        const access = await requireWorkspaceRole(supabase, workspace_slug, ['owner', 'admin'])
         if (!access.ok) return access.response
 
-        const token = `official:${body.workspace_slug}:${body.phone_number_id}`
+        const verified = await verifyOfficialWhatsAppCredentials({
+            phoneNumberId: phone_number_id,
+            wabaId: waba_id,
+            accessToken: meta_access_token
+        })
+        if (!verified.ok) {
+            return NextResponse.json({ error: verified.error }, { status: 400 })
+        }
+
+        const phone_number =
+            body.phone_number?.trim() || verified.displayPhoneNumber || null
+
+        const token = `official:${workspace_slug}:${phone_number_id}`
         const { error } = await supabase
             .from('whatsapp_instances')
             .upsert(
                 {
-                    workspace_slug: body.workspace_slug,
+                    workspace_slug,
                     provider: 'official',
                     instance_token: token,
-                    phone_number: body.phone_number || null,
+                    phone_number,
                     status: 'connected',
-                    phone_number_id: body.phone_number_id,
-                    waba_id: body.waba_id,
-                    meta_access_token: body.meta_access_token,
+                    phone_number_id,
+                    waba_id,
+                    meta_access_token,
                     meta_token_obtained_at: new Date().toISOString(),
                     last_connected_at: new Date().toISOString()
                 },
                 { onConflict: 'workspace_slug' }
             )
-        if (error) return NextResponse.json({ error: 'Failed to configure official provider' }, { status: 500 })
+        if (error) {
+            if (error.code === '23505') {
+                return NextResponse.json(
+                    {
+                        error:
+                            'Este Phone Number ID já está ligado a outro workspace. Desliga-o primeiro ou usa outro número.'
+                    },
+                    { status: 409 }
+                )
+            }
+            console.error('configure official upsert', error)
+            return NextResponse.json({ error: 'Falha ao guardar a ligação oficial.' }, { status: 500 })
+        }
         return NextResponse.json({ success: true })
     } catch (e) {
         console.error('configure official', e)

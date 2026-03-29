@@ -5,6 +5,7 @@ import { sendTemplateMessage, type TemplateMessageComponent } from '@/lib/meta/t
 const DEFAULT_BATCH = 5
 const DEFAULT_DELAY_MS = 1500
 const MAX_ATTEMPTS = 5
+const STUCK_SENDING_MINUTES = 5
 
 function delay(ms: number): Promise<void> {
     return new Promise(r => setTimeout(r, ms))
@@ -26,6 +27,29 @@ type BroadcastRow = {
     status: string
 }
 
+async function promoteScheduledBroadcasts(sql: ReturnType<typeof getTenantSql>): Promise<void> {
+    await sql.unsafe(
+        `UPDATE public.whatsapp_broadcasts
+         SET status = 'running', updated_at = NOW()
+         WHERE status = 'scheduled'
+           AND (scheduled_at IS NULL OR scheduled_at <= NOW())`
+    )
+}
+
+async function reconcileStuckSendingItems(sql: ReturnType<typeof getTenantSql>): Promise<void> {
+    await sql.unsafe(
+        `UPDATE public.whatsapp_broadcast_queue q
+         SET status = 'pending', claimed_at = NULL
+         FROM public.whatsapp_broadcasts b
+         WHERE q.broadcast_id = b.id
+           AND q.status = 'sending'
+           AND q.claimed_at IS NOT NULL
+           AND q.claimed_at < NOW() - ($1 * INTERVAL '1 minute')
+           AND b.status IN ('running', 'scheduled', 'paused')`,
+        [STUCK_SENDING_MINUTES]
+    )
+}
+
 export async function processBroadcastQueueBatch(
     supabase: SupabaseClient,
     opts?: { batchSize?: number; delayMs?: number }
@@ -36,12 +60,28 @@ export async function processBroadcastQueueBatch(
     let processed = 0
 
     const sql = getTenantSql()
+    await promoteScheduledBroadcasts(sql)
+    await reconcileStuckSendingItems(sql)
     const items = await sql.unsafe(
         `SELECT q.id, q.broadcast_id, q.workspace_slug, q.contact_id, q.attempt_count
          FROM public.whatsapp_broadcast_queue q
-         INNER JOIN public.whatsapp_broadcasts b ON b.id = q.broadcast_id AND b.status = 'running'
+         INNER JOIN public.whatsapp_broadcasts b ON b.id = q.broadcast_id
          WHERE q.status = 'pending'
            AND (q.next_attempt_at IS NULL OR q.next_attempt_at <= NOW())
+           AND b.status IN ('running', 'scheduled')
+           AND (b.scheduled_at IS NULL OR b.scheduled_at <= NOW())
+           AND (
+             b.max_sends_per_day IS NULL
+             OR (
+               SELECT COUNT(*)::int
+               FROM public.whatsapp_broadcast_queue q2
+               WHERE q2.broadcast_id = b.id
+                 AND q2.status = 'sent'
+                 AND q2.sent_at IS NOT NULL
+                 AND (q2.sent_at AT TIME ZONE b.send_timezone)::date =
+                     (NOW() AT TIME ZONE b.send_timezone)::date
+             ) < b.max_sends_per_day
+           )
          ORDER BY q.created_at ASC
          LIMIT $1`,
         [batchSize]
@@ -50,9 +90,10 @@ export async function processBroadcastQueueBatch(
     const rows = items as unknown as QueueRow[]
 
     for (const item of rows) {
+        const nowIso = new Date().toISOString()
         const { data: claimed, error: claimErr } = await supabase
             .from('whatsapp_broadcast_queue')
-            .update({ status: 'sending' })
+            .update({ status: 'sending', claimed_at: nowIso })
             .eq('id', item.id)
             .eq('status', 'pending')
             .select('id')
@@ -66,8 +107,11 @@ export async function processBroadcastQueueBatch(
             .eq('id', item.broadcast_id)
             .single()
 
-        if (bErr || !broadcast || (broadcast as BroadcastRow).status !== 'running') {
-            await supabase.from('whatsapp_broadcast_queue').update({ status: 'pending' }).eq('id', item.id)
+        if (bErr || !broadcast || !['running', 'scheduled'].includes((broadcast as BroadcastRow).status)) {
+            await supabase
+                .from('whatsapp_broadcast_queue')
+                .update({ status: 'pending', claimed_at: null })
+                .eq('id', item.id)
             continue
         }
 
@@ -116,31 +160,24 @@ export async function processBroadcastQueueBatch(
                 components
             })
 
+            const sentAt = new Date().toISOString()
             await supabase
                 .from('whatsapp_broadcast_queue')
                 .update({
                     status: 'sent',
                     whatsapp_message_id: result.messageId,
                     last_error: null,
-                    next_attempt_at: null
+                    next_attempt_at: null,
+                    sent_at: sentAt,
+                    claimed_at: null
                 })
                 .eq('id', item.id)
 
-            const { data: br } = await supabase
-                .from('whatsapp_broadcasts')
-                .select('sent_count, pending_count')
-                .eq('id', item.broadcast_id)
-                .single()
-            if (br) {
-                await supabase
-                    .from('whatsapp_broadcasts')
-                    .update({
-                        sent_count: (br.sent_count || 0) + 1,
-                        pending_count: Math.max(0, (br.pending_count || 0) - 1),
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', item.broadcast_id)
-            }
+            // Incremento atômico via RPC (evita race condition entre workers)
+            await sql.unsafe(
+                `SELECT public.increment_broadcast_counters($1::uuid, 1, 0)`,
+                [item.broadcast_id]
+            )
 
             const body = `[Template: ${b.template_name}]`
             await sql
@@ -163,25 +200,16 @@ export async function processBroadcastQueueBatch(
                         status: 'failed',
                         attempt_count: attempts,
                         last_error: msg,
-                        next_attempt_at: null
+                        next_attempt_at: null,
+                        claimed_at: null
                     })
                     .eq('id', item.id)
 
-                const { data: br } = await supabase
-                    .from('whatsapp_broadcasts')
-                    .select('failed_count, pending_count')
-                    .eq('id', item.broadcast_id)
-                    .single()
-                if (br) {
-                    await supabase
-                        .from('whatsapp_broadcasts')
-                        .update({
-                            failed_count: (br.failed_count || 0) + 1,
-                            pending_count: Math.max(0, (br.pending_count || 0) - 1),
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', item.broadcast_id)
-                }
+                // Incremento atômico via RPC (evita race condition entre workers)
+                await sql.unsafe(
+                    `SELECT public.increment_broadcast_counters($1::uuid, 0, 1)`,
+                    [item.broadcast_id]
+                )
                 await finalizeBroadcastIfDone(supabase, item.broadcast_id)
                 errors.push(`${item.id}: ${msg}`)
             } else {
@@ -192,7 +220,8 @@ export async function processBroadcastQueueBatch(
                         status: 'pending',
                         attempt_count: attempts,
                         last_error: msg,
-                        next_attempt_at: backoff
+                        next_attempt_at: backoff,
+                        claimed_at: null
                     })
                     .eq('id', item.id)
                 errors.push(`${item.id}: retry ${attempts}: ${msg}`)
@@ -223,25 +252,17 @@ async function failQueueItem(supabase: SupabaseClient, item: QueueRow, reason: s
             status: 'failed',
             attempt_count: attempts,
             last_error: reason,
-            next_attempt_at: null
+            next_attempt_at: null,
+            claimed_at: null
         })
         .eq('id', item.id)
 
-    const { data: br } = await supabase
-        .from('whatsapp_broadcasts')
-        .select('failed_count, pending_count')
-        .eq('id', item.broadcast_id)
-        .single()
-    if (br) {
-        await supabase
-            .from('whatsapp_broadcasts')
-            .update({
-                failed_count: (br.failed_count || 0) + 1,
-                pending_count: Math.max(0, (br.pending_count || 0) - 1),
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', item.broadcast_id)
-    }
+    // Incremento atômico via RPC (evita race condition entre workers)
+    const failSql = getTenantSql()
+    await failSql.unsafe(
+        `SELECT public.increment_broadcast_counters($1::uuid, 0, 1)`,
+        [item.broadcast_id]
+    )
     await finalizeBroadcastIfDone(supabase, item.broadcast_id)
 }
 
@@ -260,7 +281,8 @@ async function finalizeBroadcastIfDone(supabase: SupabaseClient, broadcastId: st
         .select('status, sent_count, failed_count')
         .eq('id', broadcastId)
         .single()
-    if (!b || b.status !== 'running') return
+    if (!b || b.status === 'cancelled' || b.status === 'completed' || b.status === 'failed' || b.status === 'draft') return
+    if (b.status !== 'running' && b.status !== 'scheduled') return
 
     const sent = b.sent_count || 0
     const failed = b.failed_count || 0

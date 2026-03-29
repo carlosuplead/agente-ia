@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { ClientPortalStats } from '@/components/client-portal/ClientPortalStats'
 import { TokenUsageSection } from '@/components/dashboard/TokenUsageSection'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 import { useDashboard } from './dashboard-context'
+import { OfficialApiSetupSection } from './OfficialApiSetupSection'
 
 function MetaTokenAgeNotice({ obtainedAt }: { obtainedAt: string }) {
     const days = useMemo(() => {
@@ -17,7 +18,8 @@ function MetaTokenAgeNotice({ obtainedAt }: { obtainedAt: string }) {
         <div className="card alert-card" role="status" style={{ marginBottom: 12 }}>
             <p className="alert-card-text" style={{ margin: 0 }}>
                 O token Meta foi obtido há {days} dias. Tokens de longa duração expiram por volta de 60 dias — volta a
-                ligar com &quot;Conectar Meta Oficial&quot; antes de expirar para não interromper envios e disparos.
+                guardar credenciais em &quot;Configurar API oficial&quot; ou a ligar com Facebook (OAuth) antes de
+                expirar para não interromper envios e disparos.
             </p>
         </div>
     )
@@ -28,7 +30,7 @@ export function WhatsAppTab() {
 
     const refreshWhatsAppData = useCallback(() => {
         if (!d.selectedSlug) return
-        void d.loadInstance(d.selectedSlug)
+        void d.loadInstance(d.selectedSlug, { syncUazapi: true })
         void d.loadMessages(d.selectedSlug)
         void d.loadStats(d.selectedSlug, d.statsDays)
         void d.loadTokenUsage(d.selectedSlug, d.tokenUsageDays)
@@ -41,6 +43,23 @@ export function WhatsAppTab() {
         d.loadStats,
         d.loadTokenUsage
     ])
+
+    useEffect(() => {
+        if (!d.selectedSlug || !d.instance || d.instance.provider === 'official') return
+        if (d.instance.status !== 'connecting') return
+        const slug = d.selectedSlug
+        const id = window.setInterval(() => {
+            void d.loadInstance(slug, { syncUazapi: true })
+        }, 4000)
+        return () => window.clearInterval(id)
+    }, [d.selectedSlug, d.instance?.provider, d.instance?.status, d.loadInstance])
+
+    const waStatusClass =
+        d.instance?.status === 'connected'
+            ? 'connected'
+            : d.instance?.status === 'connecting'
+              ? 'connecting'
+              : 'disconnected'
 
     return (
         <>
@@ -58,9 +77,7 @@ export function WhatsAppTab() {
                     <div className="card">
                         <div className="card-header">
                             <span className="card-title">Estado</span>
-                            <span
-                                className={`status-badge ${d.instance?.status === 'connected' ? 'connected' : 'disconnected'}`}
-                            >
+                            <span className={`status-badge ${waStatusClass}`}>
                                 <span className="status-dot" aria-hidden="true" />
                                 {d.instance?.status || 'sem instância'}
                             </span>
@@ -100,19 +117,24 @@ export function WhatsAppTab() {
                             <button
                                 type="button"
                                 className="btn btn-secondary"
-                                disabled={d.busy}
-                                onClick={d.startMetaOfficialOAuth}
-                            >
-                                Conectar Meta Oficial
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
                                 disabled={d.busy || !d.instance}
-                                onClick={() => d.selectedSlug && d.loadInstance(d.selectedSlug)}
+                                onClick={() =>
+                                    d.selectedSlug && d.loadInstance(d.selectedSlug, { syncUazapi: true })
+                                }
                             >
                                 Atualizar estado
                             </button>
+                            {d.instance && d.instance.provider !== 'official' && (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={d.busy}
+                                    onClick={() => d.removeUazapiInstance()}
+                                    style={{ borderColor: 'rgba(215, 0, 21, 0.35)', color: '#b30f1a' }}
+                                >
+                                    Remover ligação Uazapi
+                                </button>
+                            )}
                         </div>
                         {d.qrSrc && (
                             <div style={{ marginTop: 16 }}>
@@ -148,6 +170,12 @@ export function WhatsAppTab() {
                                 /api/whatsapp/webhook?token=INSTANCE_TOKEN
                             </code>
                             <br />
+                            <span style={{ display: 'block', marginTop: 6 }}>
+                                <strong>INSTANCE_TOKEN</strong> é só um exemplo — no painel Uazapi substitui pelo{' '}
+                                <strong>token da instância</strong> (o mesmo que fica guardado na app quando crias a
+                                instância; não uses o texto literal «INSTANCE_TOKEN»).
+                            </span>
+                            <br />
                             Webhook (Meta oficial):{' '}
                             <code style={{ wordBreak: 'break-all' }}>
                                 {typeof window !== 'undefined' ? window.location.origin : ''}
@@ -155,6 +183,8 @@ export function WhatsAppTab() {
                             </code>
                         </p>
                     </div>
+
+                    <OfficialApiSetupSection />
 
                     <ClientPortalStats
                         stats={d.stats}

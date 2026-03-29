@@ -10,6 +10,10 @@ import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowli
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || ''
 
+function isProductionRuntime(): boolean {
+    return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+}
+
 export async function GET(request: Request) {
     const url = new URL(request.url)
     const mode = url.searchParams.get('hub.mode')
@@ -25,10 +29,20 @@ export async function POST(request: Request) {
     try {
         const raw = await request.text()
         const appSecret = process.env.META_APP_SECRET?.trim()
+        if (isProductionRuntime() && !appSecret) {
+            console.error('META_APP_SECRET is required in production for WhatsApp Cloud API webhooks')
+            return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+        }
         if (appSecret) {
             const signature = request.headers.get('x-hub-signature-256')
+            if (!signature) {
+                return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+            }
             const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(raw).digest('hex')}`
-            if (!signature || signature !== expected) {
+            // Comparação em tempo constante para prevenir timing attacks
+            const sigBuf = Buffer.from(signature)
+            const expBuf = Buffer.from(expected)
+            if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
                 return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
             }
         }
@@ -73,12 +87,23 @@ export async function POST(request: Request) {
                 const variants = generateBrazilianPhoneVariants(normalized)
                 const rows = await sql.unsafe(`SELECT id FROM ${sch}.contacts WHERE phone = ANY($1::text[]) LIMIT 1`, [variants])
                 let contactId = (rows[0] as { id?: string } | undefined)?.id
+                let isNewContact = false
                 if (!contactId) {
+                    // INSERT DO NOTHING — se já existe, busca; se não, cria com flag
                     const ins = await sql.unsafe(
-                        `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+                        `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2) ON CONFLICT (phone) DO NOTHING RETURNING id`,
                         [normalized, m.fromName || normalized]
                     )
-                    contactId = (ins[0] as { id?: string } | undefined)?.id
+                    if (ins.length > 0) {
+                        contactId = (ins[0] as { id?: string } | undefined)?.id
+                        isNewContact = true
+                    } else {
+                        const existing = await sql.unsafe(
+                            `SELECT id FROM ${sch}.contacts WHERE phone = $1 LIMIT 1`,
+                            [normalized]
+                        )
+                        contactId = (existing[0] as { id?: string } | undefined)?.id
+                    }
                 }
                 if (!contactId) continue
                 const convRows = await sql.unsafe(
@@ -96,7 +121,49 @@ export async function POST(request: Request) {
                 const messageId = (insMsg[0] as { id?: string } | undefined)?.id
                 if (messageId) {
                     await resetFollowupAnchorForContact(ws, contactId).catch(() => {})
-                    await addToBuffer(ws, contactId, messageId).catch(() => {})
+
+                    // Greeting para contatos novos (mesma lógica do webhook Uazapi)
+                    let skipBuffer = false
+                    if (isNewContact) {
+                        try {
+                            const cfgRows = await sql.unsafe(
+                                `SELECT greeting_message, enabled FROM ${sch}.ai_agent_config LIMIT 1`, []
+                            )
+                            const cfg = cfgRows[0] as { greeting_message?: string | null; enabled?: boolean } | undefined
+                            const gm = cfg?.greeting_message?.trim()
+                            if (gm && cfg?.enabled !== false) {
+                                const { parseMessageForWhatsApp } = await import('@/lib/ai-agent/format-for-whatsapp')
+                                const { getProviderForWorkspace } = await import('@/lib/whatsapp/factory')
+                                const { setFollowupAnchorForContact } = await import('@/lib/ai-agent/followup-anchor')
+                                const instRow = await supabase
+                                    .from('whatsapp_instances')
+                                    .select('instance_token')
+                                    .eq('workspace_slug', ws)
+                                    .eq('status', 'connected')
+                                    .maybeSingle()
+                                if (instRow.data?.instance_token) {
+                                    const textOut = parseMessageForWhatsApp(gm)
+                                    const { provider } = await getProviderForWorkspace(supabase, ws)
+                                    await provider.sendText(instRow.data.instance_token, m.fromPhone, textOut, {
+                                        delayMs: 800,
+                                        presence: 'composing'
+                                    })
+                                    await sql.unsafe(
+                                        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status) VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent')`,
+                                        [contactId, conversationId, gm]
+                                    )
+                                    await setFollowupAnchorForContact(ws, contactId).catch(() => {})
+                                    skipBuffer = true
+                                }
+                            }
+                        } catch (greetErr) {
+                            console.error('official greeting_message', greetErr)
+                        }
+                    }
+
+                    if (!skipBuffer) {
+                        await addToBuffer(ws, contactId, messageId)
+                    }
                 }
             }
         }

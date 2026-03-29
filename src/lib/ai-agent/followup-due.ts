@@ -10,14 +10,7 @@ function sleep(ms: number) {
     return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
-function sendOptionsFromConfig(config: AiAgentConfig): { delayMs: number; presence: string | null } {
-    const delayMs = config.send_delay_ms ?? 1200
-    const p = config.send_presence
-    if (p === undefined || p === null || String(p).trim() === '' || String(p).toLowerCase() === 'none') {
-        return { delayMs, presence: null }
-    }
-    return { delayMs, presence: String(p) }
-}
+import { sendOptionsFromConfig } from '@/lib/ai-agent/send-options'
 
 type CandidateRow = {
     conversation_id: string

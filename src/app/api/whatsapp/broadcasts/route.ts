@@ -12,6 +12,23 @@ function parseUuidList(raw: unknown): string[] {
     return raw.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x))
 }
 
+function isValidIanaTimeZone(tz: string): boolean {
+    try {
+        Intl.DateTimeFormat(undefined, { timeZone: tz })
+        return true
+    } catch {
+        return false
+    }
+}
+
+function parseScheduledAt(raw: unknown): string | null {
+    if (raw == null || raw === '') return null
+    if (typeof raw !== 'string') return null
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) return null
+    return d.toISOString()
+}
+
 export async function GET(request: Request) {
     try {
         const supabase = await createClient()
@@ -27,7 +44,7 @@ export async function GET(request: Request) {
         const { data, error } = await supabase
             .from('whatsapp_broadcasts')
             .select(
-                'id, name, template_name, template_language, status, scheduled_at, sent_count, failed_count, pending_count, created_at, updated_at'
+                'id, name, template_name, template_language, status, scheduled_at, send_timezone, max_sends_per_day, sent_count, failed_count, pending_count, created_at, updated_at'
             )
             .eq('workspace_slug', workspace_slug)
             .order('created_at', { ascending: false })
@@ -51,6 +68,9 @@ export async function POST(request: Request) {
             template_components?: unknown
             contact_ids?: unknown
             start?: boolean
+            scheduled_at?: string | null
+            max_sends_per_day?: number | string | null
+            send_timezone?: string | null
         } | null
 
         const workspace_slug = body?.workspace_slug?.trim()
@@ -73,6 +93,27 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'contact_ids deve ter pelo menos um UUID' }, { status: 400 })
         }
 
+        const send_timezone = (body?.send_timezone?.trim() || 'Europe/Lisbon') || 'Europe/Lisbon'
+        if (!isValidIanaTimeZone(send_timezone)) {
+            return NextResponse.json({ error: 'send_timezone inválido (usa um IANA, ex. Europe/Lisbon)' }, { status: 400 })
+        }
+
+        let max_sends_per_day: number | null = null
+        if (body?.max_sends_per_day != null && String(body.max_sends_per_day).trim() !== '') {
+            const n = Number(body.max_sends_per_day)
+            if (!Number.isFinite(n) || n < 1 || n > 100_000) {
+                return NextResponse.json(
+                    { error: 'max_sends_per_day deve ser um inteiro entre 1 e 100000' },
+                    { status: 400 }
+                )
+            }
+            max_sends_per_day = Math.floor(n)
+        }
+
+        const scheduled_at = parseScheduledAt(body?.scheduled_at)
+        const now = Date.now()
+        const scheduledFuture = scheduled_at != null && new Date(scheduled_at).getTime() > now
+
         const official = await getOfficialInstanceForWorkspace(supabase, workspace_slug)
         if (!official) {
             return NextResponse.json({ error: 'WhatsApp oficial não configurado ou não ligado' }, { status: 400 })
@@ -91,7 +132,14 @@ export async function POST(request: Request) {
         const template_components = Array.isArray(body?.template_components) ? body.template_components : []
 
         const start = body?.start === true
-        const status = start ? 'running' : 'draft'
+        let status: string
+        if (!start) {
+            status = 'draft'
+        } else if (scheduledFuture) {
+            status = 'scheduled'
+        } else {
+            status = 'running'
+        }
 
         const { data: broadcast, error: insErr } = await supabase
             .from('whatsapp_broadcasts')
@@ -102,6 +150,9 @@ export async function POST(request: Request) {
                 template_language,
                 template_components,
                 status,
+                scheduled_at: scheduled_at,
+                send_timezone,
+                max_sends_per_day,
                 pending_count: contact_ids.length,
                 created_by: user?.id ?? null
             })

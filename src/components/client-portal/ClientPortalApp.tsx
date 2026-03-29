@@ -27,7 +27,7 @@ export function ClientPortalApp() {
 
     const refreshAll = useCallback(() => {
         if (!p.selectedSlug) return
-        void p.loadInstance(p.selectedSlug)
+        void p.loadInstance(p.selectedSlug, { syncUazapi: true })
         void p.loadMessages(p.selectedSlug)
         void p.loadStats(p.selectedSlug, p.statsDays)
     }, [p.selectedSlug, p.loadInstance, p.loadMessages, p.loadStats, p.statsDays])
@@ -99,7 +99,13 @@ export function ClientPortalApp() {
                             <div className="card-header">
                                 <span className="card-title">Ligação WhatsApp</span>
                                 <span
-                                    className={`status-badge ${p.instance?.status === 'connected' ? 'connected' : 'disconnected'}`}
+                                    className={`status-badge ${
+                                        p.instance?.status === 'connected'
+                                            ? 'connected'
+                                            : p.instance?.status === 'connecting'
+                                              ? 'connecting'
+                                              : 'disconnected'
+                                    }`}
                                 >
                                     <span className="status-dot" aria-hidden="true" />
                                     {p.instance?.status === 'connected'
@@ -140,7 +146,9 @@ export function ClientPortalApp() {
                                     type="button"
                                     className="btn btn-secondary"
                                     disabled={p.busy || !p.instance}
-                                    onClick={() => p.selectedSlug && p.loadInstance(p.selectedSlug)}
+                                    onClick={() =>
+                                        p.selectedSlug && p.loadInstance(p.selectedSlug, { syncUazapi: true })
+                                    }
                                 >
                                     Atualizar estado
                                 </button>

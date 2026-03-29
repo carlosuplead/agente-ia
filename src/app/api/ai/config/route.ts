@@ -6,6 +6,7 @@ import { defaultN8nToolDescription, normalizeToolNameFromUi } from '@/lib/ai-age
 import { parseFollowupStepsFromBody } from '@/lib/ai-agent/followup-steps'
 import { sanitizeAiConfigForClient } from '@/lib/dashboard/ai-config'
 import { hasValidAllowlistEntry } from '@/lib/ai-agent/test-mode-allowlist'
+import { encryptWorkspaceLlmKeyIfConfigured } from '@/lib/crypto/workspace-llm-keys'
 
 type N8nToolRow = {
     tool_name: string
@@ -350,9 +351,10 @@ export async function POST(request: Request) {
                     []
                 )
             } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
                 await sql.unsafe(
                     `UPDATE ${sch}.ai_agent_config SET openai_api_key = $1, updated_at = now() WHERE singleton_key = true`,
-                    [v.trim()]
+                    [stored]
                 )
             }
         }
@@ -364,9 +366,10 @@ export async function POST(request: Request) {
                     []
                 )
             } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
                 await sql.unsafe(
                     `UPDATE ${sch}.ai_agent_config SET google_api_key = $1, updated_at = now() WHERE singleton_key = true`,
-                    [v.trim()]
+                    [stored]
                 )
             }
         }

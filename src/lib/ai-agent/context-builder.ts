@@ -57,7 +57,8 @@ export async function buildContext(
                 : m.sender_type === 'ai'
                   ? opts.labelAssistant
                   : opts.labelTeam
-        return `${sender}: ${m.body || '[Mídia]'}`
+        // Delimitadores claros para dificultar prompt injection via mensagens do contato
+        return `[${sender}]: ${m.body || '[Mídia]'}`
     })
 
     return {

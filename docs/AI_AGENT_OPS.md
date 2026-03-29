@@ -6,12 +6,13 @@
   - `POST /api/ai/schedule` (agendamento após o webhook)
   - `POST /api/ai/process` (processamento direto)
   - `GET` ou `POST /api/ai/followup-cron` (follow-ups automáticos)
-  - `GET` ou `POST /api/cron/whatsapp-broadcast-queue` (fila de disparos por template Meta; query opcional `?batch=5&delay_ms=1500`)
+- **`INTERNAL_BROADCAST_SECRET`** (opcional) — Se definido, `GET`/`POST /api/cron/whatsapp-broadcast-queue` exige **este** Bearer em vez de `INTERNAL_AI_SECRET`, para isolar o job de disparos. Se estiver vazio, o cron de broadcasts continua a usar `INTERNAL_AI_SECRET` (comportamento anterior).
 - **`NEXT_PUBLIC_SITE_URL`** — URL pública da app (ex. `https://app.exemplo.com`). O [`buffer`](../src/lib/ai-agent/buffer.ts) chama `POST ${NEXT_PUBLIC_SITE_URL}/api/ai/schedule`; em produção tem de apontar para a instância que serve essa rota.
-- Chaves do LLM (`GOOGLE_API_KEY` / `OPENAI_API_KEY`) conforme o provider configurado no workspace.
+- Chaves do LLM (`GOOGLE_API_KEY` / `OPENAI_API_KEY`) conforme o provider configurado no workspace, ou chaves por workspace no dashboard.
+- **`WORKSPACE_LLM_KEYS_SECRET`** (opcional) — Se definido, as chaves OpenAI/Google guardadas no painel são persistidas encriptadas (AES-256-GCM, prefixo `ac:v1:`). Ver [LLM_API_KEYS_STORAGE.md](./LLM_API_KEYS_STORAGE.md).
 - Meta Cloud API:
   - `META_APP_ID`
-  - `META_APP_SECRET`
+  - **`META_APP_SECRET`** — Em produção (`NODE_ENV=production` ou deploy na Vercel), o `POST` do webhook oficial **exige** este valor e valida `X-Hub-Signature-256`; sem segredo o servidor responde 500 (misconfiguration). Em desenvolvimento local podes omitir para testar sem assinatura.
   - `META_WEBHOOK_VERIFY_TOKEN` (ou `WHATSAPP_WEBHOOK_VERIFY_TOKEN`)
   - opcionais: `META_OAUTH_REDIRECT_URI`, `META_OAUTH_STATE_SECRET`
 - Webhook Cloud API (receção de mensagens e estados): `https://<teu-dominio>/api/whatsapp/webhook/official` com o mesmo `META_WEBHOOK_VERIFY_TOKEN` configurado na app Meta.
@@ -21,7 +22,7 @@
 
 Campanhas e fila: tabelas `public.whatsapp_broadcasts` e `public.whatsapp_broadcast_queue`. A UI está no separador **Disparos** do dashboard. Só funciona com `provider = official` e templates em estado **APPROVED** na WABA.
 
-Sem o cron da fila, os itens ficam em `pending`. Configura o mesmo segredo `INTERNAL_AI_SECRET` num job periódico que chame `GET /api/cron/whatsapp-broadcast-queue`.
+Sem o cron da fila, os itens ficam em `pending`. Configura um job periódico com `Authorization: Bearer ${INTERNAL_BROADCAST_SECRET || INTERNAL_AI_SECRET}` a chamar `GET /api/cron/whatsapp-broadcast-queue`.
 
 ## Follow-ups automáticos
 
@@ -40,7 +41,11 @@ O processamento principal do agente ([`schedule` → `runAiProcess`](../src/app/
 | `/api/ai/schedule` | Bearer `INTERNAL_AI_SECRET` |
 | `/api/ai/process` | Bearer `INTERNAL_AI_SECRET` |
 | `/api/ai/followup-cron` | Bearer `INTERNAL_AI_SECRET` |
-| `/api/cron/whatsapp-broadcast-queue` | Bearer `INTERNAL_AI_SECRET` |
+| `/api/cron/whatsapp-broadcast-queue` | Bearer `INTERNAL_BROADCAST_SECRET` se definido; senão `INTERNAL_AI_SECRET` |
+
+## Novas rotas API
+
+Checklist de autorização para handlers em `src/app/api`: [API_ROUTE_AUTH_CHECKLIST.md](./API_ROUTE_AUTH_CHECKLIST.md).
 
 ## Rollout e rollback do provider oficial (Meta)
 

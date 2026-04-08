@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
-import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
-
-function pgErrorCode(e: unknown): string {
-    if (typeof e !== 'object' || e === null || !('code' in e)) return ''
-    return String((e as { code: unknown }).code)
-}
+import { getTenantSql, quotedSchema, isMissingTenantSchema, isStatementTimeout } from '@/lib/db/tenant-sql'
 
 export async function GET(request: Request) {
     try {
@@ -34,8 +29,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ messages: messages || [] })
     } catch (e) {
-        if (pgErrorCode(e) === '57014') {
-            console.error('messages recent', e)
+        if (isMissingTenantSchema(e) || isStatementTimeout(e)) {
             return NextResponse.json({ messages: [] })
         }
         console.error('messages recent', e)

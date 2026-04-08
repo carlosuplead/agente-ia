@@ -53,6 +53,28 @@ export function getTenantSql() {
     return globalForSql.tenantPostgres
 }
 
+/**
+ * Extrai o código de erro Postgres (e.g. '42P01', '3F000') de um objecto de erro.
+ */
+export function pgErrorCode(e: unknown): string {
+    if (typeof e !== 'object' || e === null || !('code' in e)) return ''
+    return String((e as { code: unknown }).code)
+}
+
+/**
+ * Verifica se o erro indica schema ou tabela inexistente no tenant.
+ * 42P01 = undefined_table, 3F000 = invalid_schema_name
+ */
+export function isMissingTenantSchema(e: unknown): boolean {
+    const code = pgErrorCode(e)
+    return code === '42P01' || code === '3F000'
+}
+
+/** Verifica se o erro é um statement_timeout (57014). */
+export function isStatementTimeout(e: unknown): boolean {
+    return pgErrorCode(e) === '57014'
+}
+
 export function assertTenantSlug(slug: string): string {
     const s = slug.toLowerCase()
     if (!/^[a-z0-9_]+$/.test(s)) {

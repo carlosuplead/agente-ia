@@ -7,6 +7,7 @@ import { MobileNav } from './MobileNav'
 import { NewWorkspaceModal } from './NewWorkspaceModal'
 import { Toast } from './Toast'
 import { DisparosTab } from './DisparosTab'
+import { RelatoriosTab } from './RelatoriosTab'
 import { WhatsAppTab } from './WhatsAppTab'
 import { WorkspacesTab } from './WorkspacesTab'
 import { WorkspaceSettingsTab } from './WorkspaceSettingsTab'
@@ -64,6 +65,7 @@ export function DashboardApp() {
                 {d.activeTab === 'workspaces' && <WorkspacesTab />}
                 {d.activeTab === 'connection' && <WhatsAppTab />}
                 {d.activeTab === 'disparos' && <DisparosTab />}
+                {d.activeTab === 'relatorios' && <RelatoriosTab />}
                 {d.activeTab === 'config' && <AgentConfigTab />}
                 {d.activeTab === 'workspace_settings' && <WorkspaceSettingsTab />}
             </main>

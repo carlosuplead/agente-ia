@@ -80,8 +80,9 @@ export function AdminPanel() {
         }
     }
 
-    async function handleApproveUser(userId: string, userEmail: string) {
-        const name = window.prompt(`Nome do workspace para ${userEmail}:`, userEmail.split('@')[0])
+    async function handleApproveUser(userId: string, userEmail: string, fullName: string | null) {
+        const defaultName = fullName || userEmail.split('@')[0]
+        const name = window.prompt(`Nome do workspace para ${userEmail}:`, defaultName)
         if (!name) return
         const slug = name
             .toLowerCase()
@@ -259,7 +260,7 @@ export function AdminPanel() {
                                                 <button
                                                     className="btn btn-primary"
                                                     style={{ fontSize: 12, padding: '4px 12px' }}
-                                                    onClick={() => handleApproveUser(u.id, u.email)}
+                                                    onClick={() => handleApproveUser(u.id, u.email, u.full_name)}
                                                 >
                                                     Aprovar
                                                 </button>

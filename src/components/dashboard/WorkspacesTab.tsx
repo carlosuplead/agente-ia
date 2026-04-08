@@ -48,9 +48,8 @@ export function WorkspacesTab() {
                             </>
                         ) : (
                             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                Não tens acesso a nenhum workspace. Um administrador da plataforma tem de te adicionar em{' '}
-                                <code>workspace_members</code> no Supabase (SQL Editor) ou criar um workspace contigo como
-                                membro.
+                                Ainda sem acesso a nenhum workspace. Um administrador da plataforma precisa aprovar
+                                sua conta e atribuir um workspace.
                             </p>
                         )}
                     </div>
@@ -88,17 +87,19 @@ export function WorkspacesTab() {
                                     <MessageCircle size={14} />
                                     WhatsApp
                                 </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary btn-compact"
-                                    onClick={e => {
-                                        e.stopPropagation()
-                                        setExpandedSlug(prev => prev === ws.slug ? null : ws.slug)
-                                    }}
-                                >
-                                    <Database size={14} />
-                                    {isExpanded ? 'Ocultar info' : 'Ver detalhes'}
-                                </button>
+                                {d.isPlatformAdmin && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-compact"
+                                        onClick={e => {
+                                            e.stopPropagation()
+                                            setExpandedSlug(prev => prev === ws.slug ? null : ws.slug)
+                                        }}
+                                    >
+                                        <Database size={14} />
+                                        {isExpanded ? 'Ocultar info' : 'Ver detalhes'}
+                                    </button>
+                                )}
                                 {d.canManageWorkspaceSlug(ws.slug) && (
                                     <button
                                         type="button"
@@ -115,8 +116,8 @@ export function WorkspacesTab() {
                                 )}
                             </div>
 
-                            {/* Expanded detail view */}
-                            {isExpanded && (
+                            {/* Expanded detail view — only visible to platform admins */}
+                            {d.isPlatformAdmin && isExpanded && (
                                 <div style={{
                                     marginTop: 16,
                                     padding: 16,
@@ -162,24 +163,22 @@ export function WorkspacesTab() {
                                                 Tabelas em <code className="inline-code">{ws.slug}.*</code>
                                             </span>
                                         </div>
-                                        {d.isPlatformAdmin && (
-                                            <div className="ws-detail-row">
-                                                <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
-                                                    SQL rápido
-                                                </span>
-                                                <code className="inline-code" style={{ fontSize: 11 }}>
-                                                    SELECT * FROM &quot;{ws.slug}&quot;.ai_agent_config
-                                                </code>
-                                                <button
-                                                    type="button"
-                                                    className="ws-detail-copy-btn"
-                                                    title="Copiar SQL"
-                                                    onClick={() => copyToClipboard(`SELECT * FROM "${ws.slug}".ai_agent_config`, `sql-${ws.slug}`)}
-                                                >
-                                                    {copied === `sql-${ws.slug}` ? <Check size={12} /> : <Copy size={12} />}
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="ws-detail-row">
+                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
+                                                SQL rápido
+                                            </span>
+                                            <code className="inline-code" style={{ fontSize: 11 }}>
+                                                SELECT * FROM &quot;{ws.slug}&quot;.ai_agent_config
+                                            </code>
+                                            <button
+                                                type="button"
+                                                className="ws-detail-copy-btn"
+                                                title="Copiar SQL"
+                                                onClick={() => copyToClipboard(`SELECT * FROM "${ws.slug}".ai_agent_config`, `sql-${ws.slug}`)}
+                                            >
+                                                {copied === `sql-${ws.slug}` ? <Check size={12} /> : <Copy size={12} />}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

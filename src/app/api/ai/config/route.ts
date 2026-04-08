@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceInternal } from '@/lib/auth/workspace-access'
-import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
+import { getTenantSql, quotedSchema, isMissingTenantSchema } from '@/lib/db/tenant-sql'
 import { defaultN8nToolDescription, normalizeToolNameFromUi } from '@/lib/ai-agent/n8n-tools'
 import { parseFollowupStepsFromBody } from '@/lib/ai-agent/followup-steps'
 import { sanitizeAiConfigForClient } from '@/lib/dashboard/ai-config'
@@ -82,6 +82,9 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ config })
     } catch (e) {
+        if (isMissingTenantSchema(e)) {
+            return NextResponse.json({ config: null })
+        }
         console.error('ai config GET', e)
         const msg = e instanceof Error ? e.message : 'Internal Server Error'
         return NextResponse.json({ error: msg }, { status: 500 })

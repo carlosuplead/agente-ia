@@ -7,6 +7,7 @@ import {
     LayoutGrid,
     MessageCircle,
     Megaphone,
+    BarChart3,
     Bot,
     Settings,
     Menu,
@@ -22,6 +23,7 @@ const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
     { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
     { id: 'connection', label: 'WhatsApp', icon: MessageCircle },
     { id: 'disparos', label: 'Disparos', icon: Megaphone },
+    { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
     { id: 'config', label: 'Agente IA', icon: Bot }
 ]
 

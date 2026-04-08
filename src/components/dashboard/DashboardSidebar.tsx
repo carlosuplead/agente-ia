@@ -6,6 +6,7 @@ import {
     LayoutGrid,
     MessageCircle,
     Megaphone,
+    BarChart3,
     Bot,
     Settings,
     Zap,
@@ -21,6 +22,7 @@ const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
     { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
     { id: 'connection', label: 'WhatsApp', icon: MessageCircle },
     { id: 'disparos', label: 'Disparos', icon: Megaphone },
+    { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
     { id: 'config', label: 'Agente IA', icon: Bot }
 ]
 
@@ -49,9 +51,12 @@ export function DashboardSidebar() {
         document.documentElement.setAttribute('data-theme', next)
     }
 
-    const userInitials = d.userEmail
-        ? d.userEmail.substring(0, 2).toUpperCase()
-        : '??'
+    const displayLabel = d.userDisplayName || d.userEmail || '...'
+    const userInitials = d.userDisplayName
+        ? d.userDisplayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+        : d.userEmail
+            ? d.userEmail.substring(0, 2).toUpperCase()
+            : '??'
 
     return (
         <aside className="sidebar sidebar--desktop" aria-label="Navegação principal">
@@ -125,7 +130,7 @@ export function DashboardSidebar() {
                     <div className="sidebar-user-avatar" aria-hidden="true">
                         {userInitials}
                     </div>
-                    <span className="sidebar-user-email">{d.userEmail || '...'}</span>
+                    <span className="sidebar-user-email">{displayLabel}</span>
                 </div>
 
                 <button

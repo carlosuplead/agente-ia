@@ -32,8 +32,10 @@ export async function GET() {
 
         const portal_only = await isPortalOnlyUser(supabase, user.id)
 
+        const fullName = (user.user_metadata?.full_name as string) || null
+
         return NextResponse.json({
-            user: { id: user.id, email: user.email },
+            user: { id: user.id, email: user.email, full_name: fullName },
             is_platform_admin: !!pa,
             portal_only,
             memberships

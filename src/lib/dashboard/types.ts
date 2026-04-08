@@ -94,6 +94,6 @@ export type GoogleCalendarPickerItem = {
     primary?: boolean
 }
 
-export type DashboardTab = 'workspaces' | 'connection' | 'disparos' | 'config' | 'workspace_settings'
+export type DashboardTab = 'workspaces' | 'connection' | 'disparos' | 'relatorios' | 'config' | 'workspace_settings'
 
 export type WorkspaceMembershipRow = { workspace_slug: string; role: string }

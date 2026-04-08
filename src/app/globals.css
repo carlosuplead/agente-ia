@@ -1081,6 +1081,44 @@ button.nav-item {
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+
+  .page-header h2 {
+    font-size: 1.15rem;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .card-header-with-icon {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .token-usage-table {
+    font-size: 12px;
+  }
+
+  .btn {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+
+  .btn-compact {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+}
+
+/* ========== Tablet (between 768 and 1024) ========== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .main-content {
+    padding: 24px 20px;
+  }
+
+  .workspace-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* ========== Client Portal ========== */

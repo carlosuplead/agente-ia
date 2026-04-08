@@ -1,7 +1,7 @@
 # PRD — Plataforma SaaS de IA para WhatsApp (agente-ia)
 
 > Documento vivo. Atualizado a cada ciclo de desenvolvimento.
-> Ultima atualização: 2026-04-08
+> Ultima atualização: 2026-04-09
 
 ---
 
@@ -95,15 +95,17 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 ### 4.2 Painel Admin
 - [x] Lista de usuários com status (Pendente/Aprovado/Admin)
 - [x] Botão "Aprovar" cria workspace + atribui owner
+- [x] **Aprovação usa nome da empresa (full_name) em vez do email**
 - [x] Gerenciamento de workspaces
 
 ### 4.3 Dashboard Interno
-- [x] Sidebar com ícones Lucide SVG (LayoutGrid, MessageCircle, Bot, etc.)
+- [x] Sidebar com ícones Lucide SVG (LayoutGrid, MessageCircle, BarChart3, Bot, etc.)
 - [x] Toggle claro/escuro com localStorage
 - [x] Tema BotConversa (light-first, azul #2563eb)
-- [x] Mobile responsive (drawer navigation)
-- [x] Avatar de iniciais do usuário
-- [x] Workspace grid com detalhes expandíveis (ID, slug, SQL)
+- [x] Mobile responsive (drawer navigation + tablet breakpoint)
+- [x] Avatar com iniciais do nome da empresa (não do email)
+- [x] Nome da empresa exibido na sidebar (não email)
+- [x] Workspace grid com detalhes técnicos apenas para admin
 
 ### 4.4 Conexão WhatsApp
 - [x] Uazapi: criar instância, QR Code, pairing code
@@ -188,7 +190,15 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 - [x] Convidar clientes para o portal
 - [x] Gerenciar acessos (remover clientes)
 - [x] URL do portal compartilhável
-- [x] **Detalhes expandíveis (Workspace ID, Schema slug, SQL)**
+- [x] **Detalhes expandíveis (Workspace ID, Schema slug, SQL) — só admins**
+
+### 4.15 Relatórios e Analytics
+- [x] Aba dedicada "Relatórios" na sidebar (BarChart3 icon)
+- [x] KPI cards: mensagens totais, contatos, conversas IA, handoffs, resolução IA, msgs/conversa, follow-ups, contatos únicos
+- [x] Gráficos de atividade diária (mensagens + conversas)
+- [x] Comparativo com período anterior
+- [x] Seletor de período (7d, 14d, 30d, 60d)
+- [x] API `/api/messages/conversation-stats` com métricas de conversas
 
 ---
 
@@ -200,7 +210,6 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 - [ ] Testar notificação à equipa com template preenchido pela IA
 
 ### Melhorias Planejadas
-- [ ] Dashboard analytics mais rico (gráficos de conversas, leads, conversão)
 - [ ] Histórico de conversas navegável no painel
 - [ ] Busca de contatos/conversas
 - [ ] Exportar dados (CSV/Excel)
@@ -223,7 +232,7 @@ src/
 │   │   ├── admin/          # Gerenciamento de users/workspaces
 │   │   ├── ai/             # Config, processamento, cron, follow-up
 │   │   ├── auth/           # Login, signup, OAuth (Google, Meta)
-│   │   ├── messages/       # Recent, stats, token usage
+│   │   ├── messages/       # Recent, stats, token usage, conversation-stats
 │   │   ├── whatsapp/       # Instances, send, webhooks, broadcasts
 │   │   ├── workspace/      # Contacts, Google Calendar
 │   │   └── workspaces/     # CRUD workspaces, members
@@ -233,7 +242,7 @@ src/
 │   └── signup/             # Página de cadastro
 ├── components/
 │   ├── client-portal/      # ClientPortalApp
-│   └── dashboard/          # 14 componentes do painel
+│   └── dashboard/          # 15 componentes do painel (inclui RelatoriosTab)
 ├── lib/
 │   ├── ai-agent/           # 17 módulos (LLM, tools, follow-up, etc.)
 │   ├── auth/               # Acesso, admin, redirects

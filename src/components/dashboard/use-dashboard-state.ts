@@ -139,6 +139,7 @@ export function useDashboardController() {
     const [portalOnly, setPortalOnly] = useState(false)
     const [memberships, setMemberships] = useState<WorkspaceMembershipRow[]>([])
     const [userEmail, setUserEmail] = useState<string | null>(null)
+    const [userDisplayName, setUserDisplayName] = useState<string | null>(null)
     const [instance, setInstance] = useState<InstanceRow>(null)
     const [aiConfig, setAiConfig] = useState<AiConfigRow | null>(null)
     const [messages, setMessages] = useState<MessageRow[]>([])
@@ -435,6 +436,7 @@ export function useDashboardController() {
                 : []
         )
         setUserEmail(json.user?.email ?? null)
+        setUserDisplayName(json.user?.full_name ?? null)
     }, [])
 
     const loadInstance = useCallback(async (slug: string, opts?: { syncUazapi?: boolean }) => {
@@ -1162,6 +1164,7 @@ export function useDashboardController() {
         canEditWorkspaceIdentity,
         canInvitePortalClients,
         userEmail,
+        userDisplayName,
         instance,
         aiConfig,
         messages,

@@ -189,6 +189,14 @@ export async function GET(request: Request) {
                         uazapi.configureInstanceWebhook(r.instance_token, webhookUrl).catch(() => {})
                     }
                 }
+            } else if (r.status === 'connected' || r.status === 'connecting') {
+                // Uazapi retornou null (401/erro) → instância não existe mais
+                const patch = { status: 'disconnected', last_connected_at: null }
+                const { error: upErr } = await supabase
+                    .from('whatsapp_instances')
+                    .update(patch)
+                    .eq('id', r.id)
+                if (!upErr) Object.assign(r, patch)
             }
         }
 

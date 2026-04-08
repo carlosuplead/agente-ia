@@ -57,7 +57,7 @@ export function DashboardApp() {
             <MobileNav />
 
             <main className="main-content">
-                {d.loadError && (
+                {d.loadError && d.isPlatformAdmin && (
                     <div className="card alert-card" role="alert">
                         <p className="alert-card-text">{d.loadError}</p>
                     </div>

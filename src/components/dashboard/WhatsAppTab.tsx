@@ -66,7 +66,7 @@ export function WhatsAppTab() {
         <>
             <div className="page-header">
                 <h2>WhatsApp — {d.selectedWs?.name || '—'}</h2>
-                <p>Conexão e mensagens do workspace {d.selectedSlug || '—'}</p>
+                <p>Conexão e mensagens do seu espaço de trabalho</p>
             </div>
 
             {!d.selectedSlug && (

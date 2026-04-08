@@ -127,7 +127,7 @@ export function WhatsAppTab() {
                                 type="button"
                                 className="btn btn-secondary"
                                 disabled={d.busy || !d.instance}
-                                onClick={() => d.selectedSlug && d.loadInstance(d.selectedSlug, { syncUazapi: true })}
+                                onClick={d.refreshInstanceWithFeedback}
                             >
                                 Atualizar
                             </button>

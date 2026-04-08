@@ -1024,7 +1024,16 @@ export function useDashboardController() {
                 pairingCode: (j as { pairingCode?: string }).pairingCode
             })
         }
+        // Atualiza estado em background — não bloqueia a exibição do QR
+        loadInstance(selectedSlug, { syncUazapi: true }).catch(() => {})
+    }
+
+    async function refreshInstanceWithFeedback() {
+        if (!selectedSlug) return
+        setBusy(true)
         await loadInstance(selectedSlug, { syncUazapi: true })
+        setBusy(false)
+        setToast({ message: 'Estado atualizado', variant: 'success' })
     }
 
     function startMetaOfficialOAuth() {
@@ -1206,6 +1215,7 @@ export function useDashboardController() {
         provisionInstance,
         removeUazapiInstance,
         connectWhatsapp,
+        refreshInstanceWithFeedback,
         startMetaOfficialOAuth,
         metaPendingPhones,
         completeMetaPhonePick,

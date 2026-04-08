@@ -179,8 +179,9 @@ export async function GET(request: Request) {
                     uazapiLive = { qrcode: remote.qrcode, pairingCode: remote.pairingCode }
                 }
 
-                // Auto-configure webhook if connected (ensures webhook is active)
-                if (remote.dbStatus === 'connected' && r.instance_token) {
+                // Auto-configure webhook only when status just changed to connected
+                const justConnected = remote.dbStatus === 'connected' && r.status !== 'connected'
+                if (justConnected && r.instance_token) {
                     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/\/+$/, '')
                     if (siteUrl) {
                         const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`

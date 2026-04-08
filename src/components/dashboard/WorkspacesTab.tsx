@@ -70,7 +70,9 @@ export function WorkspacesTab() {
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div className="workspace-card-name">{ws.name}</div>
-                                    <div className="workspace-card-slug">{ws.slug}</div>
+                                    {d.isPlatformAdmin && (
+                                        <div className="workspace-card-slug">{ws.slug}</div>
+                                    )}
                                 </div>
                             </div>
 

@@ -114,6 +114,7 @@ export async function POST(request: Request) {
             n8n_webhook_enabled,
             inactivity_timeout_hours,
             ai_followup_enabled,
+            ai_followup_prompt,
             elevenlabs_voice_enabled,
             elevenlabs_voice_id,
             elevenlabs_model_id,
@@ -182,6 +183,7 @@ export async function POST(request: Request) {
         const rawInact = Number(inactivity_timeout_hours)
         const inactH = Number.isFinite(rawInact) ? Math.min(720, Math.max(1, Math.floor(rawInact))) : 24
         const followOn = ai_followup_enabled === true
+        const followPrompt = trimOrNull(ai_followup_prompt)
         const elevenVoiceOn = elevenlabs_voice_enabled === true
         const elevenVoiceId = trimOrNull(elevenlabs_voice_id)
         const elevenModelId = trimOrNull(elevenlabs_model_id)
@@ -246,7 +248,7 @@ export async function POST(request: Request) {
                context_max_messages, human_handoff_enabled, transfer_tool_description, handoff_default_reply,
                whatsapp_formatting_extra, send_delay_ms, send_presence, handoff_keywords, label_team, label_assistant,
                buffer_delay_seconds, greeting_message, n8n_webhook_url, n8n_webhook_enabled, n8n_webhook_timeout_seconds,
-               n8n_tool_description, inactivity_timeout_hours, ai_followup_enabled, ai_followup_steps, n8n_tools,
+               n8n_tool_description, inactivity_timeout_hours, ai_followup_enabled, ai_followup_prompt, ai_followup_steps, n8n_tools,
                elevenlabs_voice_enabled, elevenlabs_voice_id, elevenlabs_model_id, elevenlabs_voice_tool_description,
                ai_chunk_messages_enabled, ai_chunk_split_mode, ai_chunk_max_parts,
                ai_test_mode, ai_test_allowlist_phones,
@@ -255,7 +257,7 @@ export async function POST(request: Request) {
                team_notification_template,
                updated_at
              )
-             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26::jsonb, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, now())
+             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, now())
              ON CONFLICT (singleton_key) DO UPDATE SET
                enabled = EXCLUDED.enabled,
                provider = EXCLUDED.provider,
@@ -281,6 +283,7 @@ export async function POST(request: Request) {
                n8n_tool_description = EXCLUDED.n8n_tool_description,
                inactivity_timeout_hours = EXCLUDED.inactivity_timeout_hours,
                ai_followup_enabled = EXCLUDED.ai_followup_enabled,
+               ai_followup_prompt = EXCLUDED.ai_followup_prompt,
                ai_followup_steps = EXCLUDED.ai_followup_steps,
                n8n_tools = EXCLUDED.n8n_tools,
                elevenlabs_voice_enabled = EXCLUDED.elevenlabs_voice_enabled,
@@ -324,6 +327,7 @@ export async function POST(request: Request) {
                 n8nDesc,
                 inactH,
                 followOn,
+                followPrompt,
                 followStepsJson,
                 n8nToolsJson,
                 elevenVoiceOn,

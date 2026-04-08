@@ -5,12 +5,61 @@ import { parseFollowupStepsFromConfig } from '@/lib/ai-agent/followup-steps'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from '@/lib/ai-agent/types'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
+import { sendOptionsFromConfig } from '@/lib/ai-agent/send-options'
 
 function sleep(ms: number) {
     return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
-import { sendOptionsFromConfig } from '@/lib/ai-agent/send-options'
+/** Usa o prompt de follow-up + histórico para gerar mensagem via IA. Retorna null se falhar. */
+async function generateFollowupWithAI(
+    config: AiAgentConfig,
+    workspaceSlug: string,
+    contactPhone: string,
+    stepIndex: number,
+    fallbackMessage: string
+): Promise<string | null> {
+    const prompt = config.ai_followup_prompt?.trim()
+    if (!prompt) return null
+
+    try {
+        const sql = getTenantSql()
+        const sch = quotedSchema(workspaceSlug)
+
+        // Buscar últimas mensagens do contacto
+        const recentMsgs = await sql.unsafe(
+            `SELECT sender_type, body FROM ${sch}.messages m
+             INNER JOIN ${sch}.contacts c ON c.id = m.contact_id
+             WHERE c.phone = $1 AND m.body IS NOT NULL
+             ORDER BY m.created_at DESC LIMIT 15`,
+            [contactPhone]
+        ) as unknown as { sender_type: string; body: string }[]
+
+        if (recentMsgs.length === 0) return null
+
+        const transcript = recentMsgs.reverse().map(m => {
+            const role = m.sender_type === 'contact' ? 'Cliente' : m.sender_type === 'ai' ? 'Assistente' : 'Equipa'
+            return `${role}: ${m.body}`
+        }).join('\n')
+
+        const followupSystemPrompt = `${prompt}\n\nEste é o passo ${stepIndex + 1} de follow-up. O cliente não respondeu há algum tempo.\nMensagem de fallback configurada: "${fallbackMessage}"\n\nGera UMA mensagem curta e natural de follow-up baseada no contexto da conversa. Responde APENAS com a mensagem, sem explicações.`
+
+        const userContent = `Histórico da conversa:\n${transcript}\n\nGera a mensagem de follow-up:`
+
+        // Usar config com system prompt temporário para follow-up
+        const { callFollowupLLM } = await import('@/lib/ai-agent/llm-router')
+        const result = await callFollowupLLM(config, followupSystemPrompt, userContent)
+
+        const generated = result?.trim()
+        if (generated && generated.length > 5 && generated.length < 2000) {
+            return generated
+        }
+        return null
+    } catch (e) {
+        console.error(`[followup-ai] Falha ao gerar follow-up para ${workspaceSlug}:`, e)
+        return null
+    }
+}
 
 type CandidateRow = {
     conversation_id: string
@@ -119,12 +168,15 @@ export async function processFollowupsForWorkspace(
         }
 
         try {
-            const textToSend = parseMessageForWhatsApp(step.message)
+            // Tentar gerar mensagem via IA se prompt configurado
+            const aiMessage = await generateFollowupWithAI(config, workspaceSlug, row.phone, p, step.message)
+            const finalMessage = aiMessage || step.message
+            const textToSend = parseMessageForWhatsApp(finalMessage)
             const savedRows = await sql.unsafe(
                 `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status)
                  VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sending')
                  RETURNING id`,
-                [row.contact_id, row.conversation_id, step.message]
+                [row.contact_id, row.conversation_id, finalMessage]
             )
             const savedMsg = savedRows[0] as unknown as { id: string } | undefined
             try {

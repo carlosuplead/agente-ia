@@ -484,6 +484,29 @@ button.nav-item {
   color: var(--text-muted);
 }
 
+.ws-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ws-detail-copy-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.ws-detail-copy-btn:hover {
+  color: var(--accent);
+}
+
 .workspace-card-settings-btn {
   flex-shrink: 0;
   font-size: 12px;

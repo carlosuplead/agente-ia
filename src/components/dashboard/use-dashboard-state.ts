@@ -50,6 +50,7 @@ function applyAiConfigToForm(
         setCfgInactivity: (v: number) => void
         setCfgFollowup: (v: boolean) => void
         setCfgFollowupSteps: (v: FollowupStepUi[]) => void
+        setCfgFollowupPrompt: (v: string) => void
         setCfgElevenVoice: (v: boolean) => void
         setCfgElevenVoiceId: (v: string) => void
         setCfgElevenModelId: (v: string) => void
@@ -96,6 +97,7 @@ function applyAiConfigToForm(
     setters.setCfgFollowupSteps(
         followupStepsToUiRows(parseFollowupStepsFromConfig(merged as unknown as Record<string, unknown>))
     )
+    setters.setCfgFollowupPrompt(merged.ai_followup_prompt ?? '')
     setters.setCfgElevenVoice(merged.elevenlabs_voice_enabled === true)
     setters.setCfgElevenVoiceId(merged.elevenlabs_voice_id ?? '')
     setters.setCfgElevenModelId(merged.elevenlabs_model_id ?? '')
@@ -190,6 +192,7 @@ export function useDashboardController() {
     const [cfgInactivity, setCfgInactivity] = useState(24)
     const [cfgFollowup, setCfgFollowup] = useState(false)
     const [cfgFollowupSteps, setCfgFollowupSteps] = useState<FollowupStepUi[]>([])
+    const [cfgFollowupPrompt, setCfgFollowupPrompt] = useState('')
     const [cfgElevenVoice, setCfgElevenVoice] = useState(false)
     const [cfgElevenVoiceId, setCfgElevenVoiceId] = useState('')
     const [cfgElevenModelId, setCfgElevenModelId] = useState('')
@@ -287,6 +290,7 @@ export function useDashboardController() {
             cfgInactivity,
             cfgFollowup,
             cfgFollowupSteps,
+            cfgFollowupPrompt,
             cfgElevenVoice,
             cfgElevenVoiceId,
             cfgElevenModelId,
@@ -333,6 +337,7 @@ export function useDashboardController() {
             cfgInactivity,
             cfgFollowup,
             cfgFollowupSteps,
+            cfgFollowupPrompt,
             cfgElevenVoice,
             cfgElevenVoiceId,
             cfgElevenModelId,
@@ -562,6 +567,7 @@ export function useDashboardController() {
             setCfgInactivity,
             setCfgFollowup,
             setCfgFollowupSteps,
+            setCfgFollowupPrompt,
             setCfgElevenVoice,
             setCfgElevenVoiceId,
             setCfgElevenModelId,
@@ -624,6 +630,7 @@ export function useDashboardController() {
                 setCfgFieldErrors({})
             }
             setSelectedSlug(slug)
+            setLoadError('')
             closeMobileNav()
             return true
         },
@@ -1243,6 +1250,8 @@ export function useDashboardController() {
         setCfgFollowup,
         cfgFollowupSteps,
         setCfgFollowupSteps,
+        cfgFollowupPrompt,
+        setCfgFollowupPrompt,
         cfgElevenVoice,
         setCfgElevenVoice,
         cfgElevenVoiceId,

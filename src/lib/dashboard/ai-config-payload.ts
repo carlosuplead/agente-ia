@@ -24,6 +24,7 @@ export type AiConfigFormSnapshotInput = {
     cfgInactivity: number
     cfgFollowup: boolean
     cfgFollowupSteps: FollowupStepUi[]
+    cfgFollowupPrompt: string
     cfgElevenVoice: boolean
     cfgElevenVoiceId: string
     cfgElevenModelId: string
@@ -84,6 +85,7 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
             : [],
         inactivity_timeout_hours: i.cfgInactivity,
         ai_followup_enabled: i.cfgFollowup,
+        ai_followup_prompt: i.cfgFollowupPrompt?.trim() || null,
         ai_followup_steps: i.cfgFollowup
             ? i.cfgFollowupSteps
                   .filter(r => r.message.trim())

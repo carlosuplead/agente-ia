@@ -48,6 +48,8 @@ export type AiAgentConfig = {
     elevenlabs_api_key?: string | null
     /** Follow-up automático após silêncio do cliente (requer job em `/api/ai/followup-cron`). */
     ai_followup_enabled?: boolean
+    /** Prompt customizado para gerar follow-ups via IA (se vazio, usa texto fixo). */
+    ai_followup_prompt?: string | null
     /** Passos: `[{ delay_minutes, message }]` (JSONB). */
     ai_followup_steps?: unknown
     /** BYOK OpenAI; se vazio, usa OPENAI_API_KEY no servidor. */

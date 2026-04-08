@@ -1143,3 +1143,73 @@ async function callOpenAIWithTools(
         usage: usageAcc
     }
 }
+
+/**
+ * Chamada LLM simples para gerar follow-up.
+ * Usa o prompt de follow-up como system + userContent com o histórico.
+ */
+export async function callFollowupLLM(
+    config: AiAgentConfig,
+    systemPrompt: string,
+    userContent: string
+): Promise<string> {
+    const provider = config.provider || 'gemini'
+
+    if (provider === 'anthropic') {
+        const apiKey = resolveAnthropicApiKey(config)
+        if (!apiKey) throw new Error('Chave Anthropic em falta')
+        const anthropic = new Anthropic({ apiKey })
+        const response = await withTimeout(
+            anthropic.messages.create({
+                model: config.model || 'claude-sonnet-4-6',
+                max_tokens: 512,
+                temperature: config.temperature ?? 0.7,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userContent }]
+            }),
+            LLM_TIMEOUT_MS,
+            'Timeout Anthropic follow-up'
+        )
+        return response.content
+            .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+            .map(b => b.text)
+            .join('')
+    }
+
+    if (provider === 'openai') {
+        const apiKey = resolveOpenAiApiKey(config)
+        if (!apiKey) throw new Error('Chave OpenAI em falta')
+        const openai = new OpenAI({ apiKey })
+        const modelName = config.model || 'gpt-4o-mini'
+        const completion = await withTimeout(
+            openai.chat.completions.create({
+                model: modelName,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userContent }
+                ],
+                max_tokens: 512,
+                ...(openAiOmitsChatTemperature(modelName) ? {} : { temperature: config.temperature ?? 0.7 })
+            }),
+            LLM_TIMEOUT_MS,
+            'Timeout OpenAI follow-up'
+        )
+        return completion.choices[0]?.message?.content || ''
+    }
+
+    // Gemini
+    const gKey = resolveGoogleApiKey(config)
+    if (!gKey) throw new Error('Chave Gemini em falta')
+    const genAI = new GoogleGenerativeAI(gKey)
+    const model = genAI.getGenerativeModel({
+        model: config.model || 'gemini-2.5-flash',
+        systemInstruction: systemPrompt,
+        generationConfig: { temperature: config.temperature ?? 0.7, maxOutputTokens: 512 }
+    })
+    const result = await withTimeout(
+        model.generateContent(userContent),
+        LLM_TIMEOUT_MS,
+        'Timeout Gemini follow-up'
+    )
+    return result.response.text()
+}

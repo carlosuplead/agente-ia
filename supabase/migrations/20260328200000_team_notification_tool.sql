@@ -61,6 +61,7 @@ BEGIN
             n8n_tool_description TEXT,
             inactivity_timeout_hours INTEGER NOT NULL DEFAULT 24,
             ai_followup_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            ai_followup_prompt TEXT,
             ai_followup_steps JSONB NOT NULL DEFAULT ''[]''::jsonb,
             n8n_tools JSONB NOT NULL DEFAULT ''[]''::jsonb,
             elevenlabs_voice_enabled BOOLEAN NOT NULL DEFAULT FALSE,

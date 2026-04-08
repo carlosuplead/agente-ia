@@ -25,6 +25,7 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     n8n_tool_description: null,
     inactivity_timeout_hours: 24,
     ai_followup_enabled: false,
+    ai_followup_prompt: null,
     ai_followup_steps: [],
     elevenlabs_voice_enabled: false,
     elevenlabs_voice_id: null,

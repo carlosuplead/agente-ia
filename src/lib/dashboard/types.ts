@@ -37,6 +37,7 @@ export type AiConfigRow = {
     n8n_tools?: unknown
     inactivity_timeout_hours?: number
     ai_followup_enabled?: boolean
+    ai_followup_prompt?: string | null
     ai_followup_steps?: unknown
     elevenlabs_voice_enabled?: boolean
     elevenlabs_voice_id?: string | null

@@ -535,6 +535,25 @@ export function AgentConfigTab() {
                                 <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 10, marginBottom: 12 }}>
                                     Cada passo é enviado quando passa o tempo indicado desde a última mensagem sem resposta do contacto.
                                 </p>
+
+                                <div className="input-group" style={{ marginBottom: 16 }}>
+                                    <label className="input-label" htmlFor="cfg-followup-prompt">
+                                        Prompt de follow-up (opcional)
+                                    </label>
+                                    <textarea
+                                        id="cfg-followup-prompt"
+                                        className="input textarea"
+                                        rows={4}
+                                        value={d.cfgFollowupPrompt ?? ''}
+                                        onChange={e => d.setCfgFollowupPrompt(e.target.value)}
+                                        placeholder={'Se preenchido, a IA usa este prompt + histórico da conversa para gerar a mensagem de follow-up.\nSe vazio, usa a mensagem fixa de cada passo abaixo.'}
+                                    />
+                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                        Quando preenchido, a IA analisa o histórico da conversa e gera uma mensagem personalizada.
+                                        A mensagem fixa do passo é usada como fallback se a IA falhar.
+                                    </p>
+                                </div>
+
                                 {d.cfgFollowupSteps.map((row, idx) => (
                                     <div key={row.id} className="subcard">
                                         <div className="subcard-header">

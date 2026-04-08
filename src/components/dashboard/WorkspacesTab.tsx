@@ -1,10 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import { slugColor } from '@/lib/dashboard/slug-color'
 import { useDashboard } from './dashboard-context'
+import { LayoutGrid, Copy, Check, Database, Globe, Settings, MessageCircle } from 'lucide-react'
 
 export function WorkspacesTab() {
     const d = useDashboard()
+    const [expandedSlug, setExpandedSlug] = useState<string | null>(null)
+    const [copied, setCopied] = useState<string | null>(null)
+
+    function copyToClipboard(text: string, label: string) {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(label)
+            setTimeout(() => setCopied(null), 2000)
+        })
+    }
 
     return (
         <>
@@ -44,54 +55,137 @@ export function WorkspacesTab() {
                         )}
                     </div>
                 )}
-                {d.workspaces.map(ws => (
-                    <div
-                        key={ws.id}
-                        className="workspace-card"
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                if (!d.requestWorkspaceSlug(ws.slug)) return
-                                d.requestTab('connection')
-                            }
-                        }}
-                        onClick={() => {
-                            if (!d.requestWorkspaceSlug(ws.slug)) return
-                            d.requestTab('connection')
-                        }}
-                    >
-                        <div className="workspace-card-header">
-                            <div
-                                className="workspace-avatar"
-                                style={{
-                                    background: `linear-gradient(135deg, ${slugColor(ws.slug)}, ${slugColor(ws.slug)}dd)`
-                                }}
-                                aria-hidden="true"
-                            >
-                                {ws.name[0]}
+                {d.workspaces.map(ws => {
+                    const isExpanded = expandedSlug === ws.slug
+                    return (
+                        <div key={ws.id} className="workspace-card" style={{ cursor: 'default' }}>
+                            <div className="workspace-card-header">
+                                <div
+                                    className="workspace-avatar"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${slugColor(ws.slug)}, ${slugColor(ws.slug)}dd)`
+                                    }}
+                                    aria-hidden="true"
+                                >
+                                    {ws.name[0]}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="workspace-card-name">{ws.name}</div>
+                                    <div className="workspace-card-slug">{ws.slug}</div>
+                                </div>
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="workspace-card-name">{ws.name}</div>
-                                <div className="workspace-card-slug">{ws.slug}</div>
-                            </div>
-                            {d.canManageWorkspaceSlug(ws.slug) && (
+
+                            {/* Action buttons */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
                                 <button
                                     type="button"
-                                    className="btn btn-secondary workspace-card-settings-btn"
-                                    onClick={e => {
-                                        e.stopPropagation()
+                                    className="btn btn-primary btn-compact"
+                                    onClick={() => {
                                         if (!d.requestWorkspaceSlug(ws.slug)) return
-                                        d.requestTab('workspace_settings')
+                                        d.requestTab('connection')
                                     }}
                                 >
-                                    Definições
+                                    <MessageCircle size={14} />
+                                    WhatsApp
                                 </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-compact"
+                                    onClick={e => {
+                                        e.stopPropagation()
+                                        setExpandedSlug(prev => prev === ws.slug ? null : ws.slug)
+                                    }}
+                                >
+                                    <Database size={14} />
+                                    {isExpanded ? 'Ocultar info' : 'Ver detalhes'}
+                                </button>
+                                {d.canManageWorkspaceSlug(ws.slug) && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-compact"
+                                        onClick={e => {
+                                            e.stopPropagation()
+                                            if (!d.requestWorkspaceSlug(ws.slug)) return
+                                            d.requestTab('workspace_settings')
+                                        }}
+                                    >
+                                        <Settings size={14} />
+                                        Definições
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Expanded detail view */}
+                            {isExpanded && (
+                                <div style={{
+                                    marginTop: 16,
+                                    padding: 16,
+                                    background: 'var(--surface-secondary)',
+                                    borderRadius: 'var(--radius)',
+                                    border: '1px solid var(--border-subtle)',
+                                    fontSize: 13
+                                }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                        <div className="ws-detail-row">
+                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
+                                                Workspace ID
+                                            </span>
+                                            <code className="inline-code" style={{ fontSize: 12 }}>{ws.id}</code>
+                                            <button
+                                                type="button"
+                                                className="ws-detail-copy-btn"
+                                                title="Copiar ID"
+                                                onClick={() => copyToClipboard(ws.id, `id-${ws.slug}`)}
+                                            >
+                                                {copied === `id-${ws.slug}` ? <Check size={12} /> : <Copy size={12} />}
+                                            </button>
+                                        </div>
+                                        <div className="ws-detail-row">
+                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
+                                                Schema (slug)
+                                            </span>
+                                            <code className="inline-code" style={{ fontSize: 12 }}>{ws.slug}</code>
+                                            <button
+                                                type="button"
+                                                className="ws-detail-copy-btn"
+                                                title="Copiar slug"
+                                                onClick={() => copyToClipboard(ws.slug, `slug-${ws.slug}`)}
+                                            >
+                                                {copied === `slug-${ws.slug}` ? <Check size={12} /> : <Copy size={12} />}
+                                            </button>
+                                        </div>
+                                        <div className="ws-detail-row">
+                                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
+                                                Supabase
+                                            </span>
+                                            <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                                                Tabelas em <code className="inline-code">{ws.slug}.*</code>
+                                            </span>
+                                        </div>
+                                        {d.isPlatformAdmin && (
+                                            <div className="ws-detail-row">
+                                                <span style={{ color: 'var(--text-muted)', fontWeight: 600, minWidth: 120, display: 'inline-block' }}>
+                                                    SQL rápido
+                                                </span>
+                                                <code className="inline-code" style={{ fontSize: 11 }}>
+                                                    SELECT * FROM &quot;{ws.slug}&quot;.ai_agent_config
+                                                </code>
+                                                <button
+                                                    type="button"
+                                                    className="ws-detail-copy-btn"
+                                                    title="Copiar SQL"
+                                                    onClick={() => copyToClipboard(`SELECT * FROM "${ws.slug}".ai_agent_config`, `sql-${ws.slug}`)}
+                                                >
+                                                    {copied === `sql-${ws.slug}` ? <Check size={12} /> : <Copy size={12} />}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
         </>
     )

@@ -5,6 +5,7 @@ import { useDashboard } from './dashboard-context'
 import {
     LayoutGrid,
     MessageCircle,
+    MessageSquare,
     Megaphone,
     BarChart3,
     Bot,
@@ -21,6 +22,7 @@ import { useState, useEffect } from 'react'
 const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
     { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
     { id: 'connection', label: 'WhatsApp', icon: MessageCircle },
+    { id: 'conversas', label: 'Conversas', icon: MessageSquare },
     { id: 'disparos', label: 'Disparos', icon: Megaphone },
     { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
     { id: 'config', label: 'Agente IA', icon: Bot }

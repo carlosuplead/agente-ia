@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 import { AgentConfigTab } from './AgentConfigTab'
+import { ConversasTab } from './ConversasTab'
 import { DashboardSidebar } from './DashboardSidebar'
 import { MobileNav } from './MobileNav'
 import { NewWorkspaceModal } from './NewWorkspaceModal'
@@ -64,6 +65,7 @@ export function DashboardApp() {
 
                 {d.activeTab === 'workspaces' && <WorkspacesTab />}
                 {d.activeTab === 'connection' && <WhatsAppTab />}
+                {d.activeTab === 'conversas' && <ConversasTab />}
                 {d.activeTab === 'disparos' && <DisparosTab />}
                 {d.activeTab === 'relatorios' && <RelatoriosTab />}
                 {d.activeTab === 'config' && <AgentConfigTab />}

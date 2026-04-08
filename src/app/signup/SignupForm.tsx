@@ -10,6 +10,7 @@ export function SignupForm() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [success, setSuccess] = useState(false)
     const router = useRouter()
 
     async function onSubmit(e: React.FormEvent) {
@@ -32,23 +33,34 @@ export function SignupForm() {
                 return
             }
 
-            // Login automático após signup
-            const sb = createBrowserSupabaseClient()
-            const { error: loginErr } = await sb.auth.signInWithPassword({ email, password })
-
-            if (loginErr) {
-                // Conta criada mas email pode precisar de confirmação
-                setError('Conta criada! Verifique seu email para confirmar, depois faça login.')
-                setLoading(false)
-                return
-            }
-
-            router.push('/')
-            router.refresh()
+            // Conta criada — aguarda aprovação do admin
+            setSuccess(true)
+            setLoading(false)
         } catch {
             setError('Erro de conexão. Tente novamente.')
             setLoading(false)
         }
+    }
+
+    if (success) {
+        return (
+            <div className="login-wrap">
+                <div className="login-card" style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>&#9203;</div>
+                    <h1>Conta criada!</h1>
+                    <p className="login-sub" style={{ marginBottom: 24, lineHeight: 1.6 }}>
+                        Sua conta foi registrada com sucesso.<br />
+                        Um administrador precisa aprovar seu acesso antes de você poder utilizar a plataforma.
+                    </p>
+                    <p className="login-sub">
+                        Já foi aprovado?{' '}
+                        <a href="/login" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                            Faça login
+                        </a>
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (

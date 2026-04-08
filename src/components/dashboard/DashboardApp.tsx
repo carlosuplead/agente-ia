@@ -16,6 +16,39 @@ export function DashboardApp() {
     const d = useDashboard()
     const dismissToast = useCallback(() => d.setToast(null), [d.setToast])
 
+    // Usuário sem workspaces e não é admin → aguardando aprovação
+    const pendingApproval = !d.isPlatformAdmin && d.workspaces.length === 0 && d.userEmail
+
+    if (pendingApproval) {
+        return (
+            <div className="login-wrap">
+                <div className="login-card" style={{ textAlign: 'center', maxWidth: 460 }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>&#9203;</div>
+                    <h1 style={{ marginBottom: 12 }}>Aguardando aprovação</h1>
+                    <p className="login-sub" style={{ lineHeight: 1.6, marginBottom: 24 }}>
+                        Sua conta <strong>{d.userEmail}</strong> foi criada com sucesso.<br />
+                        Um administrador precisa aprovar seu acesso e atribuir um workspace para você.
+                    </p>
+                    <p className="login-sub" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        Entre em contato com o administrador da plataforma para solicitar aprovação.
+                    </p>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ marginTop: 20 }}
+                        onClick={async () => {
+                            const { createBrowserSupabaseClient } = await import('@/lib/supabase/client')
+                            const sb = createBrowserSupabaseClient()
+                            await sb.auth.signOut()
+                            window.location.href = '/login'
+                        }}
+                    >
+                        Sair
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="app-container">
             <DashboardSidebar />

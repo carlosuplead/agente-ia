@@ -71,6 +71,52 @@ export async function GET() {
     }
 }
 
+/** POST — cria workspace e atribui a um usuário (aprovação de conta) */
+export async function POST(request: Request) {
+    try {
+        const supabase = await createClient()
+        const admin = await requirePlatformAdmin(supabase)
+        if (!admin.ok) return admin.response
+
+        const body = await request.json()
+        const { name, slug, owner_user_id } = body as {
+            name?: string
+            slug?: string
+            owner_user_id?: string
+        }
+
+        if (!name || !slug || !owner_user_id) {
+            return NextResponse.json(
+                { error: 'name, slug e owner_user_id são obrigatórios' },
+                { status: 400 }
+            )
+        }
+
+        // 1. Criar workspace
+        const { error: wsErr } = await supabase
+            .from('workspaces')
+            .insert({ name, slug })
+        if (wsErr) {
+            console.error('admin create workspace', wsErr)
+            return NextResponse.json({ error: 'Falha ao criar workspace: ' + wsErr.message }, { status: 500 })
+        }
+
+        // 2. Atribuir usuário como owner
+        const { error: memErr } = await supabase
+            .from('workspace_members')
+            .insert({ user_id: owner_user_id, workspace_slug: slug, role: 'owner' })
+        if (memErr) {
+            console.error('admin assign owner', memErr)
+            return NextResponse.json({ error: 'Workspace criado, mas falhou ao atribuir usuário' }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true, slug })
+    } catch (err) {
+        console.error('admin create workspace', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
 /** DELETE — desativa um workspace (soft delete: remove da lista, não apaga schema) */
 export async function DELETE(request: Request) {
     try {

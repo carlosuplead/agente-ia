@@ -38,38 +38,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Erro ao criar conta.' }, { status: 500 })
         }
 
-        // 2. Gerar slug a partir do nome
-        const baseSlug = name
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_|_$/g, '')
-            .slice(0, 40)
+        // NÃO cria workspace automaticamente.
+        // O admin precisa aprovar o usuário e atribuir um workspace pelo painel admin.
+        // Isso garante que ninguém acessa o sistema sem aprovação.
 
-        const slug = baseSlug || 'workspace'
-        const uniqueSlug = `${slug}_${Date.now().toString(36)}`
-
-        // 3. Criar workspace automaticamente (usa admin client com service_role)
-        const { error: wsErr } = await adminClient
-            .from('workspaces')
-            .insert({ name, slug: uniqueSlug })
-
-        if (wsErr) {
-            console.error('workspace insert error', wsErr)
-            return NextResponse.json({ error: 'Conta criada, mas falhou ao criar workspace.' }, { status: 500 })
-        }
-
-        // 4. Adicionar user como owner do workspace
-        const { error: memErr } = await adminClient
-            .from('workspace_members')
-            .insert({ user_id: userId, workspace_slug: uniqueSlug, role: 'owner' })
-
-        if (memErr) {
-            console.error('workspace_members insert error', memErr)
-        }
-
-        return NextResponse.json({ success: true, slug: uniqueSlug })
+        return NextResponse.json({ success: true, pending_approval: true })
     } catch (err) {
         console.error('signup route error', err)
         return NextResponse.json({ error: 'Erro interno.' }, { status: 500 })

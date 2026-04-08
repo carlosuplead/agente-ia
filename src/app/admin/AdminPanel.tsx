@@ -80,6 +80,31 @@ export function AdminPanel() {
         }
     }
 
+    async function handleApproveUser(userId: string, userEmail: string) {
+        const name = window.prompt(`Nome do workspace para ${userEmail}:`, userEmail.split('@')[0])
+        if (!name) return
+        const slug = name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '')
+            .slice(0, 40) + '_' + Date.now().toString(36)
+
+        const res = await fetch('/api/admin/workspaces', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, slug, owner_user_id: userId })
+        })
+        if (res.ok) {
+            await Promise.all([loadWorkspaces(), loadUsers()])
+            setError('')
+        } else {
+            const j = await res.json().catch(() => ({}))
+            setError((j as { error?: string }).error || 'Falha ao aprovar usuário')
+        }
+    }
+
     function fmtDate(iso: string) {
         return new Date(iso).toLocaleDateString('pt-BR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
@@ -192,16 +217,17 @@ export function AdminPanel() {
                                 <tr>
                                     <th>Nome</th>
                                     <th>Email</th>
-                                    <th>Admin</th>
+                                    <th>Status</th>
                                     <th>Workspaces</th>
                                     <th>Criado em</th>
                                     <th>Último login</th>
+                                    <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {users.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} style={{ color: 'var(--text-secondary)' }}>
+                                        <td colSpan={7} style={{ color: 'var(--text-secondary)' }}>
                                             Nenhum usuário encontrado.
                                         </td>
                                     </tr>
@@ -213,7 +239,11 @@ export function AdminPanel() {
                                         <td>
                                             {u.is_platform_admin ? (
                                                 <span style={{ color: '#f59e0b', fontWeight: 600 }}>Admin</span>
-                                            ) : '—'}
+                                            ) : u.workspaces.length > 0 ? (
+                                                <span style={{ color: '#4ae176', fontWeight: 600 }}>Aprovado</span>
+                                            ) : (
+                                                <span style={{ color: '#ff6b6b', fontWeight: 600 }}>Pendente</span>
+                                            )}
                                         </td>
                                         <td style={{ fontSize: 13 }}>
                                             {u.workspaces.length === 0 ? '—' : u.workspaces.map(w =>
@@ -223,6 +253,17 @@ export function AdminPanel() {
                                         <td style={{ fontSize: 13 }}>{fmtDate(u.created_at)}</td>
                                         <td style={{ fontSize: 13 }}>
                                             {u.last_sign_in_at ? fmtDate(u.last_sign_in_at) : 'Nunca'}
+                                        </td>
+                                        <td>
+                                            {!u.is_platform_admin && u.workspaces.length === 0 && (
+                                                <button
+                                                    className="btn btn-primary"
+                                                    style={{ fontSize: 12, padding: '4px 12px' }}
+                                                    onClick={() => handleApproveUser(u.id, u.email)}
+                                                >
+                                                    Aprovar
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

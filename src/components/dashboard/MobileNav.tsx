@@ -16,7 +16,8 @@ import {
     Sun,
     Moon,
     LogOut,
-    Zap
+    Zap,
+    Activity
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -26,6 +27,7 @@ const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
     { id: 'conversas', label: 'Conversas', icon: MessageSquare },
     { id: 'disparos', label: 'Disparos', icon: Megaphone },
     { id: 'relatorios', label: 'Relatorios', icon: BarChart3 },
+    { id: 'atividade', label: 'Atividade', icon: Activity },
     { id: 'config', label: 'Agente IA', icon: Bot }
 ]
 

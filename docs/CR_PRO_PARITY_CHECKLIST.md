@@ -4,12 +4,12 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 
 ## Webhook Uazapi
 
-- [ ] Variantes de payload: `EventType`, `event`, campos `message` / `chat` ausentes ou aninhados
-- [ ] `wasSentByApi`, `fromMe`, mensagens duplicadas (`whatsapp_id`)
-- [ ] Grupos ignorados; números Brasil (`normalizePhoneForBrazil`, variantes de 9 dígitos)
-- [ ] Respostas a botões/listas (`buttonOrListid`, `buttonReply`)
-- [ ] Mídia sem texto: corpo fallback “Mídia enviada” e eventual inclusão de URL/caption no contexto da IA
-- [ ] Eventos de ligação (`connection`, `status`, `phone` / `owner`)
+- [x] Variantes de payload: `EventType`, `event`, campos `message` / `chat` ausentes ou aninhados
+- [x] `wasSentByApi`, `fromMe`, mensagens duplicadas (`whatsapp_id`)
+- [x] Grupos ignorados; números Brasil (`normalizePhoneForBrazil`, variantes de 9 dígitos)
+- [x] Respostas a botões/listas (`buttonOrListid`, `buttonReply`)
+- [x] Mídia sem texto: corpo fallback “Mídia enviada” e eventual inclusão de URL/caption no contexto da IA
+- [x] Eventos de ligação (`connection`, `status`, `phone` / `owner`)
 
 ## Meta Cloud API (official)
 
@@ -44,7 +44,7 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 
 ## Operação
 
-- [ ] URL de webhook configurada na Uazapi por instância
+- [x] URL de webhook configurada na Uazapi por instância (auto-config em /instance/init + setWebhookUrl)
 - [ ] Rotação de `instance_token`
 - [ ] Filas ou workers adicionais no CR Pro (campanhas UAZAPI no CR Pro; aqui disparos Meta usam cron da fila + locks em SQL no processamento IA)
 - [ ] Rollback por workspace: `provider=official` -> `provider=uazapi` sem downtime

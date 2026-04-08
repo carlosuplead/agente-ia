@@ -76,6 +76,20 @@ export async function POST(request: Request) {
 
             await setFollowupAnchorForContact(workspace_slug, contact_id).catch(() => {})
 
+            // Quando um atendente humano envia mensagem, pausa a IA para este contato
+            // A conversa ativa muda para 'handed_off' — a IA não responde mais
+            // Para reativar: cliente envia /reset OU admin reativa manualmente
+            if (activeAiConversationId) {
+                try {
+                    await sql.unsafe(
+                        `UPDATE ${sch}.ai_conversations SET status = 'handed_off', handoff_reason = $2 WHERE id = $1::uuid AND status = 'active'`,
+                        [activeAiConversationId, 'Atendente assumiu a conversa']
+                    )
+                } catch (e) {
+                    console.error('whatsapp send handoff on human reply', e)
+                }
+            }
+
             return NextResponse.json({ success: true, messageId: savedMessage.id })
         } catch {
             await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMessage.id])

@@ -45,6 +45,9 @@ export type AiConfigRow = {
     /** API: chave não é devolvida; só indica se existe valor na BD. */
     openai_api_key_set?: boolean
     google_api_key_set?: boolean
+    anthropic_api_key_set?: boolean
+    elevenlabs_api_key_set?: boolean
+    fallback_provider?: string | null
     ai_chunk_messages_enabled?: boolean
     ai_chunk_split_mode?: string | null
     ai_chunk_max_parts?: number

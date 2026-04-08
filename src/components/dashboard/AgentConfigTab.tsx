@@ -35,7 +35,7 @@ export function AgentConfigTab() {
                 <div className="page-header-row">
                     <div>
                         <h2>Agente IA — {d.selectedWs?.name || '—'}</h2>
-                        <p>Configuração no schema {d.selectedSlug || '—'}</p>
+                        <p>Configuração do agente para o workspace {d.selectedSlug || '—'}</p>
                         {d.isConfigDirty && (
                             <p className="unsaved-hint" role="status">
                                 Alterações por guardar
@@ -64,9 +64,10 @@ export function AgentConfigTab() {
                 </p>
             ) : (
                 <>
+                    {/* ── Card 1: Provedor e Modelo ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 20 }}>
-                            Modelo
+                            Provedor e Modelo
                         </div>
                         <div className="checkbox-row">
                             <input
@@ -86,7 +87,7 @@ export function AgentConfigTab() {
                             />
                             <label htmlFor="cfg-test-mode">Modo testes (só números permitidos)</label>
                         </div>
-                        {d.cfgTestMode ? (
+                        {d.cfgTestMode && (
                             <div className="input-group" style={{ marginTop: 12 }}>
                                 <label className="input-label" htmlFor="cfg-test-allowlist">
                                     Números permitidos
@@ -94,36 +95,19 @@ export function AgentConfigTab() {
                                 <textarea
                                     id="cfg-test-allowlist"
                                     className="input"
-                                    rows={4}
+                                    rows={3}
                                     value={d.cfgTestAllowlist}
                                     onChange={e => d.setCfgTestAllowlist(e.target.value)}
-                                    placeholder="Um número por linha, ou separados por vírgula (ex. +5511999999999 ou 11999999999)"
+                                    placeholder="Um número por linha ou separados por vírgula (ex. +5511999999999)"
                                     aria-invalid={!!err.cfgTestAllowlist}
-                                    aria-describedby={
-                                        err.cfgTestAllowlist ? 'err-cfg-test-allowlist' : undefined
-                                    }
+                                    aria-describedby={err.cfgTestAllowlist ? 'err-cfg-test-allowlist' : undefined}
                                 />
-                                <FieldError
-                                    id="err-cfg-test-allowlist"
-                                    message={err.cfgTestAllowlist}
-                                />
-                                <p
-                                    style={{
-                                        color: 'var(--text-secondary)',
-                                        fontSize: 13,
-                                        marginTop: 8
-                                    }}
-                                >
-                                    Com modo testes ligado, só estes números têm mensagens recebidas gravadas e
-                                    respostas da IA. Os restantes são ignorados pelo webhook (HTTP 200).
-                                </p>
+                                <FieldError id="err-cfg-test-allowlist" message={err.cfgTestAllowlist} />
                             </div>
-                        ) : null}
-                        <div className="two-cols">
+                        )}
+                        <div className="two-cols" style={{ marginTop: 16 }}>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-provider">
-                                    Provedor
-                                </label>
+                                <label className="input-label" htmlFor="cfg-provider">Provedor</label>
                                 <select
                                     id="cfg-provider"
                                     className="input select"
@@ -137,12 +121,11 @@ export function AgentConfigTab() {
                                 >
                                     <option value="gemini">Google Gemini</option>
                                     <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic (Claude)</option>
                                 </select>
                             </div>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-model-preset">
-                                    Modelo
-                                </label>
+                                <label className="input-label" htmlFor="cfg-model-preset">Modelo</label>
                                 <select
                                     id="cfg-model-preset"
                                     className="input select"
@@ -155,9 +138,7 @@ export function AgentConfigTab() {
                                     aria-describedby={err.cfgModel ? 'err-cfg-model' : undefined}
                                 >
                                     {presets.map(m => (
-                                        <option key={m} value={m}>
-                                            {m}
-                                        </option>
+                                        <option key={m} value={m}>{m}</option>
                                     ))}
                                     <option value={MODEL_CUSTOM}>Outro (personalizado)</option>
                                 </select>
@@ -177,9 +158,7 @@ export function AgentConfigTab() {
                         </div>
                         <div className="two-cols">
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-temp">
-                                    Temperatura
-                                </label>
+                                <label className="input-label" htmlFor="cfg-temp">Temperatura</label>
                                 <div className="slider-container">
                                     <input
                                         id="cfg-temp"
@@ -191,15 +170,11 @@ export function AgentConfigTab() {
                                         value={d.cfgTemp}
                                         onChange={e => d.setCfgTemp(Number(e.target.value))}
                                     />
-                                    <span className="slider-value" aria-live="polite">
-                                        {d.cfgTemp}
-                                    </span>
+                                    <span className="slider-value" aria-live="polite">{d.cfgTemp}</span>
                                 </div>
                             </div>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-max-msg">
-                                    Máx. mensagens / conversa (antes de handoff)
-                                </label>
+                                <label className="input-label" htmlFor="cfg-max-msg">Máx. mensagens / conversa</label>
                                 <input
                                     id="cfg-max-msg"
                                     type="number"
@@ -213,24 +188,39 @@ export function AgentConfigTab() {
                                 <FieldError id="err-cfg-max" message={err.cfgMax} />
                             </div>
                         </div>
-                        <p
-                            style={{
-                                color: 'var(--text-secondary)',
-                                fontSize: 13,
-                                marginTop: 16,
-                                marginBottom: 8
-                            }}
-                        >
-                            Chaves de API por workspace (opcional). Se vazias, usam-se{' '}
-                            <code className="inline-code">OPENAI_API_KEY</code> e{' '}
-                            <code className="inline-code">GOOGLE_API_KEY</code> do servidor. As chaves
-                            guardadas não são mostradas de novo; só indicador &quot;configurada&quot;.
-                        </p>
                         <div className="two-cols" style={{ marginTop: 8 }}>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-openai-key">
-                                    OpenAI API key
-                                </label>
+                                <label className="input-label" htmlFor="cfg-fallback">Provedor de fallback</label>
+                                <select
+                                    id="cfg-fallback"
+                                    className="input select"
+                                    value={d.cfgFallbackProvider ?? ''}
+                                    onChange={e => d.setCfgFallbackProvider(e.target.value || null)}
+                                >
+                                    <option value="">Sem fallback</option>
+                                    {d.cfgProvider !== 'gemini' && <option value="gemini">Google Gemini</option>}
+                                    {d.cfgProvider !== 'openai' && <option value="openai">OpenAI</option>}
+                                    {d.cfgProvider !== 'anthropic' && <option value="anthropic">Anthropic (Claude)</option>}
+                                </select>
+                                <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    Se o provedor principal falhar, tenta automaticamente com este.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Card 2: Chaves de API ── */}
+                    <div className="card">
+                        <div className="card-title" style={{ marginBottom: 16 }}>
+                            Chaves de API
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
+                            Chaves por workspace (opcional). Se vazias, usa as variáveis globais do servidor.
+                            As chaves guardadas não são exibidas — só o indicador &quot;configurada&quot;.
+                        </p>
+                        <div className="two-cols">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-openai-key">OpenAI API key</label>
                                 <input
                                     id="cfg-openai-key"
                                     type="password"
@@ -241,11 +231,7 @@ export function AgentConfigTab() {
                                         d.setCfgOpenaiKeyInput(e.target.value)
                                         if (e.target.value.trim()) d.setCfgClearOpenaiKey(false)
                                     }}
-                                    placeholder={
-                                        d.aiConfig?.openai_api_key_set
-                                            ? 'Nova chave (deixa vazio para manter a atual)'
-                                            : 'sk-…'
-                                    }
+                                    placeholder={d.aiConfig?.openai_api_key_set ? 'Nova chave (vazio = manter)' : 'sk-…'}
                                 />
                                 <div className="checkbox-row" style={{ marginTop: 8 }}>
                                     <input
@@ -257,25 +243,14 @@ export function AgentConfigTab() {
                                             if (e.target.checked) d.setCfgOpenaiKeyInput('')
                                         }}
                                     />
-                                    <label htmlFor="cfg-clear-openai">
-                                        Remover chave do workspace (passar a usar só o .env)
-                                    </label>
+                                    <label htmlFor="cfg-clear-openai">Remover chave</label>
                                 </div>
                                 {d.aiConfig?.openai_api_key_set && !d.cfgClearOpenaiKey && (
-                                    <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Chave do workspace ativa.
-                                    </p>
-                                )}
-                                {d.cfgClearOpenaiKey && (
-                                    <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Será removida ao guardar.
-                                    </p>
+                                    <p style={{ marginTop: 4, fontSize: 12, color: 'var(--green)' }}>Configurada</p>
                                 )}
                             </div>
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-google-key">
-                                    Google AI (Gemini) API key
-                                </label>
+                                <label className="input-label" htmlFor="cfg-google-key">Google AI (Gemini) API key</label>
                                 <input
                                     id="cfg-google-key"
                                     type="password"
@@ -286,11 +261,7 @@ export function AgentConfigTab() {
                                         d.setCfgGoogleKeyInput(e.target.value)
                                         if (e.target.value.trim()) d.setCfgClearGoogleKey(false)
                                     }}
-                                    placeholder={
-                                        d.aiConfig?.google_api_key_set
-                                            ? 'Nova chave (deixa vazio para manter a atual)'
-                                            : 'AIza…'
-                                    }
+                                    placeholder={d.aiConfig?.google_api_key_set ? 'Nova chave (vazio = manter)' : 'AIza…'}
                                 />
                                 <div className="checkbox-row" style={{ marginTop: 8 }}>
                                     <input
@@ -302,32 +273,110 @@ export function AgentConfigTab() {
                                             if (e.target.checked) d.setCfgGoogleKeyInput('')
                                         }}
                                     />
-                                    <label htmlFor="cfg-clear-google">
-                                        Remover chave do workspace (passar a usar só o .env)
-                                    </label>
+                                    <label htmlFor="cfg-clear-google">Remover chave</label>
                                 </div>
                                 {d.aiConfig?.google_api_key_set && !d.cfgClearGoogleKey && (
-                                    <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Chave do workspace ativa.
-                                    </p>
+                                    <p style={{ marginTop: 4, fontSize: 12, color: 'var(--green)' }}>Configurada</p>
                                 )}
-                                {d.cfgClearGoogleKey && (
-                                    <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Será removida ao guardar.
-                                    </p>
+                            </div>
+                        </div>
+                        <div className="two-cols" style={{ marginTop: 12 }}>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-anthropic-key">Anthropic (Claude) API key</label>
+                                <input
+                                    id="cfg-anthropic-key"
+                                    type="password"
+                                    className="input"
+                                    autoComplete="off"
+                                    value={d.cfgAnthropicKeyInput ?? ''}
+                                    onChange={e => {
+                                        d.setCfgAnthropicKeyInput(e.target.value)
+                                        if (e.target.value.trim()) d.setCfgClearAnthropicKey(false)
+                                    }}
+                                    placeholder={d.aiConfig?.anthropic_api_key_set ? 'Nova chave (vazio = manter)' : 'sk-ant-…'}
+                                />
+                                <div className="checkbox-row" style={{ marginTop: 8 }}>
+                                    <input
+                                        id="cfg-clear-anthropic"
+                                        type="checkbox"
+                                        checked={d.cfgClearAnthropicKey ?? false}
+                                        onChange={e => {
+                                            d.setCfgClearAnthropicKey(e.target.checked)
+                                            if (e.target.checked) d.setCfgAnthropicKeyInput('')
+                                        }}
+                                    />
+                                    <label htmlFor="cfg-clear-anthropic">Remover chave</label>
+                                </div>
+                                {d.aiConfig?.anthropic_api_key_set && !d.cfgClearAnthropicKey && (
+                                    <p style={{ marginTop: 4, fontSize: 12, color: 'var(--green)' }}>Configurada</p>
                                 )}
                             </div>
                         </div>
                     </div>
 
+                    {/* ── Card 3: Prompt do Sistema ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
-                            Contexto enviado ao modelo
+                            Prompt do Sistema
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
-                            Quantas mensagens recentes entram no histórico e como aparecem no transcript (como no CR Pro:
-                            cliente vs equipe vs IA).
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                            Instruções completas para o agente: personalidade, regras, tom, formatação, tudo aqui.
                         </p>
+                        <label className="sr-only" htmlFor="cfg-prompt">Prompt do sistema</label>
+                        <textarea
+                            id="cfg-prompt"
+                            className="input textarea"
+                            rows={12}
+                            value={d.cfgPrompt}
+                            onChange={e => d.setCfgPrompt(e.target.value)}
+                            placeholder="Defina a personalidade, regras, estilo de resposta e qualquer instrução para o agente..."
+                        />
+                    </div>
+
+                    {/* ── Card 4: Comportamento ── */}
+                    <div className="card">
+                        <div className="card-title" style={{ marginBottom: 16 }}>
+                            Comportamento
+                        </div>
+                        <div className="two-cols">
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-buffer">
+                                    Atraso antes de responder (seg)
+                                </label>
+                                <input
+                                    id="cfg-buffer"
+                                    type="number"
+                                    className="input"
+                                    min={5}
+                                    max={120}
+                                    value={d.cfgBufferDelay}
+                                    onChange={e => d.setCfgBufferDelay(Number(e.target.value))}
+                                    aria-invalid={!!err.cfgBufferDelay}
+                                    aria-describedby={err.cfgBufferDelay ? 'err-buffer' : undefined}
+                                />
+                                <FieldError id="err-buffer" message={err.cfgBufferDelay} />
+                                <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                                    Aguarda mensagens adicionais antes de processar (debounce).
+                                </p>
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-inactivity">
+                                    Inatividade para nova sessão (horas)
+                                </label>
+                                <input
+                                    id="cfg-inactivity"
+                                    type="number"
+                                    className="input"
+                                    min={1}
+                                    max={720}
+                                    value={d.cfgInactivity}
+                                    onChange={e => d.setCfgInactivity(Number(e.target.value))}
+                                    aria-invalid={!!err.cfgInactivity}
+                                    aria-describedby={err.cfgInactivity ? 'err-inactivity' : undefined}
+                                />
+                                <FieldError id="err-inactivity" message={err.cfgInactivity} />
+                            </div>
+                        </div>
                         <div className="two-cols">
                             <div className="input-group">
                                 <label className="input-label" htmlFor="cfg-ctx-max">
@@ -346,43 +395,9 @@ export function AgentConfigTab() {
                                 />
                                 <FieldError id="err-cfg-ctx" message={err.cfgContextMax} />
                             </div>
-                        </div>
-                        <div className="two-cols" style={{ marginTop: 12 }}>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-label-team">
-                                    Rótulo mensagens da equipe (sender interno)
-                                </label>
-                                <input
-                                    id="cfg-label-team"
-                                    className="input"
-                                    value={d.cfgLabelTeam}
-                                    onChange={e => d.setCfgLabelTeam(e.target.value)}
-                                    placeholder="Equipe"
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-label-asst">
-                                    Rótulo respostas da IA
-                                </label>
-                                <input
-                                    id="cfg-label-asst"
-                                    className="input"
-                                    value={d.cfgLabelAssistant}
-                                    onChange={e => d.setCfgLabelAssistant(e.target.value)}
-                                    placeholder="Assistente"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Envio WhatsApp (Uazapi)
-                        </div>
-                        <div className="two-cols">
                             <div className="input-group">
                                 <label className="input-label" htmlFor="cfg-send-delay">
-                                    Atraso antes de enviar (ms)
+                                    Atraso de envio (ms)
                                 </label>
                                 <input
                                     id="cfg-send-delay"
@@ -397,57 +412,71 @@ export function AgentConfigTab() {
                                 />
                                 <FieldError id="err-send-delay" message={err.cfgSendDelay} />
                             </div>
+                        </div>
+                        <div className="two-cols">
                             <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-presence">
-                                    Presença
-                                </label>
+                                <label className="input-label" htmlFor="cfg-presence">Presença (digitando)</label>
                                 <select
                                     id="cfg-presence"
                                     className="input select"
                                     value={d.cfgSendPresence}
                                     onChange={e => d.setCfgSendPresence(e.target.value)}
                                 >
-                                    <option value="composing">Digitando (composing)</option>
+                                    <option value="composing">Digitando</option>
                                     <option value="recording">Gravando áudio</option>
                                     <option value="paused">Pausado</option>
                                     <option value="none">Nenhum</option>
                                 </select>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 12 }}>
-                            Várias bolhas: divide a resposta do modelo em várias mensagens WhatsApp. O atraso acima
-                            aplica-se também entre cada bolha. Com &quot;Parágrafos&quot;, o modelo deve separar blocos
-                            com uma linha em branco.
-                        </p>
-                        <div className="checkbox-row" style={{ marginTop: 12 }}>
+                        <div className="two-cols" style={{ marginTop: 12 }}>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-label-team">Rótulo equipe</label>
+                                <input
+                                    id="cfg-label-team"
+                                    className="input"
+                                    value={d.cfgLabelTeam}
+                                    onChange={e => d.setCfgLabelTeam(e.target.value)}
+                                    placeholder="Equipe"
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label" htmlFor="cfg-label-asst">Rótulo IA</label>
+                                <input
+                                    id="cfg-label-asst"
+                                    className="input"
+                                    value={d.cfgLabelAssistant}
+                                    onChange={e => d.setCfgLabelAssistant(e.target.value)}
+                                    placeholder="Assistente"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="checkbox-row" style={{ marginTop: 16 }}>
                             <input
                                 id="cfg-chunk-messages"
                                 type="checkbox"
                                 checked={d.cfgChunkMessages}
                                 onChange={e => d.setCfgChunkMessages(e.target.checked)}
                             />
-                            <label htmlFor="cfg-chunk-messages">Enviar resposta em várias mensagens</label>
+                            <label htmlFor="cfg-chunk-messages">Dividir resposta em várias mensagens</label>
                         </div>
                         {d.cfgChunkMessages && (
-                            <div className="two-cols" style={{ marginTop: 12 }}>
+                            <div className="two-cols" style={{ marginTop: 8 }}>
                                 <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-chunk-mode">
-                                        Como dividir
-                                    </label>
+                                    <label className="input-label" htmlFor="cfg-chunk-mode">Modo de divisão</label>
                                     <select
                                         id="cfg-chunk-mode"
                                         className="input select"
                                         value={d.cfgChunkSplitMode}
                                         onChange={e => d.setCfgChunkSplitMode(e.target.value)}
                                     >
-                                        <option value="paragraph">Parágrafos (linha em branco)</option>
-                                        <option value="lines">Cada linha = uma mensagem</option>
+                                        <option value="paragraph">Parágrafos</option>
+                                        <option value="lines">Cada linha</option>
                                     </select>
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-chunk-max">
-                                        Máx. mensagens por turno
-                                    </label>
+                                    <label className="input-label" htmlFor="cfg-chunk-max">Máx. partes</label>
                                     <input
                                         id="cfg-chunk-max"
                                         type="number"
@@ -465,65 +494,12 @@ export function AgentConfigTab() {
                         )}
                     </div>
 
+                    {/* ── Card 5: Follow-up Automático ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
-                            Buffer e sessão (como no CR Pro)
+                            Follow-up Automático
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
-                            O atraso do buffer é aplicado antes de o modelo responder (debounce após mensagens no webhook).
-                            Inatividade reinicia a conversa IA no Postgres (estado <code className="inline-code">expired</code>{' '}
-                            + nova sessão).
-                        </p>
-                        <div className="two-cols">
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-buffer">
-                                    Atraso do buffer (seg)
-                                </label>
-                                <input
-                                    id="cfg-buffer"
-                                    type="number"
-                                    className="input"
-                                    min={5}
-                                    max={120}
-                                    value={d.cfgBufferDelay}
-                                    onChange={e => d.setCfgBufferDelay(Number(e.target.value))}
-                                    aria-invalid={!!err.cfgBufferDelay}
-                                    aria-describedby={err.cfgBufferDelay ? 'err-buffer' : undefined}
-                                />
-                                <FieldError id="err-buffer" message={err.cfgBufferDelay} />
-                            </div>
-                            <div className="input-group">
-                                <label className="input-label" htmlFor="cfg-inactivity">
-                                    Inatividade (horas)
-                                </label>
-                                <input
-                                    id="cfg-inactivity"
-                                    type="number"
-                                    className="input"
-                                    min={1}
-                                    max={720}
-                                    value={d.cfgInactivity}
-                                    onChange={e => d.setCfgInactivity(Number(e.target.value))}
-                                    aria-invalid={!!err.cfgInactivity}
-                                    aria-describedby={err.cfgInactivity ? 'err-inactivity' : undefined}
-                                />
-                                <FieldError id="err-inactivity" message={err.cfgInactivity} />
-                            </div>
-                        </div>
-                        <div className="input-group" style={{ marginTop: 12 }}>
-                            <label className="input-label" htmlFor="cfg-greeting">
-                                Mensagem de saudação (primeira mensagem do contacto)
-                            </label>
-                            <textarea
-                                id="cfg-greeting"
-                                className="input textarea"
-                                rows={3}
-                                value={d.cfgGreeting}
-                                onChange={e => d.setCfgGreeting(e.target.value)}
-                                placeholder="Opcional. Enviada automaticamente na primeira mensagem do cliente."
-                            />
-                        </div>
-                        <div className="checkbox-row" style={{ marginTop: 12 }}>
+                        <div className="checkbox-row">
                             <input
                                 id="cfg-followup"
                                 type="checkbox"
@@ -536,24 +512,13 @@ export function AgentConfigTab() {
                                     }
                                 }}
                             />
-                            <label htmlFor="cfg-followup">Follow-up automático (vários passos após silêncio do cliente)</label>
+                            <label htmlFor="cfg-followup">Enviar follow-up após silêncio do cliente</label>
                         </div>
                         <FieldError id="err-followup" message={err.followupSteps} />
                         {d.cfgFollowup && (
                             <>
-                                <p
-                                    style={{
-                                        color: 'var(--text-secondary)',
-                                        fontSize: 13,
-                                        marginTop: 10,
-                                        marginBottom: 12
-                                    }}
-                                >
-                                    Cada passo é enviado quando passou o tempo indicado desde a <strong>última mensagem nossa</strong>{' '}
-                                    (IA, equipe ou WhatsApp) sem resposta do contacto. Os tempos são cumulativos a partir dessa
-                                    âncora (ex.: 15 min, depois 2 h, depois 24 h). Agenda um pedido periódico para{' '}
-                                    <code className="inline-code">/api/ai/followup-cron</code> com{' '}
-                                    <code className="inline-code">Authorization: Bearer INTERNAL_AI_SECRET</code>.
+                                <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 10, marginBottom: 12 }}>
+                                    Cada passo é enviado quando passa o tempo indicado desde a última mensagem sem resposta do contacto.
                                 </p>
                                 {d.cfgFollowupSteps.map((row, idx) => (
                                     <div key={row.id} className="subcard">
@@ -580,13 +545,7 @@ export function AgentConfigTab() {
                                                         d.setCfgFollowupSteps(prev =>
                                                             prev.map(r =>
                                                                 r.id === row.id
-                                                                    ? {
-                                                                          ...r,
-                                                                          amount: Math.max(
-                                                                              1,
-                                                                              Number(e.target.value) || 1
-                                                                          )
-                                                                      }
+                                                                    ? { ...r, amount: Math.max(1, Number(e.target.value) || 1) }
                                                                     : r
                                                             )
                                                         )
@@ -602,13 +561,7 @@ export function AgentConfigTab() {
                                                         d.setCfgFollowupSteps(prev =>
                                                             prev.map(r =>
                                                                 r.id === row.id
-                                                                    ? {
-                                                                          ...r,
-                                                                          unit: e.target.value as
-                                                                              | 'minutes'
-                                                                              | 'hours'
-                                                                              | 'days'
-                                                                      }
+                                                                    ? { ...r, unit: e.target.value as 'minutes' | 'hours' | 'days' }
                                                                     : r
                                                             )
                                                         )
@@ -621,7 +574,7 @@ export function AgentConfigTab() {
                                             </div>
                                         </div>
                                         <div className="input-group">
-                                            <label className="input-label">Mensagem (WhatsApp)</label>
+                                            <label className="input-label">Mensagem</label>
                                             <textarea
                                                 className="input textarea"
                                                 rows={3}
@@ -650,53 +603,35 @@ export function AgentConfigTab() {
                         )}
                     </div>
 
+                    {/* ── Card 6: Google Agenda ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
                             Google Agenda
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Liga uma conta Google para o agente consultar disponibilidade (
-                            <code className="inline-code">google_calendar_suggest_slots</code>) e criar eventos (
-                            <code className="inline-code">google_calendar_create_event</code>) após o cliente
-                            confirmar. Requer variáveis OAuth no servidor (ver <code className="inline-code">.env.example</code>
-                            ).
+                            Permite ao agente consultar disponibilidade e criar eventos na agenda do Google.
                         </p>
                         {d.googleCalendar === null ? (
                             <p className="config-loading" role="status" style={{ fontSize: 13 }}>
-                                <span className="config-loading-spinner" aria-hidden="true" />A carregar estado da
-                                agenda…
+                                <span className="config-loading-spinner" aria-hidden="true" />A carregar…
                             </p>
                         ) : (
                             <>
                                 {!d.googleCalendar.oauth_configured && (
                                     <p className="field-error" role="status">
-                                        OAuth Google não configurado: define{' '}
+                                        OAuth não configurado no servidor. Defina{' '}
                                         <code className="inline-code">GOOGLE_CALENDAR_CLIENT_ID</code> e{' '}
-                                        <code className="inline-code">GOOGLE_CALENDAR_CLIENT_SECRET</code> no .env.
+                                        <code className="inline-code">GOOGLE_CALENDAR_CLIENT_SECRET</code>.
                                     </p>
                                 )}
                                 {d.googleCalendar.connected ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                flexWrap: 'wrap',
-                                                gap: 12,
-                                                alignItems: 'center'
-                                            }}
-                                        >
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                                             <p style={{ margin: 0, fontSize: 14 }}>
-                                                Ligado como{' '}
-                                                <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
-                                                {d.googleCalendar.default_timezone ? (
-                                                    <>
-                                                        {' '}
-                                                        · fuso{' '}
-                                                        <code className="inline-code">
-                                                            {d.googleCalendar.default_timezone}
-                                                        </code>
-                                                    </>
-                                                ) : null}
+                                                Ligado como <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
+                                                {d.googleCalendar.default_timezone && (
+                                                    <> · fuso <code className="inline-code">{d.googleCalendar.default_timezone}</code></>
+                                                )}
                                             </p>
                                             {d.canGoogleCalendarConnect && (
                                                 <button
@@ -710,37 +645,19 @@ export function AgentConfigTab() {
                                             )}
                                         </div>
                                         <div className="input-group" style={{ maxWidth: 420 }}>
-                                            <label className="input-label" htmlFor="google-agent-calendar">
-                                                Agenda usada pelo agente
-                                            </label>
-                                            <p
-                                                style={{
-                                                    fontSize: 12,
-                                                    color: 'var(--text-secondary)',
-                                                    margin: '0 0 8px'
-                                                }}
-                                            >
-                                                Disponibilidade e novos eventos usam esta agenda (só calendários com
-                                                permissão de edição).
-                                            </p>
+                                            <label className="input-label" htmlFor="google-agent-calendar">Agenda do agente</label>
                                             {d.googleCalendarCalendarsLoading ? (
                                                 <p className="config-loading" role="status" style={{ fontSize: 13 }}>
-                                                    <span className="config-loading-spinner" aria-hidden="true" />A
-                                                    carregar agendas…
+                                                    <span className="config-loading-spinner" aria-hidden="true" />
+                                                    A carregar agendas…
                                                 </p>
                                             ) : d.googleCalendarCalendarsError ? (
-                                                <p className="field-error" role="alert">
-                                                    {d.googleCalendarCalendarsError}
-                                                </p>
+                                                <p className="field-error" role="alert">{d.googleCalendarCalendarsError}</p>
                                             ) : (
                                                 <select
                                                     id="google-agent-calendar"
                                                     className="input"
-                                                    disabled={
-                                                        d.busy ||
-                                                        !d.canGoogleCalendarConnect ||
-                                                        d.googleCalendarCalendarsLoading
-                                                    }
+                                                    disabled={d.busy || !d.canGoogleCalendarConnect || d.googleCalendarCalendarsLoading}
                                                     value={d.googleCalendar?.calendar_id || 'primary'}
                                                     onChange={e => {
                                                         const v = e.target.value
@@ -753,49 +670,25 @@ export function AgentConfigTab() {
                                                     {(d.googleCalendarCalendars || []).map(c => {
                                                         if (c.id === 'primary') return null
                                                         const label = c.primary ? `${c.summary} (principal)` : c.summary
-                                                        return (
-                                                            <option key={c.id} value={c.id}>
-                                                                {label}
-                                                            </option>
-                                                        )
+                                                        return <option key={c.id} value={c.id}>{label}</option>
                                                     })}
                                                 </select>
                                             )}
-                                            {d.googleCalendar?.calendar_id &&
-                                                d.googleCalendarCalendars &&
-                                                !d.googleCalendarCalendars.some(
-                                                    x => x.id === d.googleCalendar?.calendar_id
-                                                ) &&
-                                                d.googleCalendar?.calendar_id !== 'primary' && (
-                                                    <p className="field-error" role="status" style={{ marginTop: 8 }}>
-                                                        A agenda guardada (
-                                                        <code className="inline-code">{d.googleCalendar?.calendar_id}</code>)
-                                                        não aparece na lista — pode ter sido removida ou revogada.
-                                                        Escolhe outra.
-                                                    </p>
-                                                )}
                                         </div>
                                     </div>
                                 ) : (
-                                    <div
-                                        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}
-                                    >
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                                         <button
                                             type="button"
                                             className="btn btn-primary"
-                                            disabled={
-                                                d.busy ||
-                                                !d.selectedSlug ||
-                                                !d.canGoogleCalendarConnect ||
-                                                !d.googleCalendar.oauth_configured
-                                            }
+                                            disabled={d.busy || !d.selectedSlug || !d.canGoogleCalendarConnect || !d.googleCalendar.oauth_configured}
                                             onClick={d.startGoogleCalendarOAuth}
                                         >
-                                            Ligar Google Agenda
+                                            Conectar Google Agenda
                                         </button>
                                         {!d.canGoogleCalendarConnect && (
                                             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                                Só owner ou admin do workspace pode ligar.
+                                                Só owner ou admin pode conectar.
                                             </span>
                                         )}
                                     </div>
@@ -804,78 +697,13 @@ export function AgentConfigTab() {
                         )}
                     </div>
 
+                    {/* ── Card 7: Notificações à Equipa ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
-                            Voz ElevenLabs (WhatsApp)
+                            Notificações à Equipa
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Expõe a ferramenta <code className="inline-code">send_voice_message</code> ao modelo. Requer{' '}
-                            <code className="inline-code">ELEVENLABS_API_KEY</code> no servidor (.env). Opcional: voz por defeito
-                            em <code className="inline-code">ELEVENLABS_DEFAULT_VOICE_ID</code>.
-                        </p>
-                        <div className="checkbox-row" style={{ marginBottom: 16 }}>
-                            <input
-                                id="cfg-eleven"
-                                type="checkbox"
-                                checked={d.cfgElevenVoice}
-                                onChange={e => d.setCfgElevenVoice(e.target.checked)}
-                            />
-                            <label htmlFor="cfg-eleven">Ativar envio de áudio pela IA</label>
-                        </div>
-                        {d.cfgElevenVoice && (
-                            <>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-eleven-voice">
-                                        Voice ID (ElevenLabs)
-                                    </label>
-                                    <input
-                                        id="cfg-eleven-voice"
-                                        type="text"
-                                        className="input"
-                                        value={d.cfgElevenVoiceId}
-                                        onChange={e => d.setCfgElevenVoiceId(e.target.value)}
-                                        placeholder="ex.: do dashboard ElevenLabs (ou usa só a env)"
-                                    />
-                                </div>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-eleven-model">
-                                        Model ID (opcional)
-                                    </label>
-                                    <input
-                                        id="cfg-eleven-model"
-                                        type="text"
-                                        className="input"
-                                        value={d.cfgElevenModelId}
-                                        onChange={e => d.setCfgElevenModelId(e.target.value)}
-                                        placeholder="ex.: eleven_multilingual_v2"
-                                    />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-eleven-desc">
-                                        Descrição da tool para a IA (opcional)
-                                    </label>
-                                    <textarea
-                                        id="cfg-eleven-desc"
-                                        className="input textarea"
-                                        rows={3}
-                                        value={d.cfgElevenVoiceDesc}
-                                        onChange={e => d.setCfgElevenVoiceDesc(e.target.value)}
-                                        placeholder="Quando usar áudio em vez de texto…"
-                                    />
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Notificações à equipa (WhatsApp)
-                        </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Expõe a ferramenta <code className="inline-code">notify_team_whatsapp</code> ao modelo. Quando a
-                            IA a chamar, o número da instância envia um texto aos destinatários autorizados (resumo + opcional
-                            excerto da conversa). Na API oficial da Meta, o destinatário pode precisar de janela de conversa
-                            ou template; com UAZAPI aplica-se o comportamento habitual do cliente.
+                            O agente pode enviar alertas por WhatsApp para a equipa quando necessário.
                         </p>
                         <div className="checkbox-row" style={{ marginBottom: 16 }}>
                             <input
@@ -884,30 +712,23 @@ export function AgentConfigTab() {
                                 checked={d.cfgTeamNotify}
                                 onChange={e => d.setCfgTeamNotify(e.target.checked)}
                             />
-                            <label htmlFor="cfg-team-notify">Ativar notificações internas por WhatsApp</label>
+                            <label htmlFor="cfg-team-notify">Ativar notificações</label>
                         </div>
                         {d.cfgTeamNotify && (
                             <>
                                 <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-team-notify-allow">
-                                        Números autorizados (destinatários)
-                                    </label>
+                                    <label className="input-label" htmlFor="cfg-team-notify-allow">Números da equipa</label>
                                     <textarea
                                         id="cfg-team-notify-allow"
                                         className="input"
-                                        rows={4}
+                                        rows={3}
                                         value={d.cfgTeamNotifyAllowlist}
                                         onChange={e => d.setCfgTeamNotifyAllowlist(e.target.value)}
-                                        placeholder="Um número por linha ou separados por vírgula (ex. +5511999999999)"
+                                        placeholder="Um número por linha (ex. +5511999999999)"
                                         aria-invalid={!!err.cfgTeamNotifyAllowlist}
-                                        aria-describedby={
-                                            err.cfgTeamNotifyAllowlist ? 'err-cfg-team-notify-allow' : undefined
-                                        }
+                                        aria-describedby={err.cfgTeamNotifyAllowlist ? 'err-cfg-team-notify-allow' : undefined}
                                     />
-                                    <FieldError
-                                        id="err-cfg-team-notify-allow"
-                                        message={err.cfgTeamNotifyAllowlist}
-                                    />
+                                    <FieldError id="err-cfg-team-notify-allow" message={err.cfgTeamNotifyAllowlist} />
                                 </div>
                                 <div className="checkbox-row" style={{ marginBottom: 12 }}>
                                     <input
@@ -916,37 +737,30 @@ export function AgentConfigTab() {
                                         checked={d.cfgTeamNotifyAppendTranscript}
                                         onChange={e => d.setCfgTeamNotifyAppendTranscript(e.target.checked)}
                                     />
-                                    <label htmlFor="cfg-team-notify-transcript">
-                                        Incluir excerto recente do transcript na mensagem
-                                    </label>
+                                    <label htmlFor="cfg-team-notify-transcript">Incluir trecho da conversa na notificação</label>
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-team-notify-desc">
-                                        Descrição da tool para a IA (opcional)
-                                    </label>
+                                    <label className="input-label" htmlFor="cfg-team-notify-desc">Quando notificar (instrução para a IA)</label>
                                     <textarea
                                         id="cfg-team-notify-desc"
-                                        className="input textarea"
-                                        rows={3}
+                                        className="input"
+                                        rows={2}
                                         value={d.cfgTeamNotifyDesc}
                                         onChange={e => d.setCfgTeamNotifyDesc(e.target.value)}
-                                        placeholder="Quando chamar notify_team_whatsapp (ex.: após agendar)…"
+                                        placeholder="Ex.: notificar quando o cliente pedir para falar com humano..."
                                     />
                                 </div>
                             </>
                         )}
                     </div>
 
+                    {/* ── Card 9: Integração N8N ── */}
                     <div className="card">
                         <div className="card-title" style={{ marginBottom: 16 }}>
-                            Integração N8N
+                            Webhooks N8N
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Expõe uma ou mais ferramentas ao modelo (nome técnico único por workflow, ex.{' '}
-                            <code className="inline-code">n8n_agendar</code> ou <code className="inline-code">call_n8n_webhook</code>{' '}
-                            para compatibilidade com o CR Pro). O body inclui <code className="inline-code">workspace_slug</code>,{' '}
-                            <code className="inline-code">organization_id</code> e <code className="inline-code">n8n_tool</code>{' '}
-                            (nome da função chamada).
+                            Conecte workflows N8N que o agente pode acionar como ferramentas.
                         </p>
                         <FieldError id="err-n8n" message={err.n8nTools} />
                         <div className="checkbox-row" style={{ marginBottom: 16 }}>
@@ -978,23 +792,40 @@ export function AgentConfigTab() {
                                                 Remover
                                             </button>
                                         </div>
-                                        <div className="input-group" style={{ marginBottom: 12 }}>
-                                            <label className="input-label">
-                                                Nome / slug (vira função no modelo; vazio = nome automático)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input"
-                                                value={row.slug}
-                                                onChange={e =>
-                                                    d.setCfgN8nTools(prev =>
-                                                        prev.map(r =>
-                                                            r.id === row.id ? { ...r, slug: e.target.value } : r
+                                        <div className="two-cols" style={{ marginBottom: 12 }}>
+                                            <div className="input-group">
+                                                <label className="input-label">Nome da ferramenta</label>
+                                                <input
+                                                    type="text"
+                                                    className="input"
+                                                    value={row.slug}
+                                                    onChange={e =>
+                                                        d.setCfgN8nTools(prev =>
+                                                            prev.map(r =>
+                                                                r.id === row.id ? { ...r, slug: e.target.value } : r
+                                                            )
                                                         )
-                                                    )
-                                                }
-                                                placeholder="ex.: agendar ou call_n8n_webhook"
-                                            />
+                                                    }
+                                                    placeholder="ex.: agendar"
+                                                />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Timeout (seg)</label>
+                                                <input
+                                                    type="number"
+                                                    className="input"
+                                                    min={5}
+                                                    max={120}
+                                                    value={row.timeout_seconds}
+                                                    onChange={e =>
+                                                        d.setCfgN8nTools(prev =>
+                                                            prev.map(r =>
+                                                                r.id === row.id ? { ...r, timeout_seconds: Number(e.target.value) } : r
+                                                            )
+                                                        )
+                                                    }
+                                                />
+                                            </div>
                                         </div>
                                         <div className="input-group" style={{ marginBottom: 12 }}>
                                             <label className="input-label">URL do webhook</label>
@@ -1012,30 +843,11 @@ export function AgentConfigTab() {
                                                 placeholder="https://…"
                                             />
                                         </div>
-                                        <div className="input-group" style={{ marginBottom: 12 }}>
-                                            <label className="input-label">Timeout (segundos)</label>
-                                            <input
-                                                type="number"
-                                                className="input"
-                                                min={5}
-                                                max={120}
-                                                value={row.timeout_seconds}
-                                                onChange={e =>
-                                                    d.setCfgN8nTools(prev =>
-                                                        prev.map(r =>
-                                                            r.id === row.id
-                                                                ? { ...r, timeout_seconds: Number(e.target.value) }
-                                                                : r
-                                                        )
-                                                    )
-                                                }
-                                            />
-                                        </div>
                                         <div className="input-group">
                                             <label className="input-label">Descrição (para a IA)</label>
                                             <textarea
-                                                className="input textarea"
-                                                rows={3}
+                                                className="input"
+                                                rows={2}
                                                 value={row.description}
                                                 onChange={e =>
                                                     d.setCfgN8nTools(prev =>
@@ -1044,7 +856,7 @@ export function AgentConfigTab() {
                                                         )
                                                     )
                                                 }
-                                                placeholder="Quando chamar este workflow e o que enviar no payload."
+                                                placeholder="Quando chamar este workflow…"
                                             />
                                         </div>
                                     </div>
@@ -1055,39 +867,10 @@ export function AgentConfigTab() {
                                     style={{ marginTop: 4 }}
                                     onClick={() => d.setCfgN8nTools(prev => [...prev, d.newN8nToolRow()])}
                                 >
-                                    Adicionar ferramenta N8N
+                                    Adicionar workflow
                                 </button>
                             </>
                         )}
-                    </div>
-
-                    <div className="card">
-                        <div className="card-title" style={{ marginBottom: 20 }}>
-                            Prompt do sistema
-                        </div>
-                        <label className="sr-only" htmlFor="cfg-prompt">
-                            Prompt do sistema
-                        </label>
-                        <textarea
-                            id="cfg-prompt"
-                            className="input textarea"
-                            rows={10}
-                            value={d.cfgPrompt}
-                            onChange={e => d.setCfgPrompt(e.target.value)}
-                        />
-                        <div className="input-group" style={{ marginTop: 16 }}>
-                            <label className="input-label" htmlFor="cfg-wa-extra">
-                                Instruções extra de formatação (WhatsApp)
-                            </label>
-                            <textarea
-                                id="cfg-wa-extra"
-                                className="input textarea"
-                                rows={4}
-                                value={d.cfgWaExtra}
-                                onChange={e => d.setCfgWaExtra(e.target.value)}
-                                placeholder="Ex.: use emojis com moderação; cite preços sempre em BRL; não use markdown exceto *negrito*."
-                            />
-                        </div>
                     </div>
                 </>
             )}

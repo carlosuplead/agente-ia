@@ -11,6 +11,42 @@ function fmtTokens(n: number): string {
     return new Intl.NumberFormat('pt-PT').format(Math.round(n))
 }
 
+/** Preço por 1M tokens (USD) — input / output */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+    // OpenAI
+    'gpt-4o':              { input: 2.50, output: 10.00 },
+    'gpt-4o-mini':         { input: 0.15, output: 0.60 },
+    'gpt-4-turbo':         { input: 10.00, output: 30.00 },
+    'gpt-4':               { input: 30.00, output: 60.00 },
+    'gpt-3.5-turbo':       { input: 0.50, output: 1.50 },
+    // Google Gemini
+    'gemini-2.5-flash':    { input: 0.15, output: 0.60 },
+    'gemini-2.5-pro':      { input: 1.25, output: 10.00 },
+    'gemini-2.0-flash':    { input: 0.10, output: 0.40 },
+    'gemini-1.5-flash':    { input: 0.075, output: 0.30 },
+    'gemini-1.5-pro':      { input: 1.25, output: 5.00 },
+    // Anthropic Claude
+    'claude-opus-4-6':     { input: 15.00, output: 75.00 },
+    'claude-sonnet-4-6':   { input: 3.00, output: 15.00 },
+    'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
+}
+
+const USD_BRL = 5.70
+
+function getModelCostUsd(model: string, promptTokens: number, completionTokens: number): number {
+    const pricing = MODEL_PRICING[model]
+    if (!pricing) return 0
+    return (promptTokens / 1_000_000) * pricing.input + (completionTokens / 1_000_000) * pricing.output
+}
+
+function fmtUsd(n: number): string {
+    return `$${n.toFixed(4)}`
+}
+
+function fmtBrl(n: number): string {
+    return `R$${(n * USD_BRL).toFixed(2)}`
+}
+
 type Props = {
     tokenUsage: TokenUsagePayload | null
     tokenUsageLoadFailed: boolean
@@ -75,13 +111,27 @@ export function TokenUsageSection({
                 <p className="client-portal-muted">A carregar uso de tokens…</p>
             )}
 
-            {tokenUsage && (
+            {tokenUsage && (() => {
+                const totalCostUsd = tokenUsage.by_model.reduce(
+                    (acc, row) => acc + getModelCostUsd(row.model, row.prompt_tokens, row.completion_tokens), 0
+                )
+                return (
                 <>
                     <div className="stat-grid">
                         <div className="stat-card">
                             <span className="stat-card-label">Total de tokens (período)</span>
                             <span className="stat-card-value">{fmtTokens(tokenUsage.grand_total_tokens)}</span>
                             <span className="stat-card-hint">Soma de todos os modelos</span>
+                        </div>
+                        <div className="stat-card">
+                            <span className="stat-card-label">Custo estimado (USD)</span>
+                            <span className="stat-card-value">{fmtUsd(totalCostUsd)}</span>
+                            <span className="stat-card-hint">Baseado nos preços oficiais das APIs</span>
+                        </div>
+                        <div className="stat-card">
+                            <span className="stat-card-label">Custo estimado (BRL)</span>
+                            <span className="stat-card-value">{fmtBrl(totalCostUsd)}</span>
+                            <span className="stat-card-hint">Câmbio: 1 USD = {USD_BRL.toFixed(2)} BRL</span>
                         </div>
                     </div>
 
@@ -127,17 +177,21 @@ export function TokenUsageSection({
                                         <th className="token-usage-table-num">Prompt</th>
                                         <th className="token-usage-table-num">Conclusão</th>
                                         <th className="token-usage-table-num">Total</th>
+                                        <th className="token-usage-table-num">Custo (USD)</th>
+                                        <th className="token-usage-table-num">Custo (BRL)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {tokenUsage.by_model.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} style={{ color: 'var(--text-secondary)' }}>
+                                            <td colSpan={7} style={{ color: 'var(--text-secondary)' }}>
                                                 Sem registos de tokens neste período.
                                             </td>
                                         </tr>
                                     )}
-                                    {tokenUsage.by_model.map(row => (
+                                    {tokenUsage.by_model.map(row => {
+                                        const costUsd = getModelCostUsd(row.model, row.prompt_tokens, row.completion_tokens)
+                                        return (
                                         <tr key={`${row.provider}-${row.model}`}>
                                             <td>{row.provider}</td>
                                             <td>
@@ -150,8 +204,11 @@ export function TokenUsageSection({
                                             <td className="token-usage-table-num">
                                                 <strong>{fmtTokens(row.total_tokens)}</strong>
                                             </td>
+                                            <td className="token-usage-table-num">{costUsd > 0 ? fmtUsd(costUsd) : '—'}</td>
+                                            <td className="token-usage-table-num">{costUsd > 0 ? fmtBrl(costUsd) : '—'}</td>
                                         </tr>
-                                    ))}
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -236,7 +293,8 @@ export function TokenUsageSection({
                         </div>
                     </div>
                 </>
-            )}
+                )
+            })()}
         </div>
     )
 }

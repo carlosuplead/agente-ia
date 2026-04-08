@@ -67,6 +67,11 @@ function applyAiConfigToForm(
         setCfgTeamNotifyAllowlist: (v: string) => void
         setCfgTeamNotifyDesc: (v: string) => void
         setCfgTeamNotifyAppendTranscript: (v: boolean) => void
+        setCfgAnthropicKeyInput: (v: string) => void
+        setCfgClearAnthropicKey: (v: boolean) => void
+        setCfgElevenApiKeyInput: (v: string) => void
+        setCfgClearElevenApiKey: (v: boolean) => void
+        setCfgFallbackProvider: (v: string | null) => void
     }
 ) {
     setters.setCfgEnabled(merged.enabled)
@@ -98,6 +103,11 @@ function applyAiConfigToForm(
     setters.setCfgGoogleKeyInput('')
     setters.setCfgClearOpenaiKey(false)
     setters.setCfgClearGoogleKey(false)
+    setters.setCfgAnthropicKeyInput('')
+    setters.setCfgClearAnthropicKey(false)
+    setters.setCfgElevenApiKeyInput('')
+    setters.setCfgClearElevenApiKey(false)
+    setters.setCfgFallbackProvider((merged as Record<string, unknown>).fallback_provider as string ?? null)
     setters.setCfgChunkMessages(merged.ai_chunk_messages_enabled === true)
     setters.setCfgChunkSplitMode(merged.ai_chunk_split_mode === 'lines' ? 'lines' : 'paragraph')
     setters.setCfgChunkMaxParts(
@@ -186,6 +196,11 @@ export function useDashboardController() {
     const [cfgGoogleKeyInput, setCfgGoogleKeyInput] = useState('')
     const [cfgClearOpenaiKey, setCfgClearOpenaiKey] = useState(false)
     const [cfgClearGoogleKey, setCfgClearGoogleKey] = useState(false)
+    const [cfgAnthropicKeyInput, setCfgAnthropicKeyInput] = useState('')
+    const [cfgClearAnthropicKey, setCfgClearAnthropicKey] = useState(false)
+    const [cfgElevenApiKeyInput, setCfgElevenApiKeyInput] = useState('')
+    const [cfgClearElevenApiKey, setCfgClearElevenApiKey] = useState(false)
+    const [cfgFallbackProvider, setCfgFallbackProvider] = useState<string | null>(null)
     const [cfgChunkMessages, setCfgChunkMessages] = useState(false)
     const [cfgChunkSplitMode, setCfgChunkSplitMode] = useState('paragraph')
     const [cfgChunkMaxParts, setCfgChunkMaxParts] = useState(8)
@@ -277,6 +292,11 @@ export function useDashboardController() {
             cfgGoogleKeyInput,
             cfgClearOpenaiKey,
             cfgClearGoogleKey,
+            cfgAnthropicKeyInput,
+            cfgClearAnthropicKey,
+            cfgElevenApiKeyInput,
+            cfgClearElevenApiKey,
+            cfgFallbackProvider,
             cfgChunkMessages,
             cfgChunkSplitMode,
             cfgChunkMaxParts,
@@ -317,6 +337,11 @@ export function useDashboardController() {
             cfgGoogleKeyInput,
             cfgClearOpenaiKey,
             cfgClearGoogleKey,
+            cfgAnthropicKeyInput,
+            cfgClearAnthropicKey,
+            cfgElevenApiKeyInput,
+            cfgClearElevenApiKey,
+            cfgFallbackProvider,
             cfgChunkMessages,
             cfgChunkSplitMode,
             cfgChunkMaxParts,
@@ -548,7 +573,12 @@ export function useDashboardController() {
             setCfgTeamNotify,
             setCfgTeamNotifyAllowlist,
             setCfgTeamNotifyDesc,
-            setCfgTeamNotifyAppendTranscript
+            setCfgTeamNotifyAppendTranscript,
+            setCfgAnthropicKeyInput,
+            setCfgClearAnthropicKey,
+            setCfgElevenApiKeyInput,
+            setCfgClearElevenApiKey,
+            setCfgFallbackProvider
         }),
         []
     )
@@ -1223,6 +1253,16 @@ export function useDashboardController() {
         setCfgClearOpenaiKey,
         cfgClearGoogleKey,
         setCfgClearGoogleKey,
+        cfgAnthropicKeyInput,
+        setCfgAnthropicKeyInput,
+        cfgClearAnthropicKey,
+        setCfgClearAnthropicKey,
+        cfgElevenApiKeyInput,
+        setCfgElevenApiKeyInput,
+        cfgClearElevenApiKey,
+        setCfgClearElevenApiKey,
+        cfgFallbackProvider,
+        setCfgFallbackProvider,
         cfgChunkMessages,
         setCfgChunkMessages,
         cfgChunkSplitMode,

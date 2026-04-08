@@ -442,8 +442,8 @@ export function DisparosTab() {
     return (
         <>
             <div className="page-header">
-                <h2>Disparos (Meta oficial)</h2>
-                <p>Campanhas com templates aprovados pela Meta e fila de envio.</p>
+                <h2>Disparos em Massa</h2>
+                <p>Campanhas com templates aprovados pela Meta, métricas e fila de envio.</p>
             </div>
 
             {!slug && (
@@ -468,6 +468,49 @@ export function DisparosTab() {
 
             {slug && showCampaignUi && (
                 <>
+                    {/* ── Métricas resumo ── */}
+                    {(() => {
+                        const allBc = isOfficial ? broadcasts : layoutPreview ? (broadcasts.length > 0 ? broadcasts : PREVIEW_BROADCASTS) : []
+                        const totalSent = allBc.reduce((s, b) => s + b.sent_count, 0)
+                        const totalFailed = allBc.reduce((s, b) => s + b.failed_count, 0)
+                        const totalPending = allBc.reduce((s, b) => s + b.pending_count, 0)
+                        const totalCampaigns = allBc.length
+                        const running = allBc.filter(b => b.status === 'running').length
+                        const completed = allBc.filter(b => b.status === 'completed').length
+                        const successRate = totalSent + totalFailed > 0
+                            ? ((totalSent / (totalSent + totalFailed)) * 100).toFixed(1)
+                            : '—'
+                        return (
+                            <div className="stat-grid" style={{ marginBottom: 20 }}>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Campanhas</span>
+                                    <span className="stat-card-value">{totalCampaigns}</span>
+                                    <span className="stat-card-hint">{running} ativa(s) · {completed} concluída(s)</span>
+                                </div>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Enviados</span>
+                                    <span className="stat-card-value" style={{ color: 'var(--green)' }}>{totalSent.toLocaleString()}</span>
+                                </div>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Falhas</span>
+                                    <span className="stat-card-value" style={{ color: totalFailed > 0 ? 'var(--red)' : undefined }}>{totalFailed.toLocaleString()}</span>
+                                </div>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Pendentes</span>
+                                    <span className="stat-card-value" style={{ color: totalPending > 0 ? 'var(--orange)' : undefined }}>{totalPending.toLocaleString()}</span>
+                                </div>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Taxa de sucesso</span>
+                                    <span className="stat-card-value">{successRate}{successRate !== '—' ? '%' : ''}</span>
+                                </div>
+                                <div className="stat-card">
+                                    <span className="stat-card-label">Total de envios</span>
+                                    <span className="stat-card-value">{(totalSent + totalFailed + totalPending).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        )
+                    })()}
+
                     {layoutPreview && !isOfficial && (
                         <div
                             className="card"
@@ -885,11 +928,11 @@ export function DisparosTab() {
                         ))}
                     </div>
 
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-                        Agenda o cron <code>GET /api/cron/whatsapp-broadcast-queue</code> com o header{' '}
-                        <code>Authorization: Bearer INTERNAL_AI_SECRET</code> (ou <code>INTERNAL_BROADCAST_SECRET</code>). Para
-                        tetos diários suaves, corre o job a cada 1–5 minutos.
-                    </p>
+                    <div className="card" style={{ background: 'var(--surface-secondary)', padding: 16 }}>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                            Configure o cron no N8N: <code className="inline-code">GET /api/cron/whatsapp-broadcast-queue</code> a cada 3 min com header <code className="inline-code">Authorization: Bearer INTERNAL_AI_SECRET</code>.
+                        </p>
+                    </div>
                 </>
             )}
         </>

@@ -7,10 +7,11 @@ export type TextToSpeechOptions = {
     text: string
     voiceId: string
     modelId?: string | null
+    apiKey?: string | null  // per-workspace key (already decrypted)
 }
 
 export async function textToSpeechMp3(opts: TextToSpeechOptions): Promise<ArrayBuffer> {
-    const key = process.env.ELEVENLABS_API_KEY?.trim()
+    const key = opts.apiKey?.trim() || process.env.ELEVENLABS_API_KEY?.trim()
     if (!key) {
         throw new Error('ELEVENLABS_API_KEY não configurada')
     }

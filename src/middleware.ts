@@ -18,13 +18,13 @@ export async function middleware(request: NextRequest) {
         return response
     }
 
-    const isAuthPage = path.startsWith('/login') || path.startsWith('/auth')
+    const isAuthPage = path.startsWith('/login') || path.startsWith('/signup') || path.startsWith('/auth')
     if (!user && !isAuthPage) {
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         return NextResponse.redirect(url)
     }
-    if (user && path === '/login') {
+    if (user && (path === '/login' || path === '/signup')) {
         const url = request.nextUrl.clone()
         url.pathname = portalOnly ? '/portal' : '/'
         return NextResponse.redirect(url)

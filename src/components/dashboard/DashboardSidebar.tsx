@@ -34,7 +34,15 @@ export function DashboardSidebar() {
                     {d.userEmail || '…'}
                 </div>
                 {d.isPlatformAdmin && (
-                    <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>Admin plataforma</div>
+                    <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: 'var(--accent)' }}>Admin plataforma</span>
+                        <a
+                            href="/admin"
+                            style={{ color: 'var(--accent)', textDecoration: 'underline', fontSize: 11 }}
+                        >
+                            Painel Admin
+                        </a>
+                    </div>
                 )}
             </div>
 

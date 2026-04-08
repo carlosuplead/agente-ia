@@ -1,7 +1,7 @@
 export type AiAgentConfig = {
     id: string
     enabled: boolean
-    provider: 'gemini' | 'openai'
+    provider: 'gemini' | 'openai' | 'anthropic'
     model: string
     temperature: number
     system_prompt: string
@@ -44,6 +44,8 @@ export type AiAgentConfig = {
     elevenlabs_model_id?: string | null
     /** Descrição da tool para o modelo (opcional). */
     elevenlabs_voice_tool_description?: string | null
+    /** BYOK ElevenLabs; se vazio, usa ELEVENLABS_API_KEY no servidor. */
+    elevenlabs_api_key?: string | null
     /** Follow-up automático após silêncio do cliente (requer job em `/api/ai/followup-cron`). */
     ai_followup_enabled?: boolean
     /** Passos: `[{ delay_minutes, message }]` (JSONB). */
@@ -52,6 +54,10 @@ export type AiAgentConfig = {
     openai_api_key?: string | null
     /** BYOK Gemini; se vazio, usa GOOGLE_API_KEY no servidor. */
     google_api_key?: string | null
+    /** BYOK Anthropic; se vazio, usa ANTHROPIC_API_KEY no servidor. */
+    anthropic_api_key?: string | null
+    /** Provedor de fallback quando o primário falha. */
+    fallback_provider?: 'gemini' | 'openai' | 'anthropic' | null
     /** Várias bolhas WhatsApp por turno (split do texto). */
     ai_chunk_messages_enabled?: boolean
     /** paragraph: quebra por linha em branco; lines: cada linha é uma bolha. */

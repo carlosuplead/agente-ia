@@ -32,6 +32,11 @@ export type AiConfigFormSnapshotInput = {
     cfgGoogleKeyInput: string
     cfgClearOpenaiKey: boolean
     cfgClearGoogleKey: boolean
+    cfgAnthropicKeyInput: string
+    cfgClearAnthropicKey: boolean
+    cfgElevenApiKeyInput: string
+    cfgClearElevenApiKey: boolean
+    cfgFallbackProvider: string | null
     cfgChunkMessages: boolean
     cfgChunkSplitMode: string
     cfgChunkMaxParts: number
@@ -111,6 +116,17 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
     } else if (i.cfgGoogleKeyInput.trim()) {
         out.google_api_key = i.cfgGoogleKeyInput.trim()
     }
+    if (i.cfgClearAnthropicKey) {
+        out.anthropic_api_key = null
+    } else if (i.cfgAnthropicKeyInput.trim()) {
+        out.anthropic_api_key = i.cfgAnthropicKeyInput.trim()
+    }
+    if (i.cfgClearElevenApiKey) {
+        out.elevenlabs_api_key = null
+    } else if (i.cfgElevenApiKeyInput.trim()) {
+        out.elevenlabs_api_key = i.cfgElevenApiKeyInput.trim()
+    }
+    out.fallback_provider = i.cfgFallbackProvider || null
     return out
 }
 

@@ -17,9 +17,7 @@ function MetaTokenAgeNotice({ obtainedAt }: { obtainedAt: string }) {
     return (
         <div className="card alert-card" role="status" style={{ marginBottom: 12 }}>
             <p className="alert-card-text" style={{ margin: 0 }}>
-                O token Meta foi obtido há {days} dias. Tokens de longa duração expiram por volta de 60 dias — volta a
-                guardar credenciais em &quot;Configurar API oficial&quot; ou a ligar com Facebook (OAuth) antes de
-                expirar para não interromper envios e disparos.
+                O token Meta foi obtido há {days} dias. Tokens expiram por volta de 60 dias — atualize as credenciais antes de expirar.
             </p>
         </div>
     )
@@ -65,34 +63,39 @@ export function WhatsAppTab() {
         <>
             <div className="page-header">
                 <h2>WhatsApp — {d.selectedWs?.name || '—'}</h2>
-                <p>Ligação e mensagens recentes do schema {d.selectedSlug || '—'}</p>
+                <p>Conexão e mensagens do workspace {d.selectedSlug || '—'}</p>
             </div>
 
             {!d.selectedSlug && (
-                <p style={{ color: 'var(--text-secondary)' }}>Selecione um workspace na grelha ou no menu.</p>
+                <p style={{ color: 'var(--text-secondary)' }}>Selecione um workspace na barra lateral.</p>
             )}
 
             {d.selectedSlug && (
                 <>
+                    {/* Estado da conexão */}
                     <div className="card">
                         <div className="card-header">
-                            <span className="card-title">Estado</span>
+                            <span className="card-title">Conexão</span>
                             <span className={`status-badge ${waStatusClass}`}>
                                 <span className="status-dot" aria-hidden="true" />
                                 {d.instance?.status || 'sem instância'}
                             </span>
                         </div>
+
                         {d.instance?.phone_number && (
-                            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 12 }}>
+                            <p style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
                                 {d.instance.phone_number}
                             </p>
                         )}
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Provider: <strong>{d.instance?.provider || 'uazapi'}</strong>
+
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
+                            Provider: <strong>{d.instance?.provider === 'official' ? 'Meta Cloud API' : 'Uazapi'}</strong>
                         </p>
+
                         {d.instance?.provider === 'official' && d.instance?.meta_token_obtained_at && (
                             <MetaTokenAgeNotice obtainedAt={d.instance.meta_token_obtained_at} />
                         )}
+
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                             {!d.instance && (
                                 <button
@@ -118,11 +121,9 @@ export function WhatsAppTab() {
                                 type="button"
                                 className="btn btn-secondary"
                                 disabled={d.busy || !d.instance}
-                                onClick={() =>
-                                    d.selectedSlug && d.loadInstance(d.selectedSlug, { syncUazapi: true })
-                                }
+                                onClick={() => d.selectedSlug && d.loadInstance(d.selectedSlug, { syncUazapi: true })}
                             >
-                                Atualizar estado
+                                Atualizar
                             </button>
                             {d.instance && d.instance.provider !== 'official' && (
                                 <button
@@ -130,25 +131,33 @@ export function WhatsAppTab() {
                                     className="btn btn-secondary"
                                     disabled={d.busy}
                                     onClick={() => d.removeUazapiInstance()}
-                                    style={{ borderColor: 'rgba(215, 0, 21, 0.35)', color: '#b30f1a' }}
+                                    style={{ borderColor: 'rgba(255, 107, 107, 0.35)', color: 'var(--red)' }}
                                 >
-                                    Remover ligação Uazapi
+                                    Remover Uazapi
                                 </button>
                             )}
                         </div>
+
                         {d.qrSrc && (
-                            <div style={{ marginTop: 16 }}>
-                                <img src={d.qrSrc} alt="QR Code para ligar o WhatsApp" style={{ maxWidth: 280, borderRadius: 8 }} />
+                            <div style={{ marginTop: 20, padding: 16, background: 'var(--surface-secondary)', borderRadius: 12 }}>
+                                <img
+                                    src={d.qrSrc}
+                                    alt="QR Code WhatsApp"
+                                    style={{ maxWidth: 260, borderRadius: 8 }}
+                                />
                                 {d.qrPayload?.pairingCode && (
-                                    <p style={{ marginTop: 8, fontSize: 14 }}>
-                                        Código: <strong>{d.qrPayload.pairingCode}</strong>
+                                    <p style={{ marginTop: 10, fontSize: 14 }}>
+                                        Código: <strong style={{ letterSpacing: '0.05em' }}>{d.qrPayload.pairingCode}</strong>
                                     </p>
                                 )}
                             </div>
                         )}
+
                         {d.metaPendingPhones.length > 0 && (
                             <div style={{ marginTop: 16 }}>
-                                <p style={{ fontSize: 13, marginBottom: 8 }}>Escolha o número oficial:</p>
+                                <p style={{ fontSize: 13, marginBottom: 8, color: 'var(--text-secondary)' }}>
+                                    Escolha o número oficial:
+                                </p>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     {d.metaPendingPhones.map(p => (
                                         <button
@@ -163,29 +172,29 @@ export function WhatsAppTab() {
                                 </div>
                             </div>
                         )}
-                        <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
-                            Webhook (Uazapi):{' '}
-                            <code style={{ wordBreak: 'break-all' }}>
-                                {typeof window !== 'undefined' ? window.location.origin : ''}
-                                /api/whatsapp/webhook?token=INSTANCE_TOKEN
-                            </code>
-                            <br />
-                            <span style={{ display: 'block', marginTop: 6 }}>
-                                <strong>INSTANCE_TOKEN</strong> é só um exemplo — no painel Uazapi substitui pelo{' '}
-                                <strong>token da instância</strong> (o mesmo que fica guardado na app quando crias a
-                                instância; não uses o texto literal «INSTANCE_TOKEN»).
-                            </span>
-                            <br />
-                            Webhook (Meta oficial):{' '}
-                            <code style={{ wordBreak: 'break-all' }}>
-                                {typeof window !== 'undefined' ? window.location.origin : ''}
-                                /api/whatsapp/webhook/official
-                            </code>
-                        </p>
                     </div>
 
+                    {/* Webhook URLs */}
+                    <div className="card">
+                        <div className="card-title" style={{ marginBottom: 12 }}>Webhooks</div>
+                        <div className="input-group" style={{ marginBottom: 12 }}>
+                            <label className="input-label">Uazapi</label>
+                            <code className="input" style={{ display: 'block', fontSize: 12, wordBreak: 'break-all', cursor: 'text' }}>
+                                {typeof window !== 'undefined' ? window.location.origin : ''}/api/whatsapp/webhook?token=TOKEN_DA_INSTANCIA
+                            </code>
+                        </div>
+                        <div className="input-group">
+                            <label className="input-label">Meta Cloud API</label>
+                            <code className="input" style={{ display: 'block', fontSize: 12, wordBreak: 'break-all', cursor: 'text' }}>
+                                {typeof window !== 'undefined' ? window.location.origin : ''}/api/whatsapp/webhook/official
+                            </code>
+                        </div>
+                    </div>
+
+                    {/* API Oficial WABA */}
                     <OfficialApiSetupSection />
 
+                    {/* Estatísticas */}
                     <ClientPortalStats
                         stats={d.stats}
                         statsLoadFailed={d.statsLoadFailed}
@@ -205,13 +214,13 @@ export function WhatsAppTab() {
                         busy={d.busy}
                     />
 
+                    {/* Mensagens recentes */}
                     <div className="card">
                         <div className="card-header">
                             <span className="card-title">Mensagens recentes</span>
                             <button
                                 type="button"
-                                className="btn btn-secondary"
-                                style={{ fontSize: 12 }}
+                                className="btn btn-secondary btn-compact"
                                 onClick={() => d.selectedSlug && d.loadMessages(d.selectedSlug)}
                             >
                                 Atualizar
@@ -234,7 +243,9 @@ export function WhatsAppTab() {
                                 </div>
                             ))}
                             {d.messages.length === 0 && (
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Sem mensagens.</p>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, padding: '16px 0' }}>
+                                    Sem mensagens recentes.
+                                </p>
                             )}
                         </div>
                     </div>

@@ -373,6 +373,36 @@ export async function POST(request: Request) {
                 )
             }
         }
+        if ('anthropic_api_key' in body) {
+            const v = body.anthropic_api_key
+            if (v === null) {
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET anthropic_api_key = NULL, updated_at = now() WHERE singleton_key = true`,
+                    []
+                )
+            } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET anthropic_api_key = $1, updated_at = now() WHERE singleton_key = true`,
+                    [stored]
+                )
+            }
+        }
+        if ('elevenlabs_api_key' in body) {
+            const v = body.elevenlabs_api_key
+            if (v === null) {
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET elevenlabs_api_key = NULL, updated_at = now() WHERE singleton_key = true`,
+                    []
+                )
+            } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET elevenlabs_api_key = $1, updated_at = now() WHERE singleton_key = true`,
+                    [stored]
+                )
+            }
+        }
 
         const finalRows = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
         const finalRaw = finalRows[0] as Record<string, unknown> | undefined

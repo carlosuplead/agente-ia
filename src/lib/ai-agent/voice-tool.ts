@@ -2,6 +2,7 @@ import { textToSpeechMp3 } from '@/lib/elevenlabs'
 import type { AiAgentConfig, BuiltContext, VoiceDeliveryRecord } from '@/lib/ai-agent/types'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
+import { decryptWorkspaceLlmKeyIfNeeded } from '@/lib/crypto/workspace-llm-keys'
 
 const TOOL_NAME = 'send_voice_message'
 
@@ -12,6 +13,12 @@ const DEFAULT_VOICE_TOOL_DESC = `Envia uma mensagem de áudio (voz sintetizada) 
 export function voiceToolDescription(config: AiAgentConfig): string {
     const c = config.elevenlabs_voice_tool_description?.trim()
     return c || DEFAULT_VOICE_TOOL_DESC
+}
+
+function resolveElevenLabsApiKey(config: AiAgentConfig): string | null {
+    const w = typeof config.elevenlabs_api_key === 'string' ? config.elevenlabs_api_key.trim() : ''
+    if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
+    return null // fallback to ELEVENLABS_API_KEY handled inside textToSpeechMp3
 }
 
 export function resolveElevenLabsVoiceId(config: AiAgentConfig, override?: string | null): string | null {
@@ -44,7 +51,8 @@ export async function executeSendVoiceMessage(args: {
         audio = await textToSpeechMp3({
             text: args.text,
             voiceId,
-            modelId: args.config.elevenlabs_model_id
+            modelId: args.config.elevenlabs_model_id,
+            apiKey: resolveElevenLabsApiKey(args.config)
         })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Falha ElevenLabs'

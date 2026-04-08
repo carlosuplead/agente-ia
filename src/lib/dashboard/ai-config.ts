@@ -32,6 +32,9 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     elevenlabs_voice_tool_description: null,
     openai_api_key_set: false,
     google_api_key_set: false,
+    anthropic_api_key_set: false,
+    elevenlabs_api_key_set: false,
+    fallback_provider: null,
     ai_chunk_messages_enabled: false,
     ai_chunk_split_mode: 'paragraph',
     ai_chunk_max_parts: 8,
@@ -51,10 +54,14 @@ export function normalizeAiConfig(c: Partial<AiConfigRow> | null | undefined): A
 export function sanitizeAiConfigForClient(row: Record<string, unknown>): Record<string, unknown> {
     const openaiSet = typeof row.openai_api_key === 'string' && row.openai_api_key.length > 0
     const googleSet = typeof row.google_api_key === 'string' && row.google_api_key.length > 0
-    const { openai_api_key: _o, google_api_key: _g, ...rest } = row
+    const anthropicSet = typeof row.anthropic_api_key === 'string' && row.anthropic_api_key.length > 0
+    const elevenlabsSet = typeof row.elevenlabs_api_key === 'string' && row.elevenlabs_api_key.length > 0
+    const { openai_api_key: _o, google_api_key: _g, anthropic_api_key: _a, elevenlabs_api_key: _e, ...rest } = row
     return {
         ...rest,
         openai_api_key_set: openaiSet,
-        google_api_key_set: googleSet
+        google_api_key_set: googleSet,
+        anthropic_api_key_set: anthropicSet,
+        elevenlabs_api_key_set: elevenlabsSet
     }
 }

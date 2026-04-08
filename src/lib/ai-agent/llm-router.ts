@@ -2,6 +2,7 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import type { FunctionDeclarationsTool } from '@google/generative-ai'
 import OpenAI from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
+import Anthropic from '@anthropic-ai/sdk'
 import { callN8nWebhook, type N8nWebhookPayload } from '@/lib/ai-agent/n8n-webhook'
 import { parseN8nToolsFromConfig, type N8nToolDef } from '@/lib/ai-agent/n8n-tools'
 import type { AiAgentConfig, BuiltContext, LLMResponse, LlmUsageSnapshot, VoiceDeliveryRecord } from './types'
@@ -137,6 +138,22 @@ function resolveGoogleApiKey(config: AiAgentConfig): string {
     return process.env.GOOGLE_API_KEY?.trim() || ''
 }
 
+function resolveAnthropicApiKey(config: AiAgentConfig): string {
+    const w = typeof config.anthropic_api_key === 'string' ? config.anthropic_api_key.trim() : ''
+    if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
+    return process.env.ANTHROPIC_API_KEY?.trim() || ''
+}
+
+function anthropicUsageFromResponse(response: Anthropic.Message): LlmUsageSnapshot | undefined {
+    const u = response.usage
+    if (!u) return undefined
+    const pt = u.input_tokens ?? 0
+    const ct = u.output_tokens ?? 0
+    const tt = pt + ct
+    if (tt <= 0) return undefined
+    return { prompt_tokens: pt, completion_tokens: ct, total_tokens: tt }
+}
+
 import { sendOptionsFromConfig as sendOptsFromConfig } from '@/lib/ai-agent/send-options'
 
 function buildUserContent(
@@ -217,37 +234,62 @@ export async function callLLM(
         teamAuthorizedPhonesLine
     )
 
-    if (!handoffOn && !n8nOn && !voiceOn && !calendarOn && !teamNotifOn) {
-        return plainCompletion(config, userContent)
+    const callWithProvider = async (provider: string): Promise<LLMResponse> => {
+        const providerConfig = { ...config, provider: provider as AiAgentConfig['provider'] }
+
+        if (!handoffOn && !n8nOn && !voiceOn && !calendarOn && !teamNotifOn) {
+            return plainCompletion(providerConfig, userContent)
+        }
+
+        if (provider === 'openai') {
+            return callOpenAIWithTools(providerConfig, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, teamNotifOn, meta)
+        }
+        if (provider === 'anthropic') {
+            return callAnthropicWithTools(providerConfig, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, teamNotifOn, meta)
+        }
+        return callGeminiWithTools(providerConfig, context, userContent, handoffOn, n8nList, voiceOn, calendarOn, teamNotifOn, meta)
     }
 
-    if (config.provider === 'openai') {
-        return callOpenAIWithTools(
-            config,
-            context,
-            userContent,
-            handoffOn,
-            n8nList,
-            voiceOn,
-            calendarOn,
-            teamNotifOn,
-            meta
-        )
+    try {
+        return await callWithProvider(config.provider)
+    } catch (err) {
+        const fallback = config.fallback_provider
+        if (fallback && fallback !== config.provider) {
+            console.warn(`[LLM] Provider ${config.provider} falhou (${err instanceof Error ? err.message : String(err)}), tentando fallback: ${fallback}`)
+            return callWithProvider(fallback)
+        }
+        throw err
     }
-    return callGeminiWithTools(
-        config,
-        context,
-        userContent,
-        handoffOn,
-        n8nList,
-        voiceOn,
-        calendarOn,
-        teamNotifOn,
-        meta
-    )
 }
 
 async function plainCompletion(config: AiAgentConfig, userContent: string): Promise<LLMResponse> {
+    if (config.provider === 'anthropic') {
+        const apiKey = resolveAnthropicApiKey(config)
+        if (!apiKey) throw new Error('Chave Anthropic em falta (workspace ou ANTHROPIC_API_KEY no servidor)')
+        const anthropic = new Anthropic({ apiKey })
+        const modelName = config.model || 'claude-sonnet-4-6'
+        const response = await withTimeout(
+            anthropic.messages.create({
+                model: modelName,
+                max_tokens: 2048,
+                temperature: config.temperature,
+                messages: [{ role: 'user', content: userContent }]
+            }),
+            LLM_TIMEOUT_MS,
+            'Timeout Anthropic'
+        )
+        const text = response.content
+            .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+            .map(b => b.text)
+            .join('')
+        return {
+            text,
+            shouldHandoff: false,
+            voiceDeliveries: undefined,
+            usage: anthropicUsageFromResponse(response)
+        }
+    }
+
     if (config.provider === 'openai') {
         const apiKey = resolveOpenAiApiKey(config)
         if (!apiKey) throw new Error('Chave OpenAI em falta (workspace ou OPENAI_API_KEY no servidor)')
@@ -287,6 +329,241 @@ async function plainCompletion(config: AiAgentConfig, userContent: string): Prom
         shouldHandoff: false,
         voiceDeliveries: undefined,
         usage: geminiUsageFromResponse(result.response as GeminiUsageMeta)
+    }
+}
+
+async function callAnthropicWithTools(
+    config: AiAgentConfig,
+    context: BuiltContext,
+    userContent: string,
+    handoffOn: boolean,
+    n8nList: N8nToolDef[],
+    elevenlabsVoiceOn: boolean,
+    googleCalendarOn: boolean,
+    teamNotificationOn: boolean,
+    meta?: LlmContactMeta
+): Promise<LLMResponse> {
+    const apiKey = resolveAnthropicApiKey(config)
+    if (!apiKey) throw new Error('Chave Anthropic em falta (workspace ou ANTHROPIC_API_KEY no servidor)')
+
+    const tools: Anthropic.Tool[] = []
+    if (handoffOn) {
+        tools.push({
+            name: TOOL_NAME_TRANSFER,
+            description: transferToolDescription(config),
+            input_schema: {
+                type: 'object' as const,
+                properties: { reason: { type: 'string', description: 'Motivo da transferência' } },
+                required: ['reason']
+            }
+        })
+    }
+    for (const t of n8nList) {
+        tools.push({
+            name: t.tool_name,
+            description: t.description,
+            input_schema: {
+                type: 'object' as const,
+                properties: { payload: { type: 'string', description: 'Dados a enviar ao workflow' } },
+                required: ['payload']
+            }
+        })
+    }
+    if (elevenlabsVoiceOn) {
+        tools.push({
+            name: VOICE_MESSAGE_TOOL_NAME,
+            description: voiceToolDescription(config),
+            input_schema: {
+                type: 'object' as const,
+                properties: {
+                    text: { type: 'string', description: 'Texto falado no áudio' },
+                    voice_id: { type: 'string', description: 'Opcional: ID voz ElevenLabs' }
+                },
+                required: ['text']
+            }
+        })
+    }
+    if (googleCalendarOn) {
+        tools.push(
+            {
+                name: CALENDAR_SUGGEST_SLOTS_TOOL,
+                description: 'Sugere horários livres na agenda Google do workspace',
+                input_schema: {
+                    type: 'object' as const,
+                    properties: {
+                        date_from: { type: 'string', description: 'Data início (YYYY-MM-DD)' },
+                        date_to: { type: 'string', description: 'Data fim (YYYY-MM-DD)' }
+                    },
+                    required: ['date_from']
+                }
+            },
+            {
+                name: CALENDAR_CREATE_EVENT_TOOL,
+                description: 'Cria evento na agenda Google do workspace',
+                input_schema: {
+                    type: 'object' as const,
+                    properties: {
+                        title: { type: 'string', description: 'Título do evento' },
+                        start_time: { type: 'string', description: 'Início ISO 8601' },
+                        end_time: { type: 'string', description: 'Fim ISO 8601' },
+                        description: { type: 'string', description: 'Descrição do evento' },
+                        attendee_email: { type: 'string', description: 'Email do participante' }
+                    },
+                    required: ['title', 'start_time', 'end_time']
+                }
+            }
+        )
+    }
+    if (teamNotificationOn) {
+        tools.push({
+            name: NOTIFY_TEAM_WHATSAPP_TOOL_NAME,
+            description: notifyTeamWhatsAppToolDescription(config),
+            input_schema: {
+                type: 'object' as const,
+                properties: {
+                    recipient_phone: { type: 'string', description: 'Telefone do destinatário' },
+                    summary: { type: 'string', description: 'Resumo para a equipa' },
+                    stage_label: { type: 'string', description: 'Opcional: etiqueta da etapa' }
+                },
+                required: ['recipient_phone', 'summary']
+            }
+        })
+    }
+
+    const anthropic = new Anthropic({ apiKey })
+    const modelName = config.model || 'claude-sonnet-4-6'
+    const voiceDeliveries: VoiceDeliveryRecord[] = []
+    let usageAcc: LlmUsageSnapshot | undefined
+
+    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userContent }]
+
+    const MAX_ROUNDS = 4
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+        const response = await withTimeout(
+            anthropic.messages.create({
+                model: modelName,
+                max_tokens: 2048,
+                temperature: config.temperature,
+                messages,
+                tools: tools.length > 0 ? tools : undefined
+            }),
+            LLM_TIMEOUT_MS,
+            'Timeout Anthropic'
+        )
+
+        usageAcc = sumUsage(usageAcc, anthropicUsageFromResponse(response))
+
+        const toolUseBlocks = response.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+        )
+        const textBlocks = response.content
+            .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+            .map(b => b.text)
+            .join('')
+
+        if (toolUseBlocks.length === 0 || response.stop_reason === 'end_turn') {
+            return {
+                text: textBlocks.trim(),
+                shouldHandoff: false,
+                voiceDeliveries: voiceDeliveries.length ? voiceDeliveries : undefined,
+                usage: usageAcc
+            }
+        }
+
+        const transferCall = toolUseBlocks.find(b => b.name === TOOL_NAME_TRANSFER)
+        if (transferCall && handoffOn) {
+            const reason = (transferCall.input as { reason?: string })?.reason || 'Transferência solicitada'
+            return {
+                text: textBlocks.trim() || handoffFallbackText(config),
+                shouldHandoff: true,
+                handoffReason: reason,
+                voiceDeliveries: voiceDeliveries.length ? voiceDeliveries : undefined,
+                usage: usageAcc
+            }
+        }
+
+        // Add assistant message with tool_use blocks
+        messages.push({ role: 'assistant', content: response.content })
+
+        // Execute tool calls and build tool_result blocks
+        const toolResults: Anthropic.ToolResultBlockParam[] = []
+        const instanceTok = meta?.whatsappInstanceToken?.trim() || ''
+        const delayMs = config.send_delay_ms ?? 1200
+
+        for (const tc of toolUseBlocks) {
+            if (tc.name === TOOL_NAME_TRANSFER) continue
+            const args = tc.input as Record<string, unknown>
+            let toolContent: string
+
+            if (
+                googleCalendarOn &&
+                meta?.googleCalendar &&
+                (tc.name === CALENDAR_SUGGEST_SLOTS_TOOL || tc.name === CALENDAR_CREATE_EVENT_TOOL)
+            ) {
+                try {
+                    toolContent = await executeCalendarToolCall(tc.name, args, meta.googleCalendar, context)
+                } catch (e) {
+                    toolContent = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
+                }
+            } else if (tc.name === VOICE_MESSAGE_TOOL_NAME && meta) {
+                if (!elevenlabsVoiceOn || !instanceTok) {
+                    toolContent = 'Função de áudio não disponível neste contexto.'
+                } else {
+                    const exec = await executeSendVoiceMessage({
+                        config, context,
+                        workspaceSlug: meta.workspaceSlug,
+                        instanceToken: instanceTok,
+                        text: String(args?.text || ''),
+                        voiceIdOverride: typeof args?.voice_id === 'string' ? args.voice_id : null,
+                        delayMs
+                    })
+                    if (exec.delivery) voiceDeliveries.push(exec.delivery)
+                    toolContent = exec.toolResult
+                }
+            } else if (tc.name === NOTIFY_TEAM_WHATSAPP_TOOL_NAME && meta) {
+                if (!teamNotificationOn || !instanceTok) {
+                    toolContent = 'Notificação interna não disponível neste contexto.'
+                } else {
+                    toolContent = await executeNotifyTeamWhatsApp({
+                        config, context,
+                        workspaceSlug: meta.workspaceSlug,
+                        instanceToken: instanceTok,
+                        recipientPhoneRaw: String(args?.recipient_phone || ''),
+                        summary: String(args?.summary || ''),
+                        stageLabel: typeof args?.stage_label === 'string' ? args.stage_label : undefined,
+                        sendOpts: sendOptsFromConfig(config)
+                    })
+                }
+            } else {
+                const def = n8nList.find(t => t.tool_name === tc.name)
+                if (def && meta) {
+                    const webhookBody: N8nWebhookPayload = {
+                        payload: String(args?.payload || ''),
+                        contact: { id: context.contactId, name: context.contactName, phone: context.contactPhone },
+                        conversation_id: meta.conversationId,
+                        workspace_slug: meta.workspaceSlug,
+                        organization_id: meta.workspaceSlug,
+                        n8n_tool: def.tool_name
+                    }
+                    const webhookResult = await callN8nWebhook(def.url, webhookBody, def.timeout_seconds)
+                    toolContent = webhookResult.ok ? webhookResult.data || 'OK' : `Erro: ${webhookResult.error || 'Falha no webhook'}`
+                } else {
+                    toolContent = 'Função não disponível neste contexto.'
+                }
+            }
+
+            toolResults.push({ type: 'tool_result', tool_use_id: tc.id, content: toolContent })
+        }
+
+        if (toolResults.length === 0) break
+        messages.push({ role: 'user', content: toolResults })
+    }
+
+    return {
+        text: '',
+        shouldHandoff: false,
+        voiceDeliveries: voiceDeliveries.length ? voiceDeliveries : undefined,
+        usage: usageAcc
     }
 }
 

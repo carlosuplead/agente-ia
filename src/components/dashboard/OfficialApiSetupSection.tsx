@@ -96,10 +96,10 @@ export function OfficialApiSetupSection() {
                     </div>
                     <div>
                         <div className="card-title" style={{ margin: 0 }}>
-                            WhatsApp
+                            API Oficial (WABA)
                         </div>
                         <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-                            API oficial (Cloud API)
+                            WhatsApp Cloud API
                         </p>
                     </div>
                 </div>
@@ -115,26 +115,16 @@ export function OfficialApiSetupSection() {
             {!showForm && (
                 <div style={{ marginTop: 8 }}>
                     <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                        Liga com Phone Number ID, token permanente e WABA ID — igual ao fluxo manual do CR Pro.
+                        Conecte com Phone Number ID, Access Token permanente e WABA ID.
                     </p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={disableActions || !slug}
-                            onClick={openForm}
-                        >
-                            Configurar API oficial
-                        </button>
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            disabled={disableActions || !slug}
-                            onClick={d.startMetaOfficialOAuth}
-                        >
-                            Ou ligar com Facebook (OAuth)
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={disableActions || !slug}
+                        onClick={openForm}
+                    >
+                        Configurar API oficial
+                    </button>
                 </div>
             )}
 

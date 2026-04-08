@@ -39,10 +39,18 @@ export const OPENAI_MODEL_PRESETS = [
     'o1-mini'
 ] as const
 
+export const ANTHROPIC_MODEL_PRESETS = [
+    'claude-opus-4-6',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5-20251001',
+] as const
+
 export const MODEL_CUSTOM = '__custom__' as const
 
 export function presetsForProvider(provider: string): readonly string[] {
-    return provider === 'openai' ? OPENAI_MODEL_PRESETS : GEMINI_MODEL_PRESETS
+    if (provider === 'openai') return OPENAI_MODEL_PRESETS
+    if (provider === 'anthropic') return ANTHROPIC_MODEL_PRESETS
+    return GEMINI_MODEL_PRESETS
 }
 
 export function modelSelectValue(cfgProvider: string, cfgModel: string): string {

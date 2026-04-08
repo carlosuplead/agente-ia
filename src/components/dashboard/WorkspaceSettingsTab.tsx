@@ -145,8 +145,8 @@ export function WorkspaceSettingsTab() {
     return (
         <>
             <div className="page-header">
-                <h2>Definições do workspace</h2>
-                <p>Nome, membros com acesso ao portal do cliente e ligação direta.</p>
+                <h2>Definições</h2>
+                <p>Configurações do seu espaço de trabalho.</p>
             </div>
 
             {!d.selectedSlug && (
@@ -156,8 +156,7 @@ export function WorkspaceSettingsTab() {
             {d.selectedSlug && !canOpen && (
                 <div className="card">
                     <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                        Não tens permissão para gerir este workspace. Só equipa interna (owner, admin, member) ou
-                        administrador da plataforma.
+                        Sem permissão para alterar as definições deste workspace.
                     </p>
                 </div>
             )}
@@ -193,7 +192,7 @@ export function WorkspaceSettingsTab() {
                     </div>
                     )}
 
-                    {canInvite && (
+                    {d.isPlatformAdmin && canInvite && (
                     <div className="card">
                         <div className="card-header">
                             <span className="card-title">Portal do cliente</span>
@@ -239,10 +238,6 @@ export function WorkspaceSettingsTab() {
                             <button type="submit" className="btn btn-primary">
                                 Criar acesso ao portal
                             </button>
-                            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.45 }}>
-                                Com senha, a conta fica pronta: o cliente usa <strong>/login</strong> com email e senha
-                                (email já confirmado pelo administrador). Sem senha, vai convite por link.
-                            </p>
                         </form>
 
                         <div className="card-header" style={{ padding: 0, marginBottom: 8 }}>

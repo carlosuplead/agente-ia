@@ -45,7 +45,7 @@ export function AgentConfigTab() {
                 <div className="page-header-row">
                     <div>
                         <h2>Agente IA — {d.selectedWs?.name || '—'}</h2>
-                        <p>Configuração do agente para o workspace {d.selectedSlug || '—'}</p>
+                        <p>Configuração do agente para {d.selectedWs?.name || 'o seu espaço de trabalho'}</p>
                         {d.isConfigDirty && (
                             <p className="unsaved-hint" role="status">
                                 Alterações por guardar

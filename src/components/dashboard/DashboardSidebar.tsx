@@ -85,7 +85,7 @@ export function DashboardSidebar() {
                     >
                         {d.workspaces.map(ws => (
                             <option key={ws.id} value={ws.slug}>
-                                {ws.name} ({ws.slug})
+                                {ws.name}
                             </option>
                         ))}
                     </select>

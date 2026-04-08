@@ -163,17 +163,15 @@ export function WorkspaceSettingsTab() {
 
             {d.selectedSlug && canOpen && (
                 <>
-                    {canEdit && (
+                    {d.isPlatformAdmin && canEdit && (
                     <div className="card">
                         <div className="card-header">
                             <span className="card-title">Identidade</span>
                         </div>
-                        {d.isPlatformAdmin && (
-                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                                O <strong>slug</strong> (schema na base de dados) não pode ser alterado aqui:{' '}
-                                <code>{d.selectedSlug}</code>
-                            </p>
-                        )}
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                            O <strong>slug</strong> (schema na base de dados) não pode ser alterado aqui:{' '}
+                            <code>{d.selectedSlug}</code>
+                        </p>
                         <form onSubmit={saveWorkspaceName} className="input-group" style={{ maxWidth: 420 }}>
                             <label className="input-label" htmlFor="ws-settings-name">
                                 Nome apresentado

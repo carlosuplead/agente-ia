@@ -221,13 +221,8 @@ export function useDashboardController() {
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
 
     const showWorkspaceSettingsNav = useMemo(
-        () =>
-            !portalOnly &&
-            (isPlatformAdmin ||
-                memberships.some(m =>
-                    ['owner', 'admin', 'member'].includes(m.role)
-                )),
-        [portalOnly, isPlatformAdmin, memberships]
+        () => !portalOnly && isPlatformAdmin,
+        [portalOnly, isPlatformAdmin]
     )
 
     /** Abrir definições (nome +/ou convites portal) — equipa interna. */

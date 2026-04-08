@@ -12,6 +12,14 @@ import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowli
 const EMPTY_LLM_FALLBACK =
     'Desculpe, não consegui gerar uma resposta agora. Pode repetir a sua pergunta?'
 
+/** Resposta curta após `/reset` (sem chamar LLM). */
+const RESET_COMMAND_REPLY =
+    'Pronto — reiniciei a nossa conversa. Em que posso ajudar?'
+
+function isUserResetCommand(body: string | null | undefined): boolean {
+    return (body ?? '').trim().toLowerCase() === '/reset'
+}
+
 type AiConvRow = {
     id: string
     status: string
@@ -45,6 +53,105 @@ function aiReplyChunks(text: string, config: AiAgentConfig): string[] {
 
 import { sendOptionsFromConfig } from '@/lib/ai-agent/send-options'
 
+async function handleUserResetCommand(
+    supabase: SupabaseClient,
+    workspace_slug: string,
+    contact_id: string,
+    contactPhone: string,
+    config: AiAgentConfig
+): Promise<RunAiProcessResult> {
+    const sql = getTenantSql()
+    const sch = quotedSchema(workspace_slug)
+
+    const convRows = await sql.unsafe(
+        `SELECT id, status FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid ORDER BY created_at DESC LIMIT 1`,
+        [contact_id]
+    )
+    const latest = convRows[0] as unknown as { id: string; status: string } | undefined
+
+    if (latest?.status === 'active') {
+        await sql.unsafe(
+            `UPDATE ${sch}.ai_conversations SET status = 'expired', ended_at = now(), handoff_reason = $2 WHERE id = $1::uuid`,
+            [latest.id, 'Comando /reset']
+        )
+    }
+
+    const inserted = await sql.unsafe(
+        `INSERT INTO ${sch}.ai_conversations (contact_id, status) VALUES ($1::uuid, 'active') RETURNING id, messages_count, created_at`,
+        [contact_id]
+    )
+    const row = inserted[0] as unknown as { id: string; messages_count: number; created_at: string | Date } | undefined
+    if (!row) {
+        return { ok: false, status: 500, error: 'Failed to create conversation after reset' }
+    }
+    const conversationId = row.id
+
+    const { data: instance } = await supabase
+        .from('whatsapp_instances')
+        .select('instance_token')
+        .eq('workspace_slug', workspace_slug)
+        .eq('status', 'connected')
+        .maybeSingle()
+
+    if (!instance?.instance_token) {
+        return { ok: false, status: 400, error: 'No instance connected' }
+    }
+
+    const sendOpts = sendOptionsFromConfig(config)
+    const textToSend = parseMessageForWhatsApp(RESET_COMMAND_REPLY)
+    const savedRows = await sql.unsafe(
+        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status)
+         VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sending')
+         RETURNING id`,
+        [contact_id, conversationId, RESET_COMMAND_REPLY]
+    )
+    const savedMsg = savedRows[0] as unknown as { id: string } | undefined
+    try {
+        const { provider } = await getProviderForWorkspace(supabase, workspace_slug)
+        const sendRes = await provider.sendText(
+            instance.instance_token,
+            contactPhone,
+            textToSend,
+            sendOpts
+        )
+        if (savedMsg) {
+            await sql.unsafe(
+                `UPDATE ${sch}.messages SET status = 'sent', whatsapp_id = $2 WHERE id = $1::uuid`,
+                [savedMsg.id, sendRes.messageId]
+            )
+        }
+    } catch {
+        if (savedMsg) {
+            await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMsg.id])
+        }
+        return { ok: false, status: 502, error: 'Failed to send reset confirmation' }
+    }
+
+    await setFollowupAnchorForConversation(workspace_slug, conversationId).catch(() => {})
+
+    const { data: incRows, error: incErr } = await supabase.rpc('increment_ai_conversation_if_under_cap', {
+        p_tenant: workspace_slug,
+        p_conv_id: conversationId,
+        p_cap: config.max_messages_per_conversation
+    })
+    if (!incErr && Array.isArray(incRows) && incRows.length > 0) {
+        const ir = incRows[0] as { updated_ok?: boolean }
+        if (ir.updated_ok === false) {
+            await sql.unsafe(
+                `UPDATE ${sch}.ai_conversations SET status = 'handed_off', handoff_reason = $2 WHERE id = $1::uuid`,
+                [conversationId, 'Limite de mensagens atingido']
+            )
+        }
+    } else {
+        await sql.unsafe(
+            `UPDATE ${sch}.ai_conversations SET messages_count = messages_count + 1 WHERE id = $1::uuid`,
+            [conversationId]
+        )
+    }
+
+    return { ok: true, reason: 'User /reset' }
+}
+
 export type RunAiProcessResult =
     | { ok: true; reason?: string }
     | { ok: false; status: number; error: string }
@@ -70,6 +177,15 @@ export async function runAiProcess(
     const contactPhone = (phoneRows[0] as unknown as { phone?: string } | undefined)?.phone ?? ''
     if (!shouldAcceptInboundForTestMode(config, contactPhone)) {
         return { ok: true, reason: 'Test mode allowlist' }
+    }
+
+    const lastInboundRows = await sql.unsafe(
+        `SELECT body FROM ${sch}.messages WHERE contact_id = $1::uuid AND sender_type = 'contact' ORDER BY created_at DESC LIMIT 1`,
+        [contact_id]
+    )
+    const lastInboundBody = (lastInboundRows[0] as unknown as { body: string | null } | undefined)?.body
+    if (isUserResetCommand(lastInboundBody)) {
+        return handleUserResetCommand(supabase, workspace_slug, contact_id, contactPhone, config)
     }
 
     const convRows = await sql.unsafe(

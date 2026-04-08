@@ -98,6 +98,17 @@ export function ConversasTab() {
     const audioChunksRef = useRef<Blob[]>([])
     const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+    // Cleanup recording on unmount
+    useEffect(() => {
+        return () => {
+            if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+            if (mediaRecorderRef.current?.state === 'recording') {
+                mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop())
+                try { mediaRecorderRef.current.stop() } catch { /* already stopped */ }
+            }
+        }
+    }, [])
+
     // Notes
     const [showNotes, setShowNotes] = useState(false)
     const [notesText, setNotesText] = useState('')
@@ -292,21 +303,36 @@ export function ConversasTab() {
     }
 
     // Pause / Resume AI
+    const [togglingAI, setTogglingAI] = useState(false)
+
     async function handleToggleAI(action: 'pause_ai' | 'resume_ai') {
-        if (!slug || !selectedContactId) return
-        const res = await fetch(`/api/workspace/conversations/${selectedContactId}`, {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspace_slug: slug, action })
-        })
-        if (res.ok) {
-            await loadChat(selectedContactId)
-            loadConversations().catch(() => {})
-            d.setToast({
-                message: action === 'pause_ai' ? 'IA pausada' : 'IA reativada',
-                variant: 'success'
+        if (!slug || !selectedContactId || togglingAI) return
+        setTogglingAI(true)
+        try {
+            const res = await fetch(`/api/workspace/conversations/${selectedContactId}`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workspace_slug: slug, action })
             })
+            if (res.ok) {
+                await loadChat(selectedContactId)
+                loadConversations().catch(() => {})
+                d.setToast({
+                    message: action === 'pause_ai' ? 'IA pausada' : 'IA reativada',
+                    variant: 'success'
+                })
+            } else {
+                const err = await res.json().catch(() => ({}))
+                d.setToast({
+                    message: (err as { error?: string }).error || 'Erro ao alterar estado da IA',
+                    variant: 'error'
+                })
+            }
+        } catch {
+            d.setToast({ message: 'Erro de conexão ao alterar IA', variant: 'error' })
+        } finally {
+            setTogglingAI(false)
         }
     }
 
@@ -315,13 +341,23 @@ export function ConversasTab() {
         if (!slug || !selectedContactId) return
         setSavingNotes(true)
         try {
-            await fetch(`/api/workspace/conversations/${selectedContactId}`, {
+            const res = await fetch(`/api/workspace/conversations/${selectedContactId}`, {
                 method: 'PATCH',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ workspace_slug: slug, internal_notes: notesText })
             })
-            d.setToast({ message: 'Notas salvas', variant: 'success' })
+            if (res.ok) {
+                d.setToast({ message: 'Notas salvas', variant: 'success' })
+            } else {
+                const err = await res.json().catch(() => ({}))
+                d.setToast({
+                    message: (err as { error?: string }).error || 'Erro ao salvar notas',
+                    variant: 'error'
+                })
+            }
+        } catch {
+            d.setToast({ message: 'Erro de conexão ao salvar notas', variant: 'error' })
         } finally {
             setSavingNotes(false)
         }
@@ -456,9 +492,10 @@ export function ConversasTab() {
                                     type="button"
                                     className="btn btn-secondary btn-compact"
                                     onClick={() => handleToggleAI('pause_ai')}
+                                    disabled={togglingAI}
                                     title="Pausar IA"
                                 >
-                                    <Pause size={12} /> Pausar
+                                    <Pause size={12} /> {togglingAI ? '...' : 'Pausar'}
                                 </button>
                             )}
                             {(convInfo?.status === 'handed_off' || convInfo?.status === 'ended') && (
@@ -466,9 +503,10 @@ export function ConversasTab() {
                                     type="button"
                                     className="btn btn-primary btn-compact"
                                     onClick={() => handleToggleAI('resume_ai')}
+                                    disabled={togglingAI}
                                     title="Reativar IA"
                                 >
-                                    <Play size={12} /> Ativar IA
+                                    <Play size={12} /> {togglingAI ? '...' : 'Ativar IA'}
                                 </button>
                             )}
                             <button
@@ -486,7 +524,7 @@ export function ConversasTab() {
                     {showNotes && (
                         <div className="chat-notes">
                             <div className="chat-notes-header">
-                                <StickyNote size={14} style={{ color: '#d97706' }} />
+                                <StickyNote size={14} style={{ color: 'var(--orange)' }} />
                                 <span className="chat-notes-label">
                                     Notas internas (nao enviadas ao cliente)
                                 </span>
@@ -618,7 +656,7 @@ export function ConversasTab() {
                             </button>
                             <div style={{
                                 flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-                                fontSize: 13, color: '#dc2626', fontWeight: 600
+                                fontSize: 13, color: 'var(--red)', fontWeight: 600
                             }}>
                                 <Mic size={16} className="chat-compose-btn--recording" />
                                 Gravando {formatRecTime(recordingTime)}

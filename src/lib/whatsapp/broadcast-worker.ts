@@ -179,14 +179,29 @@ export async function processBroadcastQueueBatch(
                 [item.broadcast_id]
             )
 
+            // Guardar mensagem no histórico para contexto da IA
             const body = `[Template: ${b.template_name}]`
-            await sql
-                .unsafe(
-                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status, whatsapp_id)
-                     VALUES ($1::uuid, NULL, 'user', $2, 'sent', $3)`,
-                    [item.contact_id, body, result.messageId]
+            // Buscar conversa ativa para linkar a mensagem do disparo
+            let broadcastConvId: string | null = null
+            try {
+                const convRows = await sql.unsafe(
+                    `SELECT id FROM ${sch}.ai_conversations
+                     WHERE contact_id = $1::uuid AND status = 'active'
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [item.contact_id]
                 )
-                .catch(() => {})
+                broadcastConvId = (convRows[0] as unknown as { id: string } | undefined)?.id ?? null
+            } catch { /* sem conversa ativa — ok */ }
+
+            try {
+                await sql.unsafe(
+                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status, whatsapp_id)
+                     VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent', $4)`,
+                    [item.contact_id, broadcastConvId, body, result.messageId]
+                )
+            } catch (insertErr) {
+                console.error(`[broadcast-worker] Falha ao guardar mensagem broadcast ${item.broadcast_id}:`, insertErr)
+            }
 
             await finalizeBroadcastIfDone(supabase, item.broadcast_id)
             processed++

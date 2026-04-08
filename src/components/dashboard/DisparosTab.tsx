@@ -241,10 +241,16 @@ export function DisparosTab() {
             offset: String(contactOffset)
         })
         if (contactSearchDebounced) q.set('q', contactSearchDebounced)
-        const res = await fetch(`/api/workspace/contacts?${q}`, { credentials: 'include' })
-        const j = await res.json().catch(() => ({}))
-        setContacts(Array.isArray(j.contacts) ? j.contacts : [])
-        setContactsTotal(typeof j.total === 'number' ? j.total : 0)
+        try {
+            const res = await fetch(`/api/workspace/contacts?${q}`, { credentials: 'include' })
+            if (!res.ok) { setContacts([]); setContactsTotal(0); return }
+            const j = await res.json().catch(() => ({}))
+            setContacts(Array.isArray(j.contacts) ? j.contacts : [])
+            setContactsTotal(typeof j.total === 'number' ? j.total : 0)
+        } catch {
+            setContacts([])
+            setContactsTotal(0)
+        }
     }, [slug, contactOffset, contactSearchDebounced])
 
     const loadBroadcasts = useCallback(async () => {
@@ -252,12 +258,17 @@ export function DisparosTab() {
             setBroadcasts([])
             return
         }
-        const res = await fetch(
-            `/api/whatsapp/broadcasts?workspace_slug=${encodeURIComponent(slug)}`,
-            { credentials: 'include' }
-        )
-        const j = await res.json().catch(() => ({}))
-        setBroadcasts(Array.isArray(j.broadcasts) ? j.broadcasts : [])
+        try {
+            const res = await fetch(
+                `/api/whatsapp/broadcasts?workspace_slug=${encodeURIComponent(slug)}`,
+                { credentials: 'include' }
+            )
+            if (!res.ok) { setBroadcasts([]); return }
+            const j = await res.json().catch(() => ({}))
+            setBroadcasts(Array.isArray(j.broadcasts) ? j.broadcasts : [])
+        } catch {
+            setBroadcasts([])
+        }
     }, [slug])
 
     const refreshAll = useCallback(async () => {
@@ -273,9 +284,11 @@ export function DisparosTab() {
         void refreshAll()
     }, [refreshAll])
 
+    // Re-load contacts when offset/search changes (without full refresh)
     useEffect(() => {
         if (slug) void loadContacts()
-    }, [slug, loadContacts])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contactOffset, contactSearchDebounced])
 
     useEffect(() => {
         if (isOfficial) setLayoutPreview(false)

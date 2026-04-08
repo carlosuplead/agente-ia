@@ -32,10 +32,9 @@ export async function GET(request: Request) {
         return NextResponse.json({ messages: messages || [] })
     } catch (e) {
         if (isMissingTenantSchema(e) || isStatementTimeout(e)) {
-            return NextResponse.json({ messages: [] })
+            return NextResponse.json({ messages: [], partial: true })
         }
         console.error('messages recent', e)
-        const msg = e instanceof Error ? e.message : 'Internal Server Error'
-        return NextResponse.json({ error: msg }, { status: 500 })
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }

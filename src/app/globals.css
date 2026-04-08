@@ -323,28 +323,34 @@ button.nav-item {
 }
 
 .card-header-icon--blue {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
 
 .card-header-icon--green {
-  background: rgba(34, 197, 94, 0.1);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
   color: var(--green);
 }
 
 .card-header-icon--orange {
-  background: rgba(245, 158, 11, 0.1);
+  background: color-mix(in srgb, var(--orange) 10%, transparent);
   color: var(--orange);
 }
 
 .card-header-icon--purple {
-  background: rgba(168, 85, 247, 0.1);
+  background: color-mix(in srgb, var(--purple) 10%, transparent);
   color: var(--purple);
 }
 
 .card-header-icon--red {
-  background: rgba(239, 68, 68, 0.1);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
   color: var(--red);
+}
+
+/* Generic card-header-icon when using inline --icon-bg/--icon-color */
+.card-header-icon[style] {
+  background: var(--icon-bg);
+  color: var(--icon-color);
 }
 
 /* Status Badge */
@@ -403,7 +409,7 @@ button.nav-item {
 .btn-primary:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .btn:focus-visible,
@@ -428,6 +434,44 @@ button.nav-item {
 .btn-secondary:hover {
   background: var(--surface-hover);
   border-color: var(--surface-bright);
+}
+
+/* Disabled states */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.btn-primary:disabled:hover {
+  background: var(--accent);
+}
+
+.btn-secondary:disabled:hover {
+  background: var(--surface-secondary);
+  border-color: var(--border);
+}
+
+.input:disabled,
+.input[disabled],
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--surface-secondary);
+}
+
+@media (hover: none) {
+  .btn-primary:hover {
+    transform: none;
+  }
+  .btn-secondary:hover {
+    transform: none;
+  }
+  .workspace-card:hover {
+    transform: none;
+  }
 }
 
 /* Workspace Grid */
@@ -658,7 +702,7 @@ button.nav-item {
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .input::placeholder {
@@ -676,6 +720,10 @@ button.nav-item {
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 32px;
+}
+
+[data-theme="dark"] .select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23908fa0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
 }
 
 /* Slider */
@@ -701,7 +749,7 @@ button.nav-item {
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .slider-value {
@@ -1735,10 +1783,10 @@ button.nav-item {
   white-space: nowrap;
 }
 
-.chat-status-dot--active { background: #05966918; color: #059669; }
-.chat-status-dot--handed_off { background: #ea580c18; color: #ea580c; }
+.chat-status-dot--active { background: color-mix(in srgb, var(--green) 10%, transparent); color: var(--green-container); }
+.chat-status-dot--handed_off { background: color-mix(in srgb, var(--orange) 10%, transparent); color: var(--orange); }
 .chat-status-dot--ended,
-.chat-status-dot--none { background: #6b728018; color: #6b7280; }
+.chat-status-dot--none { background: color-mix(in srgb, var(--text-muted) 10%, transparent); color: var(--text-muted); }
 
 /* Chat view */
 .chat-view {
@@ -1814,7 +1862,7 @@ button.nav-item {
 .chat-notes-label {
   font-size: 12px;
   font-weight: 600;
-  color: #d97706;
+  color: var(--orange);
 }
 
 .chat-notes textarea {
@@ -1856,14 +1904,14 @@ button.nav-item {
 }
 
 .chat-bubble--ai {
-  background: rgba(124, 58, 237, 0.08);
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  background: color-mix(in srgb, var(--purple) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--purple) 20%, transparent);
   border-top-left-radius: 4px;
 }
 
 .chat-bubble--user {
-  background: rgba(37, 99, 235, 0.1);
-  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
   border-top-right-radius: 4px;
 }
 
@@ -1876,9 +1924,9 @@ button.nav-item {
   gap: 4px;
 }
 
-.chat-bubble-sender--contact { color: #059669; }
-.chat-bubble-sender--ai { color: #7c3aed; }
-.chat-bubble-sender--user { color: #2563eb; }
+.chat-bubble-sender--contact { color: var(--green-container); }
+.chat-bubble-sender--ai { color: var(--purple); }
+.chat-bubble-sender--user { color: var(--accent); }
 
 .chat-bubble-media {
   margin: 4px 0;
@@ -1928,7 +1976,7 @@ button.nav-item {
 }
 
 .chat-bubble-failed {
-  color: #dc2626;
+  color: var(--red);
   margin-left: 4px;
   font-weight: 600;
 }
@@ -1974,7 +2022,7 @@ button.nav-item {
 }
 
 .chat-compose-btn--recording {
-  color: #dc2626;
+  color: var(--red);
   animation: chat-pulse 1.2s infinite;
 }
 
@@ -2543,7 +2591,7 @@ button.nav-item {
 }
 
 .activity-log-icon--outbound {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 

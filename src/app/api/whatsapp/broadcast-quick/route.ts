@@ -37,6 +37,12 @@ export async function POST(request: Request) {
             )
         }
 
+        // Validar formato UUID de todos os contact_ids
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!contact_ids.every(id => typeof id === 'string' && UUID_RE.test(id))) {
+            return NextResponse.json({ error: 'contact_ids contém IDs inválidos' }, { status: 400 })
+        }
+
         const access = await requireWorkspaceMember(supabase, workspace_slug)
         if (!access.ok) return access.response
 
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
                     await sql.unsafe(
                         `UPDATE ${sch}.messages SET status = 'sent', whatsapp_id = $2 WHERE id = $1::uuid`,
                         [savedId, result.messageId]
-                    ).catch(() => {})
+                    ).catch(err => console.error('[broadcast-quick] Falha ao atualizar status:', err))
                 }
 
                 results.push({ contact_id: c.id, phone: c.phone, name: c.name, status: 'sent' })

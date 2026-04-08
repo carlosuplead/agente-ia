@@ -13,6 +13,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing ids' }, { status: 400 })
         }
 
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (typeof contact_id !== 'string' || !UUID_RE.test(contact_id)) {
+            return NextResponse.json({ error: 'Invalid contact_id format' }, { status: 400 })
+        }
+        if (typeof workspace_slug !== 'string' || !/^[a-z0-9_-]+$/.test(workspace_slug)) {
+            return NextResponse.json({ error: 'Invalid workspace_slug format' }, { status: 400 })
+        }
+
         const supabase = await createAdminClient()
         const result = await runAiProcess(supabase, workspace_slug, contact_id)
 

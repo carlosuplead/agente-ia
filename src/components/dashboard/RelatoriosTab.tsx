@@ -335,7 +335,7 @@ export function RelatoriosTab() {
                             {msgStats.previous_totals.ai_messages > 0 && (
                                 <div style={{
                                     fontSize: 12,
-                                    color: msgStats.totals.ai_messages >= msgStats.previous_totals.ai_messages ? '#059669' : '#dc2626'
+                                    color: msgStats.totals.ai_messages >= msgStats.previous_totals.ai_messages ? 'var(--green-container)' : 'var(--red)'
                                 }}>
                                     {msgStats.totals.ai_messages >= msgStats.previous_totals.ai_messages ? '+' : ''}
                                     {Math.round(((msgStats.totals.ai_messages - msgStats.previous_totals.ai_messages) / msgStats.previous_totals.ai_messages) * 100)}% vs anterior
@@ -348,7 +348,7 @@ export function RelatoriosTab() {
                             {msgStats.previous_totals.contact_messages > 0 && (
                                 <div style={{
                                     fontSize: 12,
-                                    color: msgStats.totals.contact_messages >= msgStats.previous_totals.contact_messages ? '#059669' : '#dc2626'
+                                    color: msgStats.totals.contact_messages >= msgStats.previous_totals.contact_messages ? 'var(--green-container)' : 'var(--red)'
                                 }}>
                                     {msgStats.totals.contact_messages >= msgStats.previous_totals.contact_messages ? '+' : ''}
                                     {Math.round(((msgStats.totals.contact_messages - msgStats.previous_totals.contact_messages) / msgStats.previous_totals.contact_messages) * 100)}% vs anterior

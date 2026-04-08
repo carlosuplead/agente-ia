@@ -22,7 +22,7 @@ export type ConversationListItem = {
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
-        const workspace_slug = searchParams.get('workspace_slug')
+        const workspace_slug = searchParams.get('workspace_slug')?.trim()
 
         if (!workspace_slug) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })

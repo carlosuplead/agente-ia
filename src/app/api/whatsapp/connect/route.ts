@@ -21,7 +21,7 @@ export async function POST(request: Request) {
             .from('whatsapp_instances')
             .select('id, instance_token, status, provider')
             .eq('workspace_slug', workspace_slug)
-            .single()
+            .maybeSingle()
 
         if (!instance) {
             return NextResponse.json({ error: 'No instance configured' }, { status: 404 })

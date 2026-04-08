@@ -64,7 +64,7 @@ function parseN8nToolsBody(
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
-        const workspaceSlug = searchParams.get('workspace_slug')
+        const workspaceSlug = searchParams.get('workspace_slug')?.trim()
 
         if (!workspaceSlug) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })

@@ -203,8 +203,11 @@ export async function runAiProcess(
         return { ok: true, reason: 'Already handed off' }
     }
 
-    const inactivityHours = config.inactivity_timeout_hours ?? 24
-    const inactivityMs = Math.max(1, inactivityHours) * 3600 * 1000
+    const rawInactivityHours = config.inactivity_timeout_hours
+    const inactivityHours = typeof rawInactivityHours === 'number' && Number.isFinite(rawInactivityHours) && rawInactivityHours > 0
+        ? rawInactivityHours
+        : 24
+    const inactivityMs = inactivityHours * 3600 * 1000
 
     const lastActivityRows = await sql.unsafe(
         `SELECT MAX(created_at) as last_at FROM ${sch}.messages WHERE contact_id = $1::uuid`,

@@ -19,7 +19,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
     try {
         const { contactId } = await ctx.params
         const { searchParams } = new URL(request.url)
-        const workspace_slug = searchParams.get('workspace_slug')
+        const workspace_slug = searchParams.get('workspace_slug')?.trim()
         const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 80))
 
         if (!workspace_slug) {
@@ -77,7 +77,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ contactId
     try {
         const { contactId } = await ctx.params
         const body = (await request.json()) as Record<string, unknown>
-        const workspace_slug = body.workspace_slug as string
+        const workspace_slug = typeof body.workspace_slug === 'string' ? body.workspace_slug.trim() : ''
 
         if (!workspace_slug) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })

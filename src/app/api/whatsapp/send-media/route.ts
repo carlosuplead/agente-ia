@@ -4,6 +4,8 @@ import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { getUazapiBaseUrl } from '@/lib/uazapi'
+import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
+import { GRAPH_API_BASE } from '@/lib/meta/graph-version'
 
 /**
  * POST — send media (image, video, audio, document) via WhatsApp
@@ -113,34 +115,91 @@ export async function POST(request: Request) {
         }
 
         try {
-            // Send via Uazapi (supports all media types via /send/media)
-            const base = getUazapiBaseUrl()
-            const sendBody: Record<string, unknown> = {
-                number: contact.phone,
-                type: media_type,
-                file: base64Data,
-                mimetype,
-                delay: 1200
+            let messageId: string | null = null
+
+            if (instance.provider === 'official') {
+                // Official Meta Cloud API — upload media then send
+                const { provider: _ } = await getProviderForWorkspace(supabase, workspace_slug)
+
+                // 1. Upload media to Meta
+                const uploadForm = new FormData()
+                uploadForm.append('messaging_product', 'whatsapp')
+                uploadForm.append('type', mimetype)
+                uploadForm.append('file', new Blob([Buffer.from(base64Data, 'base64')], { type: mimetype }), filename || 'file')
+
+                const { data: inst } = await supabase
+                    .from('whatsapp_instances')
+                    .select('phone_number_id, meta_access_token')
+                    .eq('workspace_slug', workspace_slug)
+                    .single()
+
+                if (!inst?.phone_number_id || !inst?.meta_access_token) {
+                    throw new Error('Official provider credentials missing')
+                }
+
+                const uploadRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/media`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${inst.meta_access_token}` },
+                    body: uploadForm
+                })
+                const uploadJson = (await uploadRes.json().catch(() => ({}))) as { id?: string }
+                if (!uploadRes.ok || !uploadJson.id) {
+                    throw new Error(`Meta media upload failed (${uploadRes.status})`)
+                }
+
+                // 2. Send message with uploaded media
+                const msgBody: Record<string, unknown> = {
+                    messaging_product: 'whatsapp',
+                    to: contact.phone.replace(/\D/g, ''),
+                    type: media_type
+                }
+                const mediaPayload: Record<string, unknown> = { id: uploadJson.id }
+                if (caption) mediaPayload.caption = caption
+                msgBody[media_type] = mediaPayload
+
+                const sendRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${inst.meta_access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(msgBody)
+                })
+                const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
+                if (!sendRes.ok) {
+                    throw new Error(`Meta send media failed (${sendRes.status})`)
+                }
+                const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
+                messageId = msg?.id ?? null
+            } else {
+                // Uazapi — send via /send/media
+                const base = getUazapiBaseUrl()
+                const sendBody: Record<string, unknown> = {
+                    number: contact.phone,
+                    type: media_type,
+                    file: base64Data,
+                    mimetype,
+                    delay: 1200
+                }
+                if (caption) sendBody.caption = caption
+                if (filename) sendBody.fileName = filename
+
+                const res = await fetch(`${base}/send/media`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        token: instance.instance_token
+                    },
+                    body: JSON.stringify(sendBody)
+                })
+
+                const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>
+                if (!res.ok) {
+                    throw new Error(`Media send failed (${res.status})`)
+                }
+                messageId = typeof raw.messageId === 'string' ? raw.messageId :
+                    typeof raw.id === 'string' ? raw.id : null
             }
-            if (caption) sendBody.caption = caption
-            if (filename) sendBody.fileName = filename
-
-            const res = await fetch(`${base}/send/media`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    token: instance.instance_token
-                },
-                body: JSON.stringify(sendBody)
-            })
-
-            const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>
-            if (!res.ok) {
-                throw new Error(`Media send failed (${res.status})`)
-            }
-
-            const messageId = typeof raw.messageId === 'string' ? raw.messageId :
-                typeof raw.id === 'string' ? raw.id : null
 
             await sql.unsafe(
                 `UPDATE ${sch}.messages SET status = 'sent', whatsapp_id = $2 WHERE id = $1::uuid`,

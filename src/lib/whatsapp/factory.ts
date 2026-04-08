@@ -23,7 +23,10 @@ export async function getProviderForWorkspace(
         .maybeSingle()
 
     if (!instance) return { provider: uazapiProvider, instance: null }
-    if (instance.provider === 'official' && instance.phone_number_id && instance.meta_access_token) {
+    if (instance.provider === 'official') {
+        if (!instance.phone_number_id || !instance.meta_access_token) {
+            throw new Error('Official provider configured but credentials (phone_number_id / meta_access_token) are missing')
+        }
         return {
             provider: new OfficialApiProvider({
                 phoneNumberId: instance.phone_number_id,

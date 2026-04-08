@@ -54,7 +54,7 @@ function fillDailyGaps(rows: MessageStatsDaily[], days: number): MessageStatsDai
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
-    const workspace_slug = searchParams.get('workspace_slug')
+    const workspace_slug = searchParams.get('workspace_slug')?.trim()
     const rangeDays = Math.min(30, Math.max(7, Number(searchParams.get('days')) || 7))
 
     if (!workspace_slug) {

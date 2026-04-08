@@ -74,6 +74,8 @@ export type AiAgentConfig = {
     team_notification_tool_description?: string | null
     /** Se true (default), anexa excerto recente do transcript à notificação. */
     team_notification_append_transcript?: boolean
+    /** Template de formato para a notificação — a IA preenche os campos. */
+    team_notification_template?: string | null
 }
 
 export type VoiceDeliveryRecord = {

@@ -7,6 +7,16 @@ import {
     presetsForProvider
 } from '@/lib/dashboard/model-presets'
 import { useDashboard } from './dashboard-context'
+import {
+    Cpu,
+    Key,
+    FileText,
+    Sliders,
+    Clock,
+    Calendar,
+    Bell,
+    Webhook
+} from 'lucide-react'
 
 function FieldError({ id, message }: { id?: string; message?: string | undefined }) {
     if (!message) return null
@@ -66,8 +76,9 @@ export function AgentConfigTab() {
                 <>
                     {/* ── Card 1: Provedor e Modelo ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 20 }}>
-                            Provedor e Modelo
+                        <div className="card-header-with-icon" style={{ marginBottom: 20 }}>
+                            <span className="card-header-icon card-header-icon--blue" aria-hidden="true"><Cpu size={18} /></span>
+                            <span className="card-title">Provedor e Modelo</span>
                         </div>
                         <div className="checkbox-row">
                             <input
@@ -211,8 +222,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 2: Chaves de API ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Chaves de API
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--orange" aria-hidden="true"><Key size={18} /></span>
+                            <span className="card-title">Chaves de API</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
                             Chaves por workspace (opcional). Se vazias, usa as variáveis globais do servidor.
@@ -316,8 +328,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 3: Prompt do Sistema ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Prompt do Sistema
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--purple" aria-hidden="true"><FileText size={18} /></span>
+                            <span className="card-title">Prompt do Sistema</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
                             Instruções completas para o agente: personalidade, regras, tom, formatação, tudo aqui.
@@ -335,8 +348,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 4: Comportamento ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Comportamento
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--green" aria-hidden="true"><Sliders size={18} /></span>
+                            <span className="card-title">Comportamento</span>
                         </div>
                         <div className="two-cols">
                             <div className="input-group">
@@ -496,8 +510,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 5: Follow-up Automático ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Follow-up Automático
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--orange" aria-hidden="true"><Clock size={18} /></span>
+                            <span className="card-title">Follow-up Automático</span>
                         </div>
                         <div className="checkbox-row">
                             <input
@@ -605,8 +620,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 6: Google Agenda ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Google Agenda
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--blue" aria-hidden="true"><Calendar size={18} /></span>
+                            <span className="card-title">Google Agenda</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
                             Permite ao agente consultar disponibilidade e criar eventos na agenda do Google.
@@ -625,18 +641,24 @@ export function AgentConfigTab() {
                                     </p>
                                 )}
                                 {d.googleCalendar.connected ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-                                            <p style={{ margin: 0, fontSize: 14 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                        <div className="subcard" style={{ marginBottom: 0 }}>
+                                            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
                                                 Ligado como <strong>{d.googleCalendar.account_email || 'conta Google'}</strong>
                                                 {d.googleCalendar.default_timezone && (
-                                                    <> · fuso <code className="inline-code">{d.googleCalendar.default_timezone}</code></>
+                                                    <>
+                                                        <br />
+                                                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                                            Fuso: <code className="inline-code">{d.googleCalendar.default_timezone}</code>
+                                                        </span>
+                                                    </>
                                                 )}
                                             </p>
                                             {d.canGoogleCalendarConnect && (
                                                 <button
                                                     type="button"
-                                                    className="btn btn-secondary"
+                                                    className="btn btn-secondary btn-compact"
+                                                    style={{ marginTop: 10, borderColor: 'rgba(239, 68, 68, 0.3)', color: 'var(--red)' }}
                                                     disabled={d.busy}
                                                     onClick={() => void d.disconnectGoogleCalendar()}
                                                 >
@@ -644,7 +666,7 @@ export function AgentConfigTab() {
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="input-group" style={{ maxWidth: 420 }}>
+                                        <div className="input-group" style={{ maxWidth: 420, marginBottom: 0 }}>
                                             <label className="input-label" htmlFor="google-agent-calendar">Agenda do agente</label>
                                             {d.googleCalendarCalendarsLoading ? (
                                                 <p className="config-loading" role="status" style={{ fontSize: 13 }}>
@@ -656,7 +678,7 @@ export function AgentConfigTab() {
                                             ) : (
                                                 <select
                                                     id="google-agent-calendar"
-                                                    className="input"
+                                                    className="input select"
                                                     disabled={d.busy || !d.canGoogleCalendarConnect || d.googleCalendarCalendarsLoading}
                                                     value={d.googleCalendar?.calendar_id || 'primary'}
                                                     onChange={e => {
@@ -677,19 +699,20 @@ export function AgentConfigTab() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                         <button
                                             type="button"
                                             className="btn btn-primary"
+                                            style={{ alignSelf: 'flex-start' }}
                                             disabled={d.busy || !d.selectedSlug || !d.canGoogleCalendarConnect || !d.googleCalendar.oauth_configured}
                                             onClick={d.startGoogleCalendarOAuth}
                                         >
                                             Conectar Google Agenda
                                         </button>
                                         {!d.canGoogleCalendarConnect && (
-                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                                                 Só owner ou admin pode conectar.
-                                            </span>
+                                            </p>
                                         )}
                                     </div>
                                 )}
@@ -699,8 +722,9 @@ export function AgentConfigTab() {
 
                     {/* ── Card 7: Notificações à Equipa ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Notificações à Equipa
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--green" aria-hidden="true"><Bell size={18} /></span>
+                            <span className="card-title">Notificações à Equipa</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
                             O agente pode enviar alertas por WhatsApp para a equipa quando necessário.
@@ -739,7 +763,7 @@ export function AgentConfigTab() {
                                     />
                                     <label htmlFor="cfg-team-notify-transcript">Incluir trecho da conversa na notificação</label>
                                 </div>
-                                <div className="input-group">
+                                <div className="input-group" style={{ marginBottom: 12 }}>
                                     <label className="input-label" htmlFor="cfg-team-notify-desc">Quando notificar (instrução para a IA)</label>
                                     <textarea
                                         id="cfg-team-notify-desc"
@@ -750,14 +774,32 @@ export function AgentConfigTab() {
                                         placeholder="Ex.: notificar quando o cliente pedir para falar com humano..."
                                     />
                                 </div>
+                                <div className="input-group">
+                                    <label className="input-label" htmlFor="cfg-team-notify-template">
+                                        Modelo da mensagem (template)
+                                    </label>
+                                    <textarea
+                                        id="cfg-team-notify-template"
+                                        className="input textarea"
+                                        rows={6}
+                                        value={d.cfgTeamNotifyTemplate ?? ''}
+                                        onChange={e => d.setCfgTeamNotifyTemplate(e.target.value)}
+                                        placeholder={'Exemplo de formato:\n\nNovo lead qualificado:\nNome: {nome}\nTelefone: {telefone}\nInteresse: {interesse}\nResumo: {resumo_conversa}'}
+                                    />
+                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                        Instrua a IA sobre como formatar a notificação. Use campos como {'{nome}'}, {'{telefone}'}, etc.
+                                        A IA preencherá os dados automaticamente a partir da conversa.
+                                    </p>
+                                </div>
                             </>
                         )}
                     </div>
 
                     {/* ── Card 9: Integração N8N ── */}
                     <div className="card">
-                        <div className="card-title" style={{ marginBottom: 16 }}>
-                            Webhooks N8N
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--purple" aria-hidden="true"><Webhook size={18} /></span>
+                            <span className="card-title">Webhooks N8N</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
                             Conecte workflows N8N que o agente pode acionar como ferramentas.

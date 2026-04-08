@@ -67,6 +67,7 @@ function applyAiConfigToForm(
         setCfgTeamNotifyAllowlist: (v: string) => void
         setCfgTeamNotifyDesc: (v: string) => void
         setCfgTeamNotifyAppendTranscript: (v: boolean) => void
+        setCfgTeamNotifyTemplate: (v: string) => void
         setCfgAnthropicKeyInput: (v: string) => void
         setCfgClearAnthropicKey: (v: boolean) => void
         setCfgElevenApiKeyInput: (v: string) => void
@@ -121,6 +122,7 @@ function applyAiConfigToForm(
     setters.setCfgTeamNotifyAllowlist(merged.team_notification_allowlist_phones ?? '')
     setters.setCfgTeamNotifyDesc(merged.team_notification_tool_description ?? '')
     setters.setCfgTeamNotifyAppendTranscript(merged.team_notification_append_transcript !== false)
+    setters.setCfgTeamNotifyTemplate(merged.team_notification_template ?? '')
 }
 
 export function useDashboardController() {
@@ -210,6 +212,7 @@ export function useDashboardController() {
     const [cfgTeamNotifyAllowlist, setCfgTeamNotifyAllowlist] = useState('')
     const [cfgTeamNotifyDesc, setCfgTeamNotifyDesc] = useState('')
     const [cfgTeamNotifyAppendTranscript, setCfgTeamNotifyAppendTranscript] = useState(true)
+    const [cfgTeamNotifyTemplate, setCfgTeamNotifyTemplate] = useState('')
 
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
 
@@ -305,7 +308,8 @@ export function useDashboardController() {
             cfgTeamNotify,
             cfgTeamNotifyAllowlist,
             cfgTeamNotifyDesc,
-            cfgTeamNotifyAppendTranscript
+            cfgTeamNotifyAppendTranscript,
+            cfgTeamNotifyTemplate
         }),
         [
             selectedSlug,
@@ -350,7 +354,8 @@ export function useDashboardController() {
             cfgTeamNotify,
             cfgTeamNotifyAllowlist,
             cfgTeamNotifyDesc,
-            cfgTeamNotifyAppendTranscript
+            cfgTeamNotifyAppendTranscript,
+            cfgTeamNotifyTemplate
         ]
     )
 
@@ -574,6 +579,7 @@ export function useDashboardController() {
             setCfgTeamNotifyAllowlist,
             setCfgTeamNotifyDesc,
             setCfgTeamNotifyAppendTranscript,
+            setCfgTeamNotifyTemplate,
             setCfgAnthropicKeyInput,
             setCfgClearAnthropicKey,
             setCfgElevenApiKeyInput,
@@ -1281,6 +1287,8 @@ export function useDashboardController() {
         setCfgTeamNotifyDesc,
         cfgTeamNotifyAppendTranscript,
         setCfgTeamNotifyAppendTranscript,
+        cfgTeamNotifyTemplate,
+        setCfgTeamNotifyTemplate,
         newN8nToolRow,
         newFollowupStepRow
     }

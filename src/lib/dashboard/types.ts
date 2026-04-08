@@ -57,6 +57,7 @@ export type AiConfigRow = {
     team_notification_allowlist_phones?: string | null
     team_notification_tool_description?: string | null
     team_notification_append_transcript?: boolean
+    team_notification_template?: string | null
 }
 
 export type MessageRow = {

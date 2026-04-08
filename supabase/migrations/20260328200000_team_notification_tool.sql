@@ -78,6 +78,7 @@ BEGIN
             team_notification_allowlist_phones TEXT,
             team_notification_tool_description TEXT,
             team_notification_append_transcript BOOLEAN NOT NULL DEFAULT TRUE,
+            team_notification_template TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )

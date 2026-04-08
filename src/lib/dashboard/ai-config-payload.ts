@@ -46,6 +46,7 @@ export type AiConfigFormSnapshotInput = {
     cfgTeamNotifyAllowlist: string
     cfgTeamNotifyDesc: string
     cfgTeamNotifyAppendTranscript: boolean
+    cfgTeamNotifyTemplate: string
 }
 
 export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
@@ -104,7 +105,8 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         team_notification_enabled: i.cfgTeamNotify,
         team_notification_allowlist_phones: i.cfgTeamNotifyAllowlist.trim() || null,
         team_notification_tool_description: i.cfgTeamNotifyDesc.trim() || null,
-        team_notification_append_transcript: i.cfgTeamNotifyAppendTranscript
+        team_notification_append_transcript: i.cfgTeamNotifyAppendTranscript,
+        team_notification_template: i.cfgTeamNotifyTemplate?.trim() || null
     }
     if (i.cfgClearOpenaiKey) {
         out.openai_api_key = null

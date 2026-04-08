@@ -43,7 +43,8 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     team_notification_enabled: false,
     team_notification_allowlist_phones: null,
     team_notification_tool_description: null,
-    team_notification_append_transcript: true
+    team_notification_append_transcript: true,
+    team_notification_template: null
 }
 
 export function normalizeAiConfig(c: Partial<AiConfigRow> | null | undefined): AiConfigRow {

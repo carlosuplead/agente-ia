@@ -18,7 +18,10 @@ const DEFAULT_TOOL_DESC = `Envia uma notificação por WhatsApp (texto) da inst�
 
 export function notifyTeamWhatsAppToolDescription(config: AiAgentConfig): string {
     const c = config.team_notification_tool_description?.trim()
-    return c || DEFAULT_TOOL_DESC
+    const base = c || DEFAULT_TOOL_DESC
+    const tpl = config.team_notification_template?.trim()
+    if (!tpl) return base
+    return `${base}\n\nFormata o campo "summary" exatamente no seguinte modelo (preenche os campos com dados da conversa):\n${tpl}`
 }
 
 function truncate(s: string, max: number): string {

@@ -169,10 +169,12 @@ export function WorkspaceSettingsTab() {
                         <div className="card-header">
                             <span className="card-title">Identidade</span>
                         </div>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                            O <strong>slug</strong> (schema na base de dados) não pode ser alterado aqui:{' '}
-                            <code>{d.selectedSlug}</code>
-                        </p>
+                        {d.isPlatformAdmin && (
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                                O <strong>slug</strong> (schema na base de dados) não pode ser alterado aqui:{' '}
+                                <code>{d.selectedSlug}</code>
+                            </p>
+                        )}
                         <form onSubmit={saveWorkspaceName} className="input-group" style={{ maxWidth: 420 }}>
                             <label className="input-label" htmlFor="ws-settings-name">
                                 Nome apresentado
@@ -239,9 +241,7 @@ export function WorkspaceSettingsTab() {
                             </button>
                             <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.45 }}>
                                 Com senha, a conta fica pronta: o cliente usa <strong>/login</strong> com email e senha
-                                (email já confirmado pelo administrador). Sem senha, vai convite por link. Requer{' '}
-                                <code>SUPABASE_SERVICE_ROLE_KEY</code> e <code>DATABASE_URL</code> (para localizar
-                                utilizadores por email de forma fiável).
+                                (email já confirmado pelo administrador). Sem senha, vai convite por link.
                             </p>
                         </form>
 

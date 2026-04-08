@@ -68,8 +68,8 @@ export function ClientPortalStats({
 
             {!stats && statsLoadFailed && (
                 <p className="client-portal-muted">
-                    Não foi possível carregar as estatísticas. Tenta &quot;Atualizar&quot; ou confirma a ligação à
-                    base de dados.
+                    Não foi possível carregar as estatísticas. Tenta &quot;Atualizar&quot; ou aguarda alguns
+                    instantes.
                 </p>
             )}
             {!stats && !statsLoadFailed && (

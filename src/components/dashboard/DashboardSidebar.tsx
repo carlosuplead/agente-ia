@@ -10,7 +10,9 @@ import {
     Settings,
     Zap,
     Sun,
-    Moon
+    Moon,
+    Shield,
+    LogOut
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
@@ -47,6 +49,10 @@ export function DashboardSidebar() {
         document.documentElement.setAttribute('data-theme', next)
     }
 
+    const userInitials = d.userEmail
+        ? d.userEmail.substring(0, 2).toUpperCase()
+        : '??'
+
     return (
         <aside className="sidebar sidebar--desktop" aria-label="Navegação principal">
             <div className="sidebar-brand">
@@ -56,28 +62,10 @@ export function DashboardSidebar() {
                 <h1>AI Agent</h1>
             </div>
 
-            <div className="workspace-selector workspace-selector--readonly">
-                <div className="workspace-selector-label">Sessão</div>
-                <div className="workspace-selector-value" style={{ fontSize: 12 }}>
-                    {d.userEmail || '…'}
-                </div>
-                {d.isPlatformAdmin && (
-                    <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: 'var(--accent)' }}>Admin plataforma</span>
-                        <a
-                            href="/admin"
-                            style={{ color: 'var(--accent)', textDecoration: 'underline', fontSize: 11 }}
-                        >
-                            Painel Admin
-                        </a>
-                    </div>
-                )}
-            </div>
-
             {d.workspaces.length > 0 && (
-                <div className="input-group" style={{ marginBottom: 8 }}>
+                <div className="input-group" style={{ padding: '0 4px', marginBottom: 12 }}>
                     <label className="input-label" htmlFor="dash-workspace-select">
-                        Workspace ativo
+                        Workspace
                     </label>
                     <select
                         id="dash-workspace-select"
@@ -118,9 +106,28 @@ export function DashboardSidebar() {
                         </button>
                     )
                 })}
+                {d.isPlatformAdmin && (
+                    <a
+                        href="/admin"
+                        className="nav-item"
+                        style={{ textDecoration: 'none' }}
+                    >
+                        <span className="nav-item-icon" aria-hidden="true">
+                            <Shield size={18} />
+                        </span>
+                        <span>Painel Admin</span>
+                    </a>
+                )}
             </nav>
 
-            <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="sidebar-bottom">
+                <div className="sidebar-user">
+                    <div className="sidebar-user-avatar" aria-hidden="true">
+                        {userInitials}
+                    </div>
+                    <span className="sidebar-user-email">{d.userEmail || '...'}</span>
+                </div>
+
                 <button
                     type="button"
                     className="nav-item"
@@ -132,8 +139,16 @@ export function DashboardSidebar() {
                     </span>
                     <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
                 </button>
-                <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={d.logout}>
-                    Sair
+                <button
+                    type="button"
+                    className="nav-item"
+                    onClick={d.logout}
+                    style={{ color: 'var(--red)' }}
+                >
+                    <span className="nav-item-icon" aria-hidden="true">
+                        <LogOut size={18} />
+                    </span>
+                    <span>Sair</span>
                 </button>
             </div>
         </aside>

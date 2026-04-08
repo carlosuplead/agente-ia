@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { DashboardTab } from '@/lib/dashboard/types'
 import { useDashboard } from './dashboard-context'
 import {
@@ -9,7 +9,12 @@ import {
     Megaphone,
     Bot,
     Settings,
-    Menu
+    Menu,
+    Shield,
+    Sun,
+    Moon,
+    LogOut,
+    Zap
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -28,6 +33,19 @@ const settingsTab: { id: DashboardTab; label: string; icon: LucideIcon } = {
 
 export function MobileNav() {
     const d = useDashboard()
+    const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+    useEffect(() => {
+        const saved = localStorage.getItem('theme') as 'dark' | 'light' | null
+        if (saved) setTheme(saved)
+    }, [])
+
+    function toggleTheme() {
+        const next = theme === 'dark' ? 'light' : 'dark'
+        setTheme(next)
+        localStorage.setItem('theme', next)
+        document.documentElement.setAttribute('data-theme', next)
+    }
 
     useEffect(() => {
         if (!d.mobileNavOpen) return
@@ -73,8 +91,15 @@ export function MobileNav() {
                 aria-hidden={!d.mobileNavOpen}
             >
                 <div className="mobile-drawer-inner">
+                    <div className="sidebar-brand" style={{ padding: '4px 8px', marginBottom: 4 }}>
+                        <div className="sidebar-brand-icon" aria-hidden="true">
+                            <Zap size={18} />
+                        </div>
+                        <h1 style={{ fontSize: 16, fontWeight: 700 }}>AI Agent</h1>
+                    </div>
+
                     {d.workspaces.length > 0 && (
-                        <div className="input-group" style={{ marginBottom: 12 }}>
+                        <div className="input-group" style={{ marginBottom: 12, padding: '0 4px' }}>
                             <label className="input-label" htmlFor="mobile-workspace-select">
                                 Workspace
                             </label>
@@ -92,6 +117,7 @@ export function MobileNav() {
                             </select>
                         </div>
                     )}
+
                     <nav className="mobile-drawer-nav" aria-label="Secções">
                         {[...baseTabs, ...(d.showWorkspaceSettingsNav ? [settingsTab] : [])].map(t => {
                             const Icon = t.icon
@@ -110,10 +136,44 @@ export function MobileNav() {
                                 </button>
                             )
                         })}
+                        {d.isPlatformAdmin && (
+                            <a
+                                href="/admin"
+                                className="nav-item"
+                                style={{ textDecoration: 'none' }}
+                            >
+                                <span className="nav-item-icon" aria-hidden="true">
+                                    <Shield size={18} />
+                                </span>
+                                <span>Painel Admin</span>
+                            </a>
+                        )}
                     </nav>
-                    <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={d.logout}>
-                        Sair
-                    </button>
+
+                    <div className="sidebar-bottom" style={{ borderTop: 'none', paddingTop: 8 }}>
+                        <button
+                            type="button"
+                            className="nav-item"
+                            onClick={toggleTheme}
+                            title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+                        >
+                            <span className="nav-item-icon" aria-hidden="true">
+                                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                            </span>
+                            <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="nav-item"
+                            onClick={d.logout}
+                            style={{ color: 'var(--red)' }}
+                        >
+                            <span className="nav-item-icon" aria-hidden="true">
+                                <LogOut size={18} />
+                            </span>
+                            <span>Sair</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

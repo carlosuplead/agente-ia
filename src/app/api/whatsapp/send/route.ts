@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireWorkspaceInternal } from '@/lib/auth/workspace-access'
+import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        const access = await requireWorkspaceInternal(supabase, workspace_slug)
+        const access = await requireWorkspaceMember(supabase, workspace_slug)
         if (!access.ok) return access.response
 
         const { data: instance } = await supabase

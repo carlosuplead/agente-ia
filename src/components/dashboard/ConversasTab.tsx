@@ -8,16 +8,16 @@ import {
     Pause,
     Play,
     StickyNote,
-    Image,
-    Video,
-    Mic,
     Paperclip,
     ArrowLeft,
     Bot,
     User,
     Phone,
     Search,
-    X
+    X,
+    Mic,
+    FileText,
+    Square
 } from 'lucide-react'
 import type { ConversationListItem } from '@/app/api/workspace/conversations/route'
 
@@ -49,15 +49,8 @@ type ConvInfo = {
 function senderLabel(t: string): string {
     if (t === 'ai') return 'IA'
     if (t === 'contact') return 'Cliente'
-    if (t === 'user') return 'Voce'
+    if (t === 'user') return 'Equipa'
     return t
-}
-
-function senderColor(t: string): string {
-    if (t === 'ai') return '#7c3aed'
-    if (t === 'contact') return '#059669'
-    if (t === 'user') return '#2563eb'
-    return '#6b7280'
 }
 
 function timeLabel(iso: string): string {
@@ -72,11 +65,11 @@ function timeLabel(iso: string): string {
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-function statusBadge(status: string) {
-    if (status === 'active') return { label: 'IA Ativa', color: '#059669', bg: '#05966918' }
-    if (status === 'handed_off') return { label: 'Pausado', color: '#ea580c', bg: '#ea580c18' }
-    if (status === 'ended') return { label: 'Finalizado', color: '#6b7280', bg: '#6b728018' }
-    return { label: 'Sem conversa', color: '#6b7280', bg: '#6b728018' }
+function aiStatusCss(status: string): { label: string; cls: string } {
+    if (status === 'active') return { label: 'IA Ativa', cls: 'chat-status-dot--active' }
+    if (status === 'handed_off') return { label: 'Pausado', cls: 'chat-status-dot--handed_off' }
+    if (status === 'ended') return { label: 'Finalizado', cls: 'chat-status-dot--ended' }
+    return { label: 'Sem conversa', cls: 'chat-status-dot--none' }
 }
 
 export function ConversasTab() {
@@ -87,18 +80,23 @@ export function ConversasTab() {
     const [loading, setLoading] = useState(false)
     const [searchQ, setSearchQ] = useState('')
 
-    // Chat state
     const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
     const [chatMessages, setChatMessages] = useState<ChatMsg[]>([])
     const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null)
     const [convInfo, setConvInfo] = useState<ConvInfo | null>(null)
     const [chatLoading, setChatLoading] = useState(false)
 
-    // Compose
     const [composeText, setComposeText] = useState('')
     const [sending, setSending] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
+
+    // Audio recording
+    const [isRecording, setIsRecording] = useState(false)
+    const [recordingTime, setRecordingTime] = useState(0)
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
+    const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     // Notes
     const [showNotes, setShowNotes] = useState(false)
@@ -124,6 +122,15 @@ export function ConversasTab() {
         void loadConversations()
     }, [loadConversations])
 
+    // Auto-refresh conversations list every 8s
+    useEffect(() => {
+        if (!slug) return
+        const id = setInterval(() => {
+            void loadConversations()
+        }, 8000)
+        return () => clearInterval(id)
+    }, [slug, loadConversations])
+
     // Load chat for selected contact
     const loadChat = useCallback(async (contactId: string) => {
         if (!slug) return
@@ -144,12 +151,10 @@ export function ConversasTab() {
     }, [slug])
 
     useEffect(() => {
-        if (selectedContactId) {
-            void loadChat(selectedContactId)
-        }
+        if (selectedContactId) void loadChat(selectedContactId)
     }, [selectedContactId, loadChat])
 
-    // Auto-scroll to bottom
+    // Auto-scroll
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
@@ -157,13 +162,11 @@ export function ConversasTab() {
     // Auto-refresh chat every 5s
     useEffect(() => {
         if (!selectedContactId || !slug) return
-        const id = setInterval(() => {
-            void loadChat(selectedContactId)
-        }, 5000)
+        const id = setInterval(() => void loadChat(selectedContactId), 5000)
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 
-    // Send text message
+    // Send text
     async function handleSendText(e: React.FormEvent) {
         e.preventDefault()
         if (!slug || !selectedContactId || !composeText.trim() || sending) return
@@ -182,7 +185,7 @@ export function ConversasTab() {
             if (res.ok) {
                 setComposeText('')
                 await loadChat(selectedContactId)
-                await loadConversations()
+                loadConversations().catch(() => {})
             } else {
                 const err = await res.json().catch(() => ({}))
                 d.setToast({ message: (err as { error?: string }).error || 'Erro ao enviar', variant: 'error' })
@@ -192,7 +195,7 @@ export function ConversasTab() {
         }
     }
 
-    // Send media
+    // Send media file
     async function handleSendMedia(file: File) {
         if (!slug || !selectedContactId || sending) return
         setSending(true)
@@ -217,13 +220,75 @@ export function ConversasTab() {
             })
             if (res.ok) {
                 await loadChat(selectedContactId)
-                await loadConversations()
+                loadConversations().catch(() => {})
             } else {
                 d.setToast({ message: 'Erro ao enviar midia', variant: 'error' })
             }
         } finally {
             setSending(false)
         }
+    }
+
+    // Audio recording
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+            mediaRecorderRef.current = mediaRecorder
+            audioChunksRef.current = []
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data)
+            }
+
+            mediaRecorder.onstop = async () => {
+                stream.getTracks().forEach(t => t.stop())
+                if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+                setRecordingTime(0)
+
+                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+                if (blob.size < 1000) return // too short
+
+                const file = new File([blob], 'audio.webm', { type: 'audio/webm' })
+                await handleSendMedia(file)
+            }
+
+            mediaRecorder.start()
+            setIsRecording(true)
+            setRecordingTime(0)
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingTime(t => t + 1)
+            }, 1000)
+        } catch {
+            d.setToast({ message: 'Sem acesso ao microfone', variant: 'error' })
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop()
+        }
+        setIsRecording(false)
+    }
+
+    function cancelRecording() {
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.ondataavailable = null
+            mediaRecorderRef.current.onstop = () => {
+                mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop())
+            }
+            mediaRecorderRef.current.stop()
+        }
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+        audioChunksRef.current = []
+        setIsRecording(false)
+        setRecordingTime(0)
+    }
+
+    function formatRecTime(s: number): string {
+        const m = Math.floor(s / 60)
+        const sec = s % 60
+        return `${m}:${sec.toString().padStart(2, '0')}`
     }
 
     // Pause / Resume AI
@@ -237,9 +302,9 @@ export function ConversasTab() {
         })
         if (res.ok) {
             await loadChat(selectedContactId)
-            await loadConversations()
+            loadConversations().catch(() => {})
             d.setToast({
-                message: action === 'pause_ai' ? 'IA pausada para este contato' : 'IA reativada para este contato',
+                message: action === 'pause_ai' ? 'IA pausada' : 'IA reativada',
                 variant: 'success'
             })
         }
@@ -262,6 +327,17 @@ export function ConversasTab() {
         }
     }
 
+    // Select contact
+    function selectContact(contactId: string) {
+        setSelectedContactId(contactId)
+        setShowNotes(false)
+    }
+
+    function goBack() {
+        setSelectedContactId(null)
+        setShowNotes(false)
+    }
+
     // Filter
     const filtered = conversations.filter(c => {
         if (!searchQ.trim()) return true
@@ -269,7 +345,7 @@ export function ConversasTab() {
         return c.name.toLowerCase().includes(q) || c.phone.includes(q)
     })
 
-    const aiStatus = convInfo ? statusBadge(convInfo.status) : statusBadge('none')
+    const aiSt = convInfo ? aiStatusCss(convInfo.status) : aiStatusCss('none')
 
     if (!slug) {
         return (
@@ -281,42 +357,27 @@ export function ConversasTab() {
     }
 
     return (
-        <div style={{ display: 'flex', height: 'calc(100vh - 48px)', gap: 0, overflow: 'hidden' }}>
-            {/* Contact list */}
-            <div style={{
-                width: selectedContactId ? 320 : '100%',
-                maxWidth: selectedContactId ? 320 : 600,
-                minWidth: selectedContactId ? 280 : undefined,
-                borderRight: selectedContactId ? '1px solid var(--border)' : 'none',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--surface)',
-                ...(selectedContactId ? {} : { margin: '0 auto' })
-            }}>
-                <div style={{ padding: '16px 12px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div className="chat-container">
+            {/* ── Sidebar / Contact List ── */}
+            <div className={`chat-sidebar ${selectedContactId ? 'chat-sidebar--has-chat' : ''}`}>
+                <div className="chat-sidebar-header">
+                    <div className="chat-sidebar-title">
                         <MessageSquare size={18} style={{ color: 'var(--primary)' }} />
-                        <span style={{ fontWeight: 700, fontSize: 16 }}>Conversas</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                            {filtered.length}
-                        </span>
+                        <h3>Conversas</h3>
+                        <span className="chat-sidebar-count">{filtered.length}</span>
                     </div>
-                    <div style={{ position: 'relative' }}>
-                        <Search size={14} style={{
-                            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-                            color: 'var(--text-muted)'
-                        }} />
+                    <div className="chat-search">
+                        <Search size={14} className="chat-search-icon" />
                         <input
                             className="input"
                             placeholder="Buscar contato..."
                             value={searchQ}
                             onChange={e => setSearchQ(e.target.value)}
-                            style={{ paddingLeft: 32, fontSize: 13 }}
                         />
                     </div>
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="chat-contact-list">
                     {loading && conversations.length === 0 && (
                         <p style={{ padding: 16, color: 'var(--text-muted)', fontSize: 13 }}>Carregando...</p>
                     )}
@@ -326,56 +387,33 @@ export function ConversasTab() {
                         </p>
                     )}
                     {filtered.map(c => {
-                        const st = statusBadge(c.ai_status || 'none')
-                        const isSelected = selectedContactId === c.contact_id
+                        const st = aiStatusCss(c.ai_status || 'none')
+                        const isActive = selectedContactId === c.contact_id
                         return (
                             <button
                                 key={c.contact_id}
                                 type="button"
-                                onClick={() => setSelectedContactId(c.contact_id)}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 10,
-                                    width: '100%',
-                                    padding: '10px 12px',
-                                    border: 'none',
-                                    borderBottom: '1px solid var(--border-subtle)',
-                                    background: isSelected ? 'var(--surface-hover)' : 'transparent',
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                    transition: 'background 0.15s'
-                                }}
+                                className={`chat-contact-item ${isActive ? 'chat-contact-item--active' : ''}`}
+                                onClick={() => selectContact(c.contact_id)}
                             >
-                                <div style={{
-                                    width: 40, height: 40, borderRadius: '50%',
-                                    background: 'var(--primary)', color: '#fff',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontWeight: 700, fontSize: 14, flexShrink: 0
-                                }}>
+                                <div className="chat-avatar">
                                     {c.name?.[0]?.toUpperCase() || '?'}
                                 </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
-                                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div className="chat-contact-info">
+                                    <div className="chat-contact-row">
+                                        <span className="chat-contact-name">
                                             {c.name || c.phone}
                                         </span>
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                                        <span className="chat-contact-time">
                                             {c.last_message_at ? timeLabel(c.last_message_at) : ''}
                                         </span>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                        <span style={{
-                                            fontSize: 12, color: 'var(--text-secondary)',
-                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                                        }}>
+                                    <div className="chat-contact-preview">
+                                        <span className="chat-contact-lastmsg">
                                             {c.last_sender_type ? `${senderLabel(c.last_sender_type)}: ` : ''}
                                             {c.last_message || 'Sem mensagens'}
                                         </span>
-                                        <span style={{
-                                            fontSize: 10, padding: '1px 6px', borderRadius: 8,
-                                            background: st.bg, color: st.color, fontWeight: 600, flexShrink: 0
-                                        }}>
+                                        <span className={`chat-status-dot ${st.cls}`}>
                                             {st.label}
                                         </span>
                                     </div>
@@ -386,51 +424,32 @@ export function ConversasTab() {
                 </div>
             </div>
 
-            {/* Chat view */}
-            {selectedContactId && (
-                <div style={{
-                    flex: 1, display: 'flex', flexDirection: 'column',
-                    background: 'var(--bg)', minWidth: 0
-                }}>
-                    {/* Chat header */}
-                    <div style={{
-                        padding: '10px 16px', borderBottom: '1px solid var(--border)',
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        background: 'var(--surface)'
-                    }}>
-                        <button
-                            type="button"
-                            onClick={() => setSelectedContactId(null)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-secondary)' }}
-                            title="Voltar"
-                        >
+            {/* ── Chat View ── */}
+            {selectedContactId ? (
+                <div className="chat-view">
+                    {/* Header */}
+                    <div className="chat-header">
+                        <button type="button" className="chat-header-back" onClick={goBack} title="Voltar">
                             <ArrowLeft size={18} />
                         </button>
-                        <div style={{
-                            width: 36, height: 36, borderRadius: '50%',
-                            background: 'var(--primary)', color: '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontWeight: 700, fontSize: 14
-                        }}>
-                            {contactInfo?.name?.[0]?.toUpperCase() || '?'}
+                        <div className="chat-avatar chat-avatar--small">
+                            {contactInfo?.avatar_url
+                                ? <img src={contactInfo.avatar_url} alt="" />
+                                : (contactInfo?.name?.[0]?.toUpperCase() || '?')
+                            }
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                        <div className="chat-header-info">
+                            <div className="chat-header-name">
                                 {contactInfo?.name || 'Carregando...'}
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <div className="chat-header-phone">
                                 <Phone size={10} />
                                 {contactInfo?.phone || ''}
                             </div>
                         </div>
-
-                        {/* AI status + controls */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{
-                                fontSize: 11, padding: '3px 8px', borderRadius: 10,
-                                background: aiStatus.bg, color: aiStatus.color, fontWeight: 600
-                            }}>
-                                {aiStatus.label}
+                        <div className="chat-header-actions">
+                            <span className={`chat-status-dot ${aiSt.cls}`}>
+                                {aiSt.label}
                             </span>
                             {convInfo?.status === 'active' && (
                                 <button
@@ -438,7 +457,6 @@ export function ConversasTab() {
                                     className="btn btn-secondary btn-compact"
                                     onClick={() => handleToggleAI('pause_ai')}
                                     title="Pausar IA"
-                                    style={{ fontSize: 11, gap: 4 }}
                                 >
                                     <Pause size={12} /> Pausar
                                 </button>
@@ -449,7 +467,6 @@ export function ConversasTab() {
                                     className="btn btn-primary btn-compact"
                                     onClick={() => handleToggleAI('resume_ai')}
                                     title="Reativar IA"
-                                    style={{ fontSize: 11, gap: 4 }}
                                 >
                                     <Play size={12} /> Ativar IA
                                 </button>
@@ -459,7 +476,6 @@ export function ConversasTab() {
                                 className="btn btn-secondary btn-compact"
                                 onClick={() => setShowNotes(!showNotes)}
                                 title="Notas internas"
-                                style={{ fontSize: 11, gap: 4 }}
                             >
                                 <StickyNote size={12} />
                             </button>
@@ -468,13 +484,10 @@ export function ConversasTab() {
 
                     {/* Notes panel */}
                     {showNotes && (
-                        <div style={{
-                            padding: '10px 16px', borderBottom: '1px solid var(--border)',
-                            background: '#fefce818'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <div className="chat-notes">
+                            <div className="chat-notes-header">
                                 <StickyNote size={14} style={{ color: '#d97706' }} />
-                                <span style={{ fontSize: 12, fontWeight: 600, color: '#d97706' }}>
+                                <span className="chat-notes-label">
                                     Notas internas (nao enviadas ao cliente)
                                 </span>
                                 <button
@@ -491,7 +504,6 @@ export function ConversasTab() {
                                 value={notesText}
                                 onChange={e => setNotesText(e.target.value)}
                                 placeholder="Anote informacoes sobre esta conversa..."
-                                style={{ fontSize: 13, resize: 'vertical' }}
                             />
                             <button
                                 type="button"
@@ -506,94 +518,68 @@ export function ConversasTab() {
                     )}
 
                     {/* Messages */}
-                    <div style={{
-                        flex: 1, overflowY: 'auto', padding: '12px 16px',
-                        display: 'flex', flexDirection: 'column', gap: 6
-                    }}>
+                    <div className="chat-messages">
                         {chatLoading && chatMessages.length === 0 && (
-                            <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                            <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, padding: 20 }}>
                                 Carregando mensagens...
                             </p>
                         )}
+
                         {chatMessages.map(msg => {
-                            const isContact = msg.sender_type === 'contact'
-                            const isAi = msg.sender_type === 'ai'
+                            const st = msg.sender_type
+                            const rowCls = st === 'contact' ? 'chat-msg-row--contact'
+                                : st === 'ai' ? 'chat-msg-row--ai'
+                                    : 'chat-msg-row--user'
+                            const bubbleCls = st === 'contact' ? 'chat-bubble--contact'
+                                : st === 'ai' ? 'chat-bubble--ai'
+                                    : 'chat-bubble--user'
+                            const senderCls = `chat-bubble-sender--${st === 'contact' ? 'contact' : st === 'ai' ? 'ai' : 'user'}`
+                            const SenderIcon = st === 'ai' ? Bot : User
+
                             return (
-                                <div
-                                    key={msg.id}
-                                    style={{
-                                        display: 'flex',
-                                        justifyContent: isContact ? 'flex-start' : 'flex-end',
-                                        maxWidth: '100%'
-                                    }}
-                                >
-                                    <div style={{
-                                        maxWidth: '75%',
-                                        padding: '8px 12px',
-                                        borderRadius: isContact ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
-                                        background: isContact
-                                            ? 'var(--surface)'
-                                            : isAi
-                                                ? '#7c3aed15'
-                                                : '#2563eb15',
-                                        border: `1px solid ${isContact ? 'var(--border)' : isAi ? '#7c3aed30' : '#2563eb30'}`
-                                    }}>
-                                        <div style={{
-                                            fontSize: 11, fontWeight: 600, marginBottom: 2,
-                                            color: senderColor(msg.sender_type),
-                                            display: 'flex', alignItems: 'center', gap: 4
-                                        }}>
-                                            {isAi ? <Bot size={10} /> : isContact ? <User size={10} /> : <User size={10} />}
-                                            {senderLabel(msg.sender_type)}
+                                <div key={msg.id} className={`chat-msg-row ${rowCls}`}>
+                                    <div className={`chat-bubble ${bubbleCls}`}>
+                                        <div className={`chat-bubble-sender ${senderCls}`}>
+                                            <SenderIcon size={10} />
+                                            {senderLabel(st)}
                                         </div>
+
+                                        {/* Media */}
                                         {msg.media_type && msg.media_url && (
-                                            <div style={{ marginBottom: 4 }}>
+                                            <div className="chat-bubble-media">
                                                 {msg.media_type === 'image' && (
-                                                    <img
-                                                        src={msg.media_url}
-                                                        alt="imagem"
-                                                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6 }}
-                                                    />
+                                                    <img src={msg.media_url} alt="imagem" loading="lazy" />
                                                 )}
                                                 {msg.media_type === 'video' && (
-                                                    <video
-                                                        src={msg.media_url}
-                                                        controls
-                                                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6 }}
-                                                    />
+                                                    <video src={msg.media_url} controls preload="metadata" />
                                                 )}
                                                 {msg.media_type === 'audio' && (
-                                                    <audio src={msg.media_url} controls style={{ maxWidth: '100%' }} />
+                                                    <audio src={msg.media_url} controls preload="metadata" />
                                                 )}
                                                 {msg.media_type === 'document' && (
-                                                    <a href={msg.media_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)' }}>
-                                                        <Paperclip size={12} /> Documento anexado
+                                                    <a href={msg.media_url} target="_blank" rel="noreferrer">
+                                                        <FileText size={14} /> Documento anexado
                                                     </a>
                                                 )}
                                             </div>
                                         )}
                                         {msg.media_type && !msg.media_url && (
-                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: 2 }}>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                                 [{msg.media_type}]
                                             </div>
                                         )}
-                                        <div style={{
-                                            fontSize: 13, lineHeight: 1.45,
-                                            color: 'var(--text-primary)',
-                                            whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-                                        }}>
-                                            {msg.body || ''}
-                                        </div>
-                                        <div style={{
-                                            fontSize: 10, color: 'var(--text-muted)',
-                                            textAlign: 'right', marginTop: 4
-                                        }}>
+
+                                        {msg.body && (
+                                            <div className="chat-bubble-text">{msg.body}</div>
+                                        )}
+
+                                        <div className="chat-bubble-time">
                                             {new Date(msg.created_at).toLocaleString('pt-BR', {
                                                 hour: '2-digit', minute: '2-digit',
                                                 day: '2-digit', month: '2-digit'
                                             })}
                                             {msg.status === 'failed' && (
-                                                <span style={{ color: '#dc2626', marginLeft: 4 }}>falhou</span>
+                                                <span className="chat-bubble-failed">falhou</span>
                                             )}
                                         </div>
                                     </div>
@@ -601,19 +587,13 @@ export function ConversasTab() {
                             )
                         })}
 
-                        {/* Conversation summary when ended/handed_off */}
+                        {/* Conversation summary block */}
                         {convInfo && (convInfo.status === 'handed_off' || convInfo.status === 'ended') && chatMessages.length > 0 && (
-                            <div style={{
-                                margin: '8px auto', padding: '8px 16px',
-                                background: 'var(--surface-secondary)',
-                                borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)',
-                                textAlign: 'center', maxWidth: 400,
-                                border: '1px solid var(--border-subtle)'
-                            }}>
+                            <div className="chat-system-block">
                                 <strong>{convInfo.status === 'handed_off' ? 'IA Pausada' : 'Conversa Finalizada'}</strong>
                                 {convInfo.handoff_reason && (
                                     <div style={{ marginTop: 4, fontStyle: 'italic' }}>
-                                        Motivo: {convInfo.handoff_reason}
+                                        {convInfo.handoff_reason}
                                     </div>
                                 )}
                                 <div style={{ marginTop: 4 }}>
@@ -626,55 +606,84 @@ export function ConversasTab() {
                     </div>
 
                     {/* Compose bar */}
-                    <form
-                        onSubmit={handleSendText}
-                        style={{
-                            padding: '8px 12px',
-                            borderTop: '1px solid var(--border)',
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            background: 'var(--surface)'
-                        }}
-                    >
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
-                            onChange={e => {
-                                const file = e.target.files?.[0]
-                                if (file) void handleSendMedia(file)
-                                e.target.value = ''
-                            }}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={sending}
-                            style={{
-                                background: 'none', border: 'none', cursor: 'pointer',
-                                padding: 6, color: 'var(--text-secondary)'
-                            }}
-                            title="Enviar imagem, video, audio ou documento"
-                        >
-                            <Paperclip size={18} />
-                        </button>
-                        <input
-                            className="input"
-                            placeholder="Digite uma mensagem..."
-                            value={composeText}
-                            onChange={e => setComposeText(e.target.value)}
-                            disabled={sending}
-                            style={{ flex: 1, fontSize: 13 }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={!composeText.trim() || sending}
-                            className="btn btn-primary btn-compact"
-                            style={{ padding: '6px 12px' }}
-                        >
-                            <Send size={14} />
-                        </button>
-                    </form>
+                    {isRecording ? (
+                        <div className="chat-compose">
+                            <button
+                                type="button"
+                                className="chat-compose-btn"
+                                onClick={cancelRecording}
+                                title="Cancelar"
+                            >
+                                <X size={18} />
+                            </button>
+                            <div style={{
+                                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                                fontSize: 13, color: '#dc2626', fontWeight: 600
+                            }}>
+                                <Mic size={16} className="chat-compose-btn--recording" />
+                                Gravando {formatRecTime(recordingTime)}
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-compact chat-compose-send"
+                                onClick={stopRecording}
+                            >
+                                <Send size={14} /> Enviar
+                            </button>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSendText} className="chat-compose">
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                style={{ display: 'none' }}
+                                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                                onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) void handleSendMedia(file)
+                                    e.target.value = ''
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="chat-compose-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={sending}
+                                title="Enviar arquivo"
+                            >
+                                <Paperclip size={18} />
+                            </button>
+                            <button
+                                type="button"
+                                className="chat-compose-btn"
+                                onClick={startRecording}
+                                disabled={sending}
+                                title="Gravar audio"
+                            >
+                                <Mic size={18} />
+                            </button>
+                            <input
+                                type="text"
+                                className="input"
+                                placeholder="Digite uma mensagem..."
+                                value={composeText}
+                                onChange={e => setComposeText(e.target.value)}
+                                disabled={sending}
+                            />
+                            <button
+                                type="submit"
+                                disabled={!composeText.trim() || sending}
+                                className="btn btn-primary btn-compact chat-compose-send"
+                            >
+                                <Send size={14} />
+                            </button>
+                        </form>
+                    )}
+                </div>
+            ) : (
+                <div className="chat-empty">
+                    <MessageSquare size={48} className="chat-empty-icon" />
+                    <span>Selecione uma conversa</span>
                 </div>
             )}
         </div>

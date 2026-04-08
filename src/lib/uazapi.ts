@@ -45,23 +45,13 @@ export async function createRemoteInstance(displayName: string): Promise<{ token
     }
 
     const base = getUazapiBaseUrl()
-
-    // Monta a webhook URL para esta instância — será preenchida com o token real após criação
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/+$/, '')
-
-    const initBody: Record<string, unknown> = { name: displayName }
-    // uazapiGO v2 aceita `webhook` no body de /instance/init para pré-configurar
-    if (siteUrl) {
-        initBody.webhook = `${siteUrl}/api/whatsapp/webhook`
-    }
-
     const res = await fetch(`${base}/instance/init`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             admintoken: adm
         },
-        body: JSON.stringify(initBody)
+        body: JSON.stringify({ name: displayName })
     })
 
     if (!res.ok) {
@@ -186,40 +176,55 @@ export async function deleteRemoteInstance(instanceToken: string): Promise<void>
 }
 
 /**
- * POST /instance/settings (ou PUT /instance/webhook)
- * Atualiza a webhook URL da instância já criada.
+ * POST /webhook (modo simples — recomendado pela spec)
+ * Configura o webhook da instância para receber eventos.
  * Auth: header `token` (token da instância).
- * Tenta vários endpoints comuns do uazapiGO v2.
+ *
+ * Payload:
+ *   url: URL destino
+ *   enabled: true
+ *   events: ["messages"] — só precisamos de mensagens recebidas
+ *   excludeMessages: ["wasSentByApi", "isGroupYes"] — evita eco e grupos
+ *   addUrlEvents: false
+ *   addUrlTypesMessages: false
+ *
+ * Modo simples (sem action/id): cria ou atualiza automaticamente.
  */
-export async function setWebhookUrl(instanceToken: string, webhookUrl: string): Promise<boolean> {
+export async function configureInstanceWebhook(instanceToken: string, webhookUrl: string): Promise<boolean> {
     const t = instanceToken.trim()
     if (!t || !webhookUrl) return false
 
     const base = getUazapiBaseUrl()
 
-    // Tentativa 1: POST /instance/settings (padrão uazapiGO v2)
-    for (const endpoint of ['/instance/settings', '/instance/webhook']) {
-        try {
-            const res = await fetch(`${base}${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    token: t
-                },
-                body: JSON.stringify({ webhook: webhookUrl })
+    try {
+        const res = await fetch(`${base}/webhook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                token: t
+            },
+            body: JSON.stringify({
+                enabled: true,
+                url: webhookUrl,
+                events: ['messages'],
+                excludeMessages: ['wasSentByApi', 'isGroupYes'],
+                addUrlEvents: false,
+                addUrlTypesMessages: false
             })
-            if (res.ok) return true
-            // 404 = endpoint não existe nesta versão, tenta próximo
-            if (res.status === 404) continue
-            // Outro erro: loga mas não falha
-            const errText = await res.text().catch(() => '')
-            console.warn(`Uazapi setWebhookUrl ${endpoint}: ${res.status} ${errText}`)
-        } catch (e) {
-            console.warn(`Uazapi setWebhookUrl ${endpoint} error:`, e)
-        }
-    }
+        })
 
-    return false
+        if (res.ok) {
+            console.log(`[uazapi] Webhook configurado para instância: ${webhookUrl}`)
+            return true
+        }
+
+        const errText = await res.text().catch(() => '')
+        console.warn(`[uazapi] Falha ao configurar webhook: ${res.status} ${errText}`)
+        return false
+    } catch (e) {
+        console.warn('[uazapi] Erro ao configurar webhook:', e)
+        return false
+    }
 }
 
 // ──────────────────────────────────────────────── Connect

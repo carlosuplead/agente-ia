@@ -51,6 +51,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Uazapi devolveu token da instância vazio' }, { status: 502 })
         }
 
+        // Auto-configurar webhook URL com o token da instância
+        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/\/+$/, '')
+        if (siteUrl) {
+            const webhookUrl = `${siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`}/api/whatsapp/webhook?token=${encodeURIComponent(instanceToken)}`
+            const webhookSet = await uazapi.setWebhookUrl(instanceToken, webhookUrl)
+            if (!webhookSet) {
+                console.warn(`[instances] Webhook auto-config falhou para ${workspace_slug}. Configure manualmente no painel Uazapi: ${webhookUrl}`)
+            }
+        }
+
         const { data: row, error } = await supabase
             .from('whatsapp_instances')
             .insert({

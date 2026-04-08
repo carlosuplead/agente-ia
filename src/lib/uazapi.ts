@@ -45,13 +45,23 @@ export async function createRemoteInstance(displayName: string): Promise<{ token
     }
 
     const base = getUazapiBaseUrl()
+
+    // Monta a webhook URL para esta instância — será preenchida com o token real após criação
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/+$/, '')
+
+    const initBody: Record<string, unknown> = { name: displayName }
+    // uazapiGO v2 aceita `webhook` no body de /instance/init para pré-configurar
+    if (siteUrl) {
+        initBody.webhook = `${siteUrl}/api/whatsapp/webhook`
+    }
+
     const res = await fetch(`${base}/instance/init`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             admintoken: adm
         },
-        body: JSON.stringify({ name: displayName })
+        body: JSON.stringify(initBody)
     })
 
     if (!res.ok) {
@@ -173,6 +183,43 @@ export async function deleteRemoteInstance(instanceToken: string): Promise<void>
 
     const text = await res.text().catch(() => '')
     throw new Error(`Uazapi delete instance: ${res.status} ${text}`)
+}
+
+/**
+ * POST /instance/settings (ou PUT /instance/webhook)
+ * Atualiza a webhook URL da instância já criada.
+ * Auth: header `token` (token da instância).
+ * Tenta vários endpoints comuns do uazapiGO v2.
+ */
+export async function setWebhookUrl(instanceToken: string, webhookUrl: string): Promise<boolean> {
+    const t = instanceToken.trim()
+    if (!t || !webhookUrl) return false
+
+    const base = getUazapiBaseUrl()
+
+    // Tentativa 1: POST /instance/settings (padrão uazapiGO v2)
+    for (const endpoint of ['/instance/settings', '/instance/webhook']) {
+        try {
+            const res = await fetch(`${base}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    token: t
+                },
+                body: JSON.stringify({ webhook: webhookUrl })
+            })
+            if (res.ok) return true
+            // 404 = endpoint não existe nesta versão, tenta próximo
+            if (res.status === 404) continue
+            // Outro erro: loga mas não falha
+            const errText = await res.text().catch(() => '')
+            console.warn(`Uazapi setWebhookUrl ${endpoint}: ${res.status} ${errText}`)
+        } catch (e) {
+            console.warn(`Uazapi setWebhookUrl ${endpoint} error:`, e)
+        }
+    }
+
+    return false
 }
 
 // ──────────────────────────────────────────────── Connect

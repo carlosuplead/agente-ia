@@ -177,6 +177,10 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 - [x] Fila de envio com rate limiting
 - [x] Estatísticas de entrega
 - [x] Importação de contatos CSV
+- [x] **Gestão de contactos sempre visível** (não depende de conexão WhatsApp)
+- [x] **Envio rápido** via Uazapi/qualquer provider (até 50 contactos)
+- [x] **Abas internas**: Contactos, Envio Rápido, Campanhas, Histórico
+- [x] **API `/api/whatsapp/broadcast-quick`** para envio de texto em lote
 
 ### 4.13 Portal do Cliente
 - [x] Estatísticas de uso (mensagens, conversas, tokens)
@@ -191,6 +195,14 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 - [x] Gerenciar acessos (remover clientes)
 - [x] URL do portal compartilhável
 - [x] **Detalhes expandíveis (Workspace ID, Schema slug, SQL) — só admins**
+
+### 4.16 Atividade (Activity Log)
+- [x] Aba dedicada "Atividade" na sidebar (Activity icon)
+- [x] Eventos recentes em tempo real (auto-refresh 10s)
+- [x] Filtros: Todos, Recebidas, IA, Equipa
+- [x] Stats resumo: Total eventos, Recebidas, IA, Equipa
+- [x] Nome e telefone do contacto em cada evento
+- [x] API `/api/messages/recent` com JOIN de contactos
 
 ### 4.15 Relatórios e Analytics
 - [x] Aba dedicada "Relatórios" na sidebar (BarChart3 icon)
@@ -228,7 +240,7 @@ Plataforma SaaS multi-tenant que permite a qualquer empresa conectar um número 
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── api/                # 37 API routes
+│   ├── api/                # 38 API routes
 │   │   ├── admin/          # Gerenciamento de users/workspaces
 │   │   ├── ai/             # Config, processamento, cron, follow-up
 │   │   ├── auth/           # Login, signup, OAuth (Google, Meta)
@@ -242,7 +254,7 @@ src/
 │   └── signup/             # Página de cadastro
 ├── components/
 │   ├── client-portal/      # ClientPortalApp
-│   └── dashboard/          # 15 componentes do painel (inclui RelatoriosTab)
+│   └── dashboard/          # 17 componentes do painel (inclui RelatoriosTab, AtividadeTab)
 ├── lib/
 │   ├── ai-agent/           # 17 módulos (LLM, tools, follow-up, etc.)
 │   ├── auth/               # Acesso, admin, redirects

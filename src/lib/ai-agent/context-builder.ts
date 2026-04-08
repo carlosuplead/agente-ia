@@ -41,14 +41,14 @@ export async function buildContext(
         : [contactId, opts.aiConversationId, cutoff]
 
     const messages = (await sql.unsafe(
-        `SELECT sender_type, body FROM (
-            SELECT sender_type, body, created_at FROM ${sch}.messages
+        `SELECT sender_type, body, media_type FROM (
+            SELECT sender_type, body, media_type, created_at FROM ${sch}.messages
             WHERE contact_id = $1::uuid AND ${innerWhere}
             ORDER BY created_at DESC
             LIMIT ${limit}
         ) sub ORDER BY sub.created_at ASC`,
         params
-    )) as unknown as { sender_type: string; body: string | null }[]
+    )) as unknown as { sender_type: string; body: string | null; media_type: string | null }[]
 
     const lines = messages.map(m => {
         const sender =
@@ -57,8 +57,20 @@ export async function buildContext(
                 : m.sender_type === 'ai'
                   ? opts.labelAssistant
                   : opts.labelTeam
+        // Indicador de tipo de mídia para a IA saber diferenciar texto de mídia
+        let content = m.body || '[Mídia]'
+        if (m.media_type && m.media_type !== 'text') {
+            const mediaLabel =
+                m.media_type === 'audio' ? 'áudio'
+                : m.media_type === 'image' ? 'imagem'
+                : m.media_type === 'video' ? 'vídeo'
+                : m.media_type === 'document' ? 'documento'
+                : m.media_type === 'sticker' ? 'sticker'
+                : m.media_type
+            content = `[${mediaLabel}] ${m.body || ''}`
+        }
         // Delimitadores claros para dificultar prompt injection via mensagens do contato
-        return `[${sender}]: ${m.body || '[Mídia]'}`
+        return `[${sender}]: ${content.trim() || '[Mídia]'}`
     })
 
     return {

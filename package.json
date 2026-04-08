@@ -15,6 +15,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.0",
     "googleapis": "^171.4.0",
+    "lucide-react": "^1.7.0",
     "luxon": "^3.7.2",
     "next": "^15.5.14",
     "openai": "^4.85.0",

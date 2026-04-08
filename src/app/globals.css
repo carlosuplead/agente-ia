@@ -31,6 +31,35 @@
   --radius-xl: 20px;
 }
 
+/* ========== Light Mode ========== */
+[data-theme="light"] {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-secondary: #f0f0f3;
+  --surface-card: #ffffff;
+  --surface-hover: #e8e8ec;
+  --surface-bright: #dcdce0;
+  --text-primary: #1a1a2e;
+  --text-secondary: #5a5a72;
+  --text-muted: #8a8a9a;
+  --accent: #5b5eff;
+  --accent-dim: #4a4de0;
+  --accent-hover: #6e70ff;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+}
+
+[data-theme="light"] .btn-primary {
+  color: #ffffff;
+}
+
+[data-theme="light"] .login-card,
+[data-theme="light"] .modal-dialog .card {
+  box-shadow: var(--shadow-lg);
+}
+
 * {
   margin: 0;
   padding: 0;

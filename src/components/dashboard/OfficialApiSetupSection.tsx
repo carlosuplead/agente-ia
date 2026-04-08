@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Smartphone } from 'lucide-react'
 import { useDashboard } from './dashboard-context'
 
 const META_WA_CREDENTIALS_DOCS =
@@ -92,7 +93,7 @@ export function OfficialApiSetupSection() {
                             fontSize: 22
                         }}
                     >
-                        📱
+                        <Smartphone size={20} />
                     </div>
                     <div>
                         <div className="card-title" style={{ margin: 0 }}>

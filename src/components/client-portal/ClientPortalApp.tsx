@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { Zap } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 import { Toast } from '@/components/dashboard/Toast'
 import { ClientPortalStats } from './ClientPortalStats'
@@ -37,7 +38,7 @@ export function ClientPortalApp() {
             <header className="client-portal-header">
                 <div className="client-portal-brand">
                     <div className="sidebar-brand-icon" aria-hidden="true">
-                        ⚡
+                        <Zap size={18} />
                     </div>
                     <div>
                         <h1 className="client-portal-title">Área do cliente</h1>

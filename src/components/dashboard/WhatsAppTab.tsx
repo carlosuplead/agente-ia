@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo } from 'react'
+import { Smartphone } from 'lucide-react'
 import { ClientPortalStats } from '@/components/client-portal/ClientPortalStats'
 import { TokenUsageSection } from '@/components/dashboard/TokenUsageSection'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
@@ -78,7 +79,7 @@ export function WhatsAppTab() {
                     <div className="card">
                         <div className="card-header">
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontSize: 20 }}>📱</span>
+                                <Smartphone size={20} />
                                 <span className="card-title">
                                     {isOfficial ? 'WhatsApp (API Oficial)' : 'WhatsApp (QR Code)'}
                                 </span>

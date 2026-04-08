@@ -3,18 +3,27 @@
 import { useEffect } from 'react'
 import type { DashboardTab } from '@/lib/dashboard/types'
 import { useDashboard } from './dashboard-context'
+import {
+    LayoutGrid,
+    MessageCircle,
+    Megaphone,
+    Bot,
+    Settings,
+    Menu
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
-const baseTabs: { id: DashboardTab; label: string; emoji: string }[] = [
-    { id: 'workspaces', label: 'Workspaces', emoji: '🏢' },
-    { id: 'connection', label: 'WhatsApp', emoji: '📱' },
-    { id: 'disparos', label: 'Disparos', emoji: '📣' },
-    { id: 'config', label: 'Agente IA', emoji: '🤖' }
+const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
+    { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
+    { id: 'connection', label: 'WhatsApp', icon: MessageCircle },
+    { id: 'disparos', label: 'Disparos', icon: Megaphone },
+    { id: 'config', label: 'Agente IA', icon: Bot }
 ]
 
-const settingsTab: { id: DashboardTab; label: string; emoji: string } = {
+const settingsTab: { id: DashboardTab; label: string; icon: LucideIcon } = {
     id: 'workspace_settings',
     label: 'Definições',
-    emoji: '⚙️'
+    icon: Settings
 }
 
 export function MobileNav() {
@@ -40,7 +49,7 @@ export function MobileNav() {
                     onClick={() => d.setMobileNavOpen(o => !o)}
                 >
                     <span className="sr-only">Abrir menu</span>
-                    <span aria-hidden="true">☰</span>
+                    <Menu size={20} aria-hidden="true" />
                 </button>
                 <span className="mobile-topbar-title">AI Agent</span>
                 <span className="mobile-topbar-spacer" aria-hidden="true" />
@@ -84,20 +93,23 @@ export function MobileNav() {
                         </div>
                     )}
                     <nav className="mobile-drawer-nav" aria-label="Secções">
-                        {[...baseTabs, ...(d.showWorkspaceSettingsNav ? [settingsTab] : [])].map(t => (
-                            <button
-                                key={t.id}
-                                type="button"
-                                className={`nav-item ${d.activeTab === t.id ? 'active' : ''}`}
-                                aria-current={d.activeTab === t.id ? 'page' : undefined}
-                                onClick={() => d.requestTab(t.id)}
-                            >
-                                <span className="nav-item-icon" aria-hidden="true">
-                                    {t.emoji}
-                                </span>
-                                <span>{t.label}</span>
-                            </button>
-                        ))}
+                        {[...baseTabs, ...(d.showWorkspaceSettingsNav ? [settingsTab] : [])].map(t => {
+                            const Icon = t.icon
+                            return (
+                                <button
+                                    key={t.id}
+                                    type="button"
+                                    className={`nav-item ${d.activeTab === t.id ? 'active' : ''}`}
+                                    aria-current={d.activeTab === t.id ? 'page' : undefined}
+                                    onClick={() => d.requestTab(t.id)}
+                                >
+                                    <span className="nav-item-icon" aria-hidden="true">
+                                        <Icon size={18} />
+                                    </span>
+                                    <span>{t.label}</span>
+                                </button>
+                            )
+                        })}
                     </nav>
                     <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={d.logout}>
                         Sair

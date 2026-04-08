@@ -178,6 +178,16 @@ export async function GET(request: Request) {
                 if (remote.qrcode || remote.pairingCode) {
                     uazapiLive = { qrcode: remote.qrcode, pairingCode: remote.pairingCode }
                 }
+
+                // Auto-configure webhook if connected (ensures webhook is active)
+                if (remote.dbStatus === 'connected' && r.instance_token) {
+                    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/\/+$/, '')
+                    if (siteUrl) {
+                        const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
+                        const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(r.instance_token)}`
+                        uazapi.configureInstanceWebhook(r.instance_token, webhookUrl).catch(() => {})
+                    }
+                }
             }
         }
 

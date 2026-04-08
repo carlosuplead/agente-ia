@@ -196,35 +196,38 @@ export async function configureInstanceWebhook(instanceToken: string, webhookUrl
 
     const base = getUazapiBaseUrl()
 
-    try {
-        const res = await fetch(`${base}/webhook`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                token: t
-            },
-            body: JSON.stringify({
-                enabled: true,
-                url: webhookUrl,
-                events: ['messages'],
-                excludeMessages: ['wasSentByApi', 'isGroupYes'],
-                addUrlEvents: false,
-                addUrlTypesMessages: false
+    // Try POST first (uazapiGO v2), then PUT (v1 fallback)
+    for (const method of ['POST', 'PUT'] as const) {
+        try {
+            const res = await fetch(`${base}/webhook`, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    token: t
+                },
+                body: JSON.stringify({
+                    enabled: true,
+                    url: webhookUrl,
+                    events: ['messages', 'status', 'chats'],
+                    excludeMessages: ['isGroupYes'],
+                    addUrlEvents: false,
+                    addUrlTypesMessages: false
+                })
             })
-        })
 
-        if (res.ok) {
-            console.log(`[uazapi] Webhook configurado para instância: ${webhookUrl}`)
-            return true
+            if (res.ok) {
+                console.log(`[uazapi] Webhook configurado (${method}) para instância: ${webhookUrl}`)
+                return true
+            }
+
+            const errText = await res.text().catch(() => '')
+            console.warn(`[uazapi] Webhook ${method} falhou: ${res.status} ${errText}`)
+        } catch (e) {
+            console.warn(`[uazapi] Erro ao configurar webhook (${method}):`, e)
         }
-
-        const errText = await res.text().catch(() => '')
-        console.warn(`[uazapi] Falha ao configurar webhook: ${res.status} ${errText}`)
-        return false
-    } catch (e) {
-        console.warn('[uazapi] Erro ao configurar webhook:', e)
-        return false
     }
+
+    return false
 }
 
 // ──────────────────────────────────────────────── Connect

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         }
 
         // Auto-configurar webhook via POST /webhook (spec uazapiGO v2)
-        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/\/+$/, '')
+        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
         if (siteUrl) {
             const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
             const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(instanceToken)}`
@@ -182,7 +182,7 @@ export async function GET(request: Request) {
                 // Auto-configure webhook only when status just changed to connected
                 const justConnected = remote.dbStatus === 'connected' && r.status !== 'connected'
                 if (justConnected && r.instance_token) {
-                    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/\/+$/, '')
+                    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
                     if (siteUrl) {
                         const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
                         const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(r.instance_token)}`

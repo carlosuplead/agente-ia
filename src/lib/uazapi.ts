@@ -192,39 +192,61 @@ export async function deleteRemoteInstance(instanceToken: string): Promise<void>
  */
 export async function configureInstanceWebhook(instanceToken: string, webhookUrl: string): Promise<boolean> {
     const t = instanceToken.trim()
-    if (!t || !webhookUrl) return false
+    // Limpa newlines que podem vir de variáveis de ambiente
+    const cleanUrl = webhookUrl.replace(/[\r\n]+/g, '')
+    if (!t || !cleanUrl) return false
 
     const base = getUazapiBaseUrl()
+    const webhookPayload = {
+        enabled: true,
+        url: cleanUrl,
+        events: ['messages', 'status', 'chats'],
+        excludeMessages: ['isGroupYes'],
+        addUrlEvents: false,
+        addUrlTypesMessages: false
+    }
 
-    // Try POST first (uazapiGO v2), then PUT (v1 fallback)
-    for (const method of ['POST', 'PUT'] as const) {
-        try {
-            const res = await fetch(`${base}/webhook`, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    token: t
-                },
-                body: JSON.stringify({
-                    enabled: true,
-                    url: webhookUrl,
-                    events: ['messages', 'status', 'chats'],
-                    excludeMessages: ['isGroupYes'],
-                    addUrlEvents: false,
-                    addUrlTypesMessages: false
-                })
-            })
-
-            if (res.ok) {
-                console.log(`[uazapi] Webhook configurado (${method}) para instância: ${webhookUrl}`)
-                return true
+    // 1) Busca webhooks existentes para obter o id
+    let existingId: string | null = null
+    try {
+        const listRes = await fetch(`${base}/webhook`, {
+            method: 'GET',
+            headers: { token: t }
+        })
+        if (listRes.ok) {
+            const list = (await listRes.json()) as Array<{ id?: string; url?: string }>
+            if (Array.isArray(list) && list.length > 0) {
+                existingId = list[0].id || null
             }
-
-            const errText = await res.text().catch(() => '')
-            console.warn(`[uazapi] Webhook ${method} falhou: ${res.status} ${errText}`)
-        } catch (e) {
-            console.warn(`[uazapi] Erro ao configurar webhook (${method}):`, e)
         }
+    } catch {
+        // ignora — tenta criar novo
+    }
+
+    // 2) Se existe, atualiza com action:"update" + id; senão cria com action:"create"
+    try {
+        const body = existingId
+            ? { action: 'update', id: existingId, ...webhookPayload }
+            : { action: 'create', ...webhookPayload }
+
+        const res = await fetch(`${base}/webhook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                token: t
+            },
+            body: JSON.stringify(body)
+        })
+
+        if (res.ok) {
+            console.log(`[uazapi] Webhook ${existingId ? 'atualizado' : 'criado'} para instância: ${cleanUrl}`)
+            return true
+        }
+
+        const errText = await res.text().catch(() => '')
+        console.warn(`[uazapi] Webhook POST falhou: ${res.status} ${errText}`)
+    } catch (e) {
+        console.warn(`[uazapi] Erro ao configurar webhook:`, e)
     }
 
     return false

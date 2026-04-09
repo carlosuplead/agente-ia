@@ -16,12 +16,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'workspace_slug is required' }, { status: 400 })
         }
 
-        const access = await requireWorkspaceRole(supabase, workspace_slug, [
-            'owner',
-            'admin',
-            'member',
-            'client'
-        ])
+        const access = await requireWorkspaceInternal(supabase, workspace_slug)
         if (!access.ok) return access.response
 
         const { data: existing } = await supabase
@@ -66,7 +61,9 @@ export async function POST(request: Request) {
                 const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(instanceToken)}`
                 const webhookSet = await uazapi.configureInstanceWebhook(instanceToken, webhookUrl)
                 if (!webhookSet) {
-                    console.warn(`[instances] Webhook auto-config falhou para ${workspace_slug}. Configure manualmente: ${webhookUrl}`)
+                    console.warn(
+                        `[instances] Webhook auto-config falhou para ${workspace_slug}. Configure manualmente em Uazapi (URL com token na query — não logar).`
+                    )
                 }
             }
         }

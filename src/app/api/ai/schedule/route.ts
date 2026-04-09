@@ -3,6 +3,7 @@ import { requireInternalAiSecret } from '@/lib/auth/internal'
 import { createAdminClient } from '@/lib/supabase/server'
 import { runAiProcess } from '@/lib/ai-agent/run-process'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
+import { parseContactUuidParam, parseWorkspaceSlugForTenantSql } from '@/lib/validation/internal-ai-params'
 
 function sleep(ms: number) {
     return new Promise<void>(resolve => setTimeout(resolve, ms))
@@ -12,11 +13,14 @@ export async function POST(request: Request) {
     const denied = requireInternalAiSecret(request)
     if (denied) return denied
 
-    const body = await request.json().catch(() => null)
-    const workspace_slug = body?.workspace_slug as string | undefined
-    const contact_id = body?.contact_id as string | undefined
+    const body = await request.json().catch(() => null) as {
+        workspace_slug?: unknown
+        contact_id?: unknown
+    } | null
+    const workspace_slug = parseWorkspaceSlugForTenantSql(body?.workspace_slug)
+    const contact_id = parseContactUuidParam(body?.contact_id)
     if (!workspace_slug || !contact_id) {
-        return NextResponse.json({ error: 'Missing ids' }, { status: 400 })
+        return NextResponse.json({ error: 'Missing or invalid ids' }, { status: 400 })
     }
 
     after(async () => {

@@ -142,38 +142,6 @@ export function useClientPortalState() {
         router.refresh()
     }
 
-    async function provisionInstance() {
-        if (!selectedSlug) return
-        setBusy(true)
-        setLoadError('')
-        const res = await fetch('/api/whatsapp/instances', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspace_slug: selectedSlug, display_name: selectedWs?.name })
-        })
-        setBusy(false)
-        if (!res.ok) {
-            const j = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
-            if (res.status === 409) {
-                await loadInstance(selectedSlug, { syncUazapi: true })
-                setLoadError('')
-                setToast({
-                    message:
-                        j.error ||
-                        'Este workspace já tinha uma instância. O estado foi atualizado — usa «Mostrar QR Code» se ainda não estiver ligado.',
-                    variant: 'success'
-                })
-                return
-            }
-            setLoadError(j.error || 'Não foi possível preparar a ligação.')
-            setToast({ message: 'Falha ao preparar WhatsApp.', variant: 'error' })
-            return
-        }
-        setToast({ message: 'Ligação preparada. Gera o QR Code para associar o telemóvel.', variant: 'success' })
-        await loadInstance(selectedSlug, { syncUazapi: true })
-    }
-
     async function connectWhatsapp() {
         if (!selectedSlug) return
         setBusy(true)
@@ -278,7 +246,6 @@ export function useClientPortalState() {
         loadMessages,
         loadStats,
         logout,
-        provisionInstance,
         connectWhatsapp,
         updateProfile,
         changePassword

@@ -11,6 +11,12 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 - [x] Mídia sem texto: corpo fallback “Mídia enviada” e eventual inclusão de URL/caption no contexto da IA
 - [x] Eventos de ligação (`connection`, `status`, `phone` / `owner`)
 
+### Áudio / imagem (paridade funcional com CR Pro)
+
+- [x] **Arquitetura:** CR Pro transcreve/desenha no **webhook** com URL pública; aqui o processamento é **adiado** para `runAiProcess` (`processUnprocessedMedia` → atualiza `body` e `media_processed`). Resultado para o LLM é equivalente (transcript no contexto).
+- [x] Uazapi: download `/message/download`, fallback CDN em `media_ref`, logs `[downloadMediaUazapi]` / `[media-processing]`
+- [x] Transcrição OpenAI: `gpt-4o-mini-transcribe` → `whisper-1` → fallback Gemini (`src/lib/ai-agent/media-processing.ts`)
+
 ## Meta Cloud API (official)
 
 - [x] OAuth start/callback com descoberta de `phone_number_id`
@@ -18,6 +24,7 @@ Use esta lista ao comparar com o código ou o comportamento do **CR Pro** origin
 - [x] Deduplicação por `whatsapp_id`
 - [x] Atualização de status (`sent`, `delivered`, `read`, `failed`)
 - [x] Entrada Meta -> buffer IA -> resposta enviada
+- [x] Mensagens de áudio: `media_ref` = id Graph para download; tipo `voice` (se aparecer) normalizado para `audio` em `official.provider.ts`
 - [x] `meta_token_obtained_at` ao guardar token (OAuth / complete-pick / configure-official) + aviso no dashboard (>50 dias)
 - [x] Listagem de templates (`GET /api/whatsapp/meta/templates`) e validação APPROVED ao criar campanha
 - [x] Envio em massa só via API oficial: fila `whatsapp_broadcast_queue` + `GET /api/cron/whatsapp-broadcast-queue` (Bearer `INTERNAL_AI_SECRET`)

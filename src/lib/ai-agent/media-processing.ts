@@ -1,7 +1,7 @@
 /**
  * Processamento de mídia recebida via WhatsApp.
  *
- * Áudio  → transcrição via OpenAI Whisper (fallback Gemini nativo).
+ * Áudio  → transcrição OpenAI `gpt-4o-mini-transcribe` → `whisper-1` (fallback Gemini nativo).
  * Imagem → análise visual via GPT-4o-mini / Gemini / Claude.
  *
  * O processamento ocorre em `runAiProcess`, antes de montar o contexto,
@@ -21,6 +21,8 @@ const DOWNLOAD_TIMEOUT_MS = 30_000
 const PROCESSING_TIMEOUT_MS = 45_000
 /** Máximo de mídias processadas por turno (evita ultrapassar TTL do lock). */
 const MAX_MEDIA_PER_RUN = 3
+/** Timeout por tentativa de modelo OpenAI (alinhado ao CR Pro). */
+const TRANSCRIPTION_OPENAI_TIMEOUT_MS = 25_000
 
 // ─── Lazy column migration ──────────────────────────────────────
 
@@ -253,36 +255,48 @@ export async function downloadMediaOfficial(
 
 // ─── Transcrição de áudio ───────────────────────────────────────
 
+function withTranscriptionTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+    return Promise.race([
+        promise,
+        new Promise<null>(resolve => {
+            setTimeout(() => resolve(null), ms)
+        })
+    ])
+}
+
 export async function transcribeAudio(
     audioBuffer: Buffer,
     mimetype: string,
     config: AiAgentConfig
 ): Promise<string | null> {
-    // 1. Whisper (melhor qualidade, disponível se houver chave OpenAI)
     const openaiKey = resolveOpenAiKey(config)
     if (openaiKey) {
         try {
-            return await transcribeWithWhisper(audioBuffer, mimetype, openaiKey)
+            console.log(
+                '[media-processing] transcribeAudio: tentando OpenAI (gpt-4o-mini-transcribe → whisper-1)'
+            )
+            const text = await transcribeWithOpenAI(audioBuffer, mimetype, openaiKey)
+            if (text) return text
         } catch (e) {
-            console.error('transcribeAudio whisper:', e)
+            console.error('[media-processing] transcribeAudio OpenAI:', e)
         }
     }
 
-    // 2. Gemini native audio (fallback)
     const geminiKey = resolveGoogleKey(config)
     if (geminiKey) {
         try {
+            console.log('[media-processing] transcribeAudio: fallback Gemini')
             return await transcribeWithGemini(audioBuffer, mimetype, geminiKey)
         } catch (e) {
-            console.error('transcribeAudio gemini:', e)
+            console.error('[media-processing] transcribeAudio gemini:', e)
         }
     }
 
-    console.warn('transcribeAudio: nenhuma API key disponível para transcrição')
+    console.warn('[media-processing] transcribeAudio: nenhuma API key disponível para transcrição')
     return null
 }
 
-async function transcribeWithWhisper(
+async function transcribeWithOpenAI(
     audioBuffer: Buffer,
     mimetype: string,
     apiKey: string
@@ -299,19 +313,40 @@ async function transcribeWithWhisper(
                         ? 'webm'
                         : 'ogg'
 
-    // Usa `toFile` da SDK para garantir compatibilidade em todos os runtimes
     const OpenAI = (await import('openai')).default
     const { toFile } = await import('openai')
     const openai = new OpenAI({ apiKey })
-    const file = await toFile(audioBuffer, `audio.${ext}`, { type: mimetype })
 
-    const transcription = await openai.audio.transcriptions.create({
-        file,
-        model: 'whisper-1',
-        language: 'pt'
-    })
-
-    return transcription.text?.trim() || ''
+    const models = ['gpt-4o-mini-transcribe', 'whisper-1'] as const
+    for (const model of models) {
+        try {
+            const file = await toFile(audioBuffer, `audio.${ext}`, { type: mimetype })
+            const result = await withTranscriptionTimeout(
+                openai.audio.transcriptions.create({
+                    file,
+                    model,
+                    language: 'pt'
+                }),
+                TRANSCRIPTION_OPENAI_TIMEOUT_MS
+            )
+            const text = result?.text?.trim()
+            if (text) {
+                console.log(
+                    `[media-processing] transcribeAudio OpenAI OK model=${model} chars=${text.length}`
+                )
+                return text
+            }
+            console.warn(
+                `[media-processing] transcribeAudio: modelo ${model} retornou vazio ou timeout`
+            )
+        } catch (e) {
+            console.warn(
+                `[media-processing] transcribeAudio erro model=${model}:`,
+                (e as Error)?.message
+            )
+        }
+    }
+    return ''
 }
 
 async function transcribeWithGemini(

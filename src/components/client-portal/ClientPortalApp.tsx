@@ -289,14 +289,11 @@ export function ClientPortalApp() {
                             )}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                 {!p.instance && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-primary"
-                                        disabled={p.busy}
-                                        onClick={p.provisionInstance}
-                                    >
-                                        Preparar ligação WhatsApp
-                                    </button>
+                                    <p className="client-portal-muted" style={{ margin: 0, flex: '1 1 100%' }}>
+                                        A ligação WhatsApp ainda não foi configurada. Pedir a um administrador da
+                                        empresa (painel interno) para preparar a instância; depois poderás associar o
+                                        telemóvel com o QR Code aqui.
+                                    </p>
                                 )}
                                 {p.instance && p.instance.status !== 'connected' && (
                                     <button

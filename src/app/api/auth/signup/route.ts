@@ -1,8 +1,31 @@
 import { NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { allowSignupAttempt, clientIpFromRequest } from '@/lib/rate-limit/signup-ip'
+
+const MIN_PASSWORD_LENGTH = 8
+
+function signupDisabled(): boolean {
+    const v = process.env.SIGNUP_DISABLED?.trim().toLowerCase()
+    return v === '1' || v === 'true' || v === 'yes'
+}
 
 export async function POST(request: Request) {
     try {
+        if (signupDisabled()) {
+            return NextResponse.json(
+                { error: 'O registo público está desativado. Contacta um administrador.' },
+                { status: 403 }
+            )
+        }
+
+        const ip = clientIpFromRequest(request)
+        if (!allowSignupAttempt(ip)) {
+            return NextResponse.json(
+                { error: 'Demasiadas tentativas a partir desta rede. Tenta mais tarde.' },
+                { status: 429 }
+            )
+        }
+
         const body = await request.json()
         const email = (body.email as string || '').trim().toLowerCase()
         const password = body.password as string || ''
@@ -11,8 +34,11 @@ export async function POST(request: Request) {
         if (!email || !password || !name) {
             return NextResponse.json({ error: 'Nome, email e senha obrigatórios.' }, { status: 400 })
         }
-        if (password.length < 6) {
-            return NextResponse.json({ error: 'Senha deve ter no mínimo 6 caracteres.' }, { status: 400 })
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            return NextResponse.json(
+                { error: `Senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.` },
+                { status: 400 }
+            )
         }
 
         const adminClient = await createAdminClient()

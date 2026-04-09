@@ -105,10 +105,17 @@ function isBlockedWebhookHost(hostname: string): boolean {
     return false
 }
 
+function isProductionLikeRuntime(): boolean {
+    return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+}
+
 function isSafeHttpUrl(value: string): boolean {
     try {
         const parsed = new URL(value)
         if (!['https:', 'http:'].includes(parsed.protocol)) return false
+        if (isProductionLikeRuntime() && parsed.protocol !== 'https:') {
+            return false
+        }
         if (isBlockedWebhookHost(parsed.hostname)) return false
         return true
     } catch {

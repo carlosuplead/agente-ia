@@ -2,23 +2,21 @@ import { NextResponse } from 'next/server'
 import { requireInternalAiSecret } from '@/lib/auth/internal'
 import { createAdminClient } from '@/lib/supabase/server'
 import { runAiProcess } from '@/lib/ai-agent/run-process'
+import { parseContactUuidParam, parseWorkspaceSlugForTenantSql } from '@/lib/validation/internal-ai-params'
 
 export async function POST(request: Request) {
     const denied = requireInternalAiSecret(request)
     if (denied) return denied
 
     try {
-        const { workspace_slug, contact_id } = await request.json()
+        const body = await request.json().catch(() => null) as {
+            workspace_slug?: unknown
+            contact_id?: unknown
+        } | null
+        const workspace_slug = parseWorkspaceSlugForTenantSql(body?.workspace_slug)
+        const contact_id = parseContactUuidParam(body?.contact_id)
         if (!workspace_slug || !contact_id) {
-            return NextResponse.json({ error: 'Missing ids' }, { status: 400 })
-        }
-
-        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-        if (typeof contact_id !== 'string' || !UUID_RE.test(contact_id)) {
-            return NextResponse.json({ error: 'Invalid contact_id format' }, { status: 400 })
-        }
-        if (typeof workspace_slug !== 'string' || !/^[a-z0-9_-]+$/.test(workspace_slug)) {
-            return NextResponse.json({ error: 'Invalid workspace_slug format' }, { status: 400 })
+            return NextResponse.json({ error: 'Missing or invalid ids' }, { status: 400 })
         }
 
         const supabase = await createAdminClient()

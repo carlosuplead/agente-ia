@@ -131,7 +131,13 @@ export function parseMetaWebhookPayload(payload: unknown): MetaWebhookParsed[] {
                     (msg.interactive as { list_reply?: { title?: string } } | undefined)?.list_reply?.title ||
                     ''
                 const type = typeof msg.type === 'string' ? msg.type : ''
-                const mediaType = type === 'text' || type === 'interactive' || type === 'button' ? null : type || null
+                // `voice` (se existir no payload) normaliza para `audio` — a fila de mídia só processa audio|image
+                const mediaType =
+                    type === 'text' || type === 'interactive' || type === 'button'
+                        ? null
+                        : type === 'voice'
+                          ? 'audio'
+                          : type || null
                 const fallback = mediaType ? 'Midia enviada' : ''
 
                 // Extrair caption de mensagens de mídia (imagem/vídeo/documento)
@@ -144,11 +150,25 @@ export function parseMetaWebhookPayload(payload: unknown): MetaWebhookParsed[] {
                     caption =
                         (msg.document as { caption?: string } | undefined)?.caption ||
                         (msg.document as { filename?: string } | undefined)?.filename || ''
+                } else if (type === 'audio') {
+                    caption = (msg.audio as { caption?: string } | undefined)?.caption || ''
+                } else if (type === 'voice') {
+                    caption = (msg.voice as { caption?: string } | undefined)?.caption || ''
                 }
 
-                // Extrair media_id para download posterior (Graph API)
+                // media_id para download na Graph API (áudio: bloco audio ou voice)
                 let mediaId: string | null = null
-                if (mediaType && msg[type] && typeof msg[type] === 'object') {
+                if (mediaType === 'audio') {
+                    const audioBlock =
+                        type === 'voice' && msg.voice && typeof msg.voice === 'object'
+                            ? (msg.voice as { id?: string })
+                            : msg.audio && typeof msg.audio === 'object'
+                              ? (msg.audio as { id?: string })
+                              : null
+                    if (audioBlock && typeof audioBlock.id === 'string' && audioBlock.id) {
+                        mediaId = audioBlock.id
+                    }
+                } else if (mediaType && msg[type] && typeof msg[type] === 'object') {
                     const mediaObj = msg[type] as { id?: string }
                     if (typeof mediaObj.id === 'string' && mediaObj.id) {
                         mediaId = mediaObj.id

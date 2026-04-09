@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { NextResponse } from 'next/server'
+import { timingSafeEqualUtf8 } from '@/lib/crypto/timing-safe-utf8'
 import { createAdminClient } from '@/lib/supabase/server'
 import { normalizePhoneForBrazil, generateBrazilianPhoneVariants, isWhatsAppGroup } from '@/lib/phone'
 import { addToBuffer } from '@/lib/ai-agent/buffer'
@@ -9,7 +10,11 @@ import { parseMetaWebhookPayload } from '@/lib/whatsapp/providers/official.provi
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 import { ensureMediaColumns } from '@/lib/ai-agent/media-processing'
 
-const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || ''
+const VERIFY_TOKEN = (
+    process.env.META_WEBHOOK_VERIFY_TOKEN ||
+    process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ||
+    ''
+).trim()
 
 function isProductionRuntime(): boolean {
     return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
@@ -18,9 +23,9 @@ function isProductionRuntime(): boolean {
 export async function GET(request: Request) {
     const url = new URL(request.url)
     const mode = url.searchParams.get('hub.mode')
-    const token = url.searchParams.get('hub.verify_token')
+    const token = url.searchParams.get('hub.verify_token') ?? ''
     const challenge = url.searchParams.get('hub.challenge')
-    if (mode === 'subscribe' && token === VERIFY_TOKEN && challenge) {
+    if (mode === 'subscribe' && VERIFY_TOKEN && timingSafeEqualUtf8(token, VERIFY_TOKEN) && challenge) {
         return new Response(challenge, { status: 200 })
     }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

@@ -1,24 +1,23 @@
 import { NextResponse } from 'next/server'
+import { timingSafeEqualUtf8 } from '@/lib/crypto/timing-safe-utf8'
 
 export function requireInternalAiSecret(request: Request): NextResponse | null {
-    const secret = process.env.INTERNAL_AI_SECRET
+    const secret = process.env.INTERNAL_AI_SECRET?.trim()
     if (!secret) {
         console.error('INTERNAL_AI_SECRET is not set')
         return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
     }
 
-    // 1. Check Bearer token (usado pelo addToBuffer e chamadas internas)
     const auth = request.headers.get('authorization')
-    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
-    if (token === secret) return null
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!token) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    // 2. Check Vercel Cron secret (usado por Vercel Cron Jobs)
-    const cronSecret = process.env.CRON_SECRET
-    if (cronSecret && token === cronSecret) return null
+    if (timingSafeEqualUtf8(token, secret)) return null
 
-    // 3. Check x-vercel-cron header (Vercel sets this for cron invocations)
-    const vercelCron = request.headers.get('x-vercel-cron')
-    if (vercelCron === '1' || vercelCron === 'true') return null
+    const cronSecret = process.env.CRON_SECRET?.trim()
+    if (cronSecret && timingSafeEqualUtf8(token, cronSecret)) return null
 
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }
@@ -36,8 +35,8 @@ export function requireInternalBroadcastCronSecret(request: Request): NextRespon
         return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
     }
     const auth = request.headers.get('authorization')
-    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
-    if (token !== secret) {
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!token || !timingSafeEqualUtf8(token, secret)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return null

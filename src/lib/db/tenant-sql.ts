@@ -170,9 +170,15 @@ export function isStatementTimeout(e: unknown): boolean {
     return msg.includes('statement timeout') || msg.includes('canceling statement')
 }
 
+/** Limite do Postgres para identificadores (schemas por tenant). */
+const TENANT_SLUG_MAX_LEN = 63
+
 export function assertTenantSlug(slug: string): string {
-    const s = slug.toLowerCase()
-    if (!/^[a-z0-9_]+$/.test(s)) {
+    const s = slug.trim().toLowerCase()
+    if (!s || s.length > TENANT_SLUG_MAX_LEN) {
+        throw new Error('Invalid workspace slug')
+    }
+    if (!/^[a-z0-9_-]+$/.test(s)) {
         throw new Error('Invalid workspace slug')
     }
     return s

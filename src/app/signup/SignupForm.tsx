@@ -106,7 +106,7 @@ export function SignupForm() {
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            minLength={6}
+                            minLength={8}
                         />
                     </label>
                     <button type="submit" className="btn btn-primary login-btn" disabled={loading}>

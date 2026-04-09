@@ -2,21 +2,31 @@ import { NextResponse } from 'next/server'
 import { requireInternalAiSecret } from '@/lib/auth/internal'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processFollowupsForWorkspace } from '@/lib/ai-agent/followup-due'
+import { parseWorkspaceSlugForTenantSql } from '@/lib/validation/internal-ai-params'
 
 async function runCron(request: Request) {
     const denied = requireInternalAiSecret(request)
     if (denied) return denied
 
     const url = new URL(request.url)
-    const fromQuery = url.searchParams.get('workspace_slug')?.trim() ?? ''
+    const fromQuery = url.searchParams.get('workspace_slug')
 
-    let bodySlug = ''
+    let bodySlugRaw: unknown | undefined
     if (request.method === 'POST') {
-        const body = (await request.json().catch(() => null)) as { workspace_slug?: string } | null
-        bodySlug = typeof body?.workspace_slug === 'string' ? body.workspace_slug.trim() : ''
+        const body = (await request.json().catch(() => null)) as { workspace_slug?: unknown } | null
+        bodySlugRaw = body?.workspace_slug
     }
 
-    const slug = bodySlug || fromQuery
+    const slugRaw =
+        request.method === 'POST' && bodySlugRaw !== undefined ? bodySlugRaw : fromQuery
+    const slug =
+        slugRaw !== undefined && slugRaw !== null && String(slugRaw).trim() !== ''
+            ? parseWorkspaceSlugForTenantSql(slugRaw)
+            : ''
+    if (slugRaw !== undefined && slugRaw !== null && String(slugRaw).trim() !== '' && !slug) {
+        return NextResponse.json({ error: 'Invalid workspace_slug format' }, { status: 400 })
+    }
+
     const supabase = await createAdminClient()
 
     if (slug) {

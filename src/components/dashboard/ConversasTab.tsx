@@ -513,7 +513,10 @@ export function ConversasTab() {
                                 onClick={() => selectContact(c.contact_id)}
                             >
                                 <div className="chat-avatar">
-                                    {c.name?.[0]?.toUpperCase() || '?'}
+                                    {c.avatar_url
+                                        ? <img src={c.avatar_url} alt="" className="chat-avatar-img" referrerPolicy="no-referrer" />
+                                        : (c.name?.[0]?.toUpperCase() || '?')
+                                    }
                                 </div>
                                 <div className="chat-contact-info">
                                     <div className="chat-contact-row">
@@ -550,7 +553,7 @@ export function ConversasTab() {
                         </button>
                         <div className="chat-avatar chat-avatar--small">
                             {contactInfo?.avatar_url
-                                ? <img src={contactInfo.avatar_url} alt="" />
+                                ? <img src={contactInfo.avatar_url} alt="" className="chat-avatar-img" referrerPolicy="no-referrer" />
                                 : (contactInfo?.name?.[0]?.toUpperCase() || '?')
                             }
                         </div>

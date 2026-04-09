@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         const total = (countRows[0] as { c?: number } | undefined)?.c ?? 0
 
         const rows = await sql.unsafe(
-            `SELECT id, phone, name, created_at FROM ${sch}.contacts
+            `SELECT id, phone, name, avatar_url, created_at FROM ${sch}.contacts
              WHERE ($3::text IS NULL OR name ILIKE $3 ESCAPE '\\' OR phone ILIKE $3 ESCAPE '\\')
              ORDER BY name ASC
              LIMIT $1 OFFSET $2`,

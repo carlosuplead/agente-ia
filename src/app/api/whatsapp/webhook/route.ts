@@ -598,6 +598,22 @@ export async function POST(request: Request) {
             } catch { /* non-fatal */ }
         }
 
+        // Salvar foto de perfil do WhatsApp (chat.image) no avatar_url do contato
+        const chatObj = data.chat as Record<string, unknown> | undefined
+        const profilePicUrl =
+            (typeof chatObj?.image === 'string' && chatObj.image ? chatObj.image : null) ||
+            (typeof chatObj?.imagePreview === 'string' && chatObj.imagePreview ? chatObj.imagePreview : null) ||
+            (typeof data.profilePicUrl === 'string' && data.profilePicUrl ? data.profilePicUrl : null)
+        if (profilePicUrl) {
+            try {
+                await sql.unsafe(
+                    `UPDATE ${sch}.contacts SET avatar_url = $2, updated_at = now()
+                     WHERE id = $1::uuid AND (avatar_url IS NULL OR avatar_url = '' OR avatar_url != $2)`,
+                    [contactId, profilePicUrl]
+                )
+            } catch { /* non-fatal */ }
+        }
+
         // Garantir colunas media_ref/media_processed se houver mídia
         if (msg.mediaType && ['audio', 'image', 'video', 'document'].includes(msg.mediaType)) {
             await ensureMediaColumns(ws).catch(() => {})

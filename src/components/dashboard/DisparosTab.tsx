@@ -29,7 +29,7 @@ type MetaTpl = {
     category?: string
 }
 
-type ContactRow = { id: string; phone: string; name: string }
+type ContactRow = { id: string; phone: string; name: string; avatar_url?: string | null }
 
 type BroadcastRow = {
     id: string
@@ -755,7 +755,10 @@ export function DisparosTab() {
                                         disabled={!canManage || loading || isPreview}
                                     />
                                     <div className="disparos-contact-avatar">
-                                        {c.name?.[0]?.toUpperCase() || '?'}
+                                        {c.avatar_url
+                                            ? <img src={c.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                                            : (c.name?.[0]?.toUpperCase() || '?')
+                                        }
                                     </div>
                                     <div className="disparos-contact-info">
                                         <span className="disparos-contact-name">{c.name || 'Sem nome'}</span>

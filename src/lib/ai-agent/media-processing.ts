@@ -37,6 +37,9 @@ export async function ensureMediaColumns(workspaceSlug: string): Promise<void> {
         await sql.unsafe(
             `ALTER TABLE ${sch}.messages ADD COLUMN IF NOT EXISTS media_processed BOOLEAN DEFAULT NULL`
         )
+        await sql.unsafe(
+            `ALTER TABLE ${sch}.messages ADD COLUMN IF NOT EXISTS media_thumbnail TEXT DEFAULT NULL`
+        )
         migratedSchemas.add(sch)
     } catch (e) {
         // Se o tenant schema ainda não tem a tabela ou outra razão — ignora e
@@ -159,6 +162,46 @@ export async function downloadMediaUazapi(
     }
 
     return null
+}
+
+// ─── Download — URL direta (CDN do WhatsApp) ───────────────────
+
+/**
+ * Tenta baixar mídia diretamente de uma URL (CDN do WhatsApp ou qualquer URL pública).
+ * Fallback quando /message/download do Uazapi falha.
+ */
+export async function downloadFromDirectUrl(
+    url: string
+): Promise<{ buffer: Buffer; mimetype: string } | null> {
+    try {
+        console.log(`[downloadFromDirectUrl] GET ${url.slice(0, 100)}...`)
+        const res = await fetch(url, {
+            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        })
+        if (!res.ok) {
+            console.error(`[downloadFromDirectUrl] HTTP ${res.status}`)
+            return null
+        }
+        const contentType = res.headers.get('content-type') || 'application/octet-stream'
+        const arrayBuf = await res.arrayBuffer()
+        const buffer = Buffer.from(arrayBuf)
+        if (buffer.length > MAX_MEDIA_SIZE_BYTES) {
+            console.warn(`[downloadFromDirectUrl] Arquivo muito grande: ${buffer.length}`)
+            return null
+        }
+        if (buffer.length < 100) {
+            console.warn(`[downloadFromDirectUrl] Arquivo muito pequeno: ${buffer.length}`)
+            return null
+        }
+        console.log(`[downloadFromDirectUrl] OK: ${buffer.length} bytes, type=${contentType}`)
+        return { buffer, mimetype: contentType.split(';')[0].trim() }
+    } catch (e) {
+        console.error('[downloadFromDirectUrl]:', e)
+        return null
+    }
 }
 
 // ─── Download — Meta Cloud API (Official) ───────────────────────
@@ -466,8 +509,9 @@ export async function processUnprocessedMedia(
 
     // Mensagens recentes com mídia por processar
     // Inclui created_at para decidir se vale retry ou se deve desistir
+    // media_ref = CDN URL do WhatsApp, media_thumbnail = base64 thumbnail
     const mediaMessages = (await sql.unsafe(
-        `SELECT id, whatsapp_id, media_type, body, media_ref, created_at
+        `SELECT id, whatsapp_id, media_type, body, media_ref, media_thumbnail, created_at
          FROM ${sch}.messages
          WHERE contact_id = $1::uuid
            AND sender_type = 'contact'
@@ -482,6 +526,7 @@ export async function processUnprocessedMedia(
         media_type: string
         body: string | null
         media_ref: string | null
+        media_thumbnail: string | null
         created_at: string | Date
     }>
 
@@ -508,9 +553,10 @@ export async function processUnprocessedMedia(
             try {
                 console.log(`[media-processing] Processando msg ${msg.id}: type=${msg.media_type}, wa_id=${msg.whatsapp_id}, provider=${providerInfo.providerType}, age=${Math.round(msgAgeMs / 1000)}s`)
 
-                // ── Download ──
+                // ── Download (3 estratégias de fallback) ──
                 let mediaData: { buffer: Buffer; mimetype: string } | null = null
 
+                // 1) Tentar download via Uazapi /message/download
                 if (
                     providerInfo.providerType === 'uazapi' &&
                     msg.whatsapp_id
@@ -531,14 +577,37 @@ export async function processUnprocessedMedia(
                         providerInfo.accessToken,
                         msg.media_ref
                     )
-                } else {
-                    console.warn(`[media-processing] Sem condições para download: provider=${providerInfo.providerType}, wa_id=${msg.whatsapp_id}, media_ref=${msg.media_ref}`)
+                }
+
+                // 2) Fallback: baixar direto da CDN URL do WhatsApp (media_ref)
+                if (!mediaData && msg.media_ref && msg.media_ref.startsWith('http')) {
+                    console.log(`[media-processing] Tentando download direto da CDN: ${msg.media_ref.slice(0, 80)}...`)
+                    mediaData = await downloadFromDirectUrl(msg.media_ref)
+                    if (mediaData) {
+                        console.log(`[media-processing] Download CDN OK: ${mediaData.buffer.length} bytes`)
+                    } else {
+                        console.warn(`[media-processing] Download CDN também falhou`)
+                    }
+                }
+
+                // 3) Fallback: usar thumbnail base64 (só para imagens)
+                if (!mediaData && msg.media_thumbnail && msg.media_type === 'image') {
+                    console.log(`[media-processing] Usando thumbnail base64 como fallback (${msg.media_thumbnail.length} chars)`)
+                    try {
+                        const thumbBuf = Buffer.from(msg.media_thumbnail, 'base64')
+                        if (thumbBuf.length > 500) { // thumbnail mínimo razoável
+                            mediaData = { buffer: thumbBuf, mimetype: 'image/jpeg' }
+                            console.log(`[media-processing] Thumbnail OK: ${thumbBuf.length} bytes`)
+                        }
+                    } catch {
+                        console.warn(`[media-processing] Falha ao decodificar thumbnail base64`)
+                    }
                 }
 
                 if (!mediaData) {
                     if (isOldEnoughToGiveUp) {
                         // Mensagem antiga demais — desiste e atualiza body para IA saber
-                        console.warn(`[media-processing] Desistindo do download msg ${msg.id} (age=${Math.round(msgAgeMs / 1000)}s)`)
+                        console.warn(`[media-processing] Desistindo do download msg ${msg.id} (age=${Math.round(msgAgeMs / 1000)}s) — TODOS os 3 métodos falharam`)
                         const failBody = msg.media_type === 'image'
                             ? '[O cliente enviou uma imagem, mas não foi possível visualizá-la. Peça para o cliente descrever o que a imagem mostra.]'
                             : '[O cliente enviou um áudio, mas não foi possível ouvi-lo. Peça para o cliente digitar a mensagem.]'

@@ -32,6 +32,10 @@ type ParsedUazapiMessage = {
     mediaType: string | null
     timestampMs: number | null
     fromMe: boolean
+    /** URL direta do CDN do WhatsApp (content.URL) — temporária */
+    mediaCdnUrl: string | null
+    /** Thumbnail em base64 (content.JPEGThumbnail) */
+    mediaThumbnailB64: string | null
 }
 
 type ParsedUazapiStatus = {
@@ -395,6 +399,61 @@ function extractTimestamp(data: Record<string, unknown>): number | null {
 }
 
 /**
+ * Extrai URL de CDN da mídia e thumbnail base64 do payload uazapiGO.
+ * O payload contém content.URL (CDN temporário) e content.JPEGThumbnail (base64).
+ * Também verifica message.content, data.content, etc.
+ */
+function extractMediaUrls(data: Record<string, unknown>): {
+    mediaCdnUrl: string | null
+    mediaThumbnailB64: string | null
+} {
+    const msgOuter = data.message as Record<string, unknown> | undefined
+
+    // Buscar em content, message.content, data.content
+    let cdnUrl: string | null = null
+    let thumbB64: string | null = null
+
+    for (const obj of [data, msgOuter]) {
+        if (!obj) continue
+        const content = obj.content as Record<string, unknown> | undefined
+        if (content) {
+            // URL da mídia no CDN do WhatsApp
+            if (!cdnUrl) {
+                for (const k of ['URL', 'url', 'mediaUrl', 'media_url', 'directPath']) {
+                    const v = content[k]
+                    if (typeof v === 'string' && v.startsWith('http')) {
+                        cdnUrl = v
+                        break
+                    }
+                }
+            }
+            // Thumbnail em base64
+            if (!thumbB64) {
+                for (const k of ['JPEGThumbnail', 'jpegThumbnail', 'thumbnail', 'base64Thumbnail']) {
+                    const v = content[k]
+                    if (typeof v === 'string' && v.length > 50) {
+                        thumbB64 = v
+                        break
+                    }
+                }
+            }
+        }
+        // Também checar campos diretos
+        if (!cdnUrl) {
+            for (const k of ['mediaUrl', 'media_url', 'fileUrl', 'file_url']) {
+                const v = obj[k]
+                if (typeof v === 'string' && v.startsWith('http')) {
+                    cdnUrl = v
+                    break
+                }
+            }
+        }
+    }
+
+    return { mediaCdnUrl: cdnUrl, mediaThumbnailB64: thumbB64 }
+}
+
+/**
  * Parse completo do payload Uazapi → mensagem estruturada.
  */
 function parseUazapiMessage(data: Record<string, unknown>): ParsedUazapiMessage | null {
@@ -406,6 +465,7 @@ function parseUazapiMessage(data: Record<string, unknown>): ParsedUazapiMessage 
 
     const fromMe = isSentByUs(data)
     const { body, mediaType } = extractMessageBody(data)
+    const { mediaCdnUrl, mediaThumbnailB64 } = extractMediaUrls(data)
 
     return {
         whatsappId,
@@ -414,7 +474,9 @@ function parseUazapiMessage(data: Record<string, unknown>): ParsedUazapiMessage 
         body,
         mediaType,
         timestampMs: extractTimestamp(data),
-        fromMe
+        fromMe,
+        mediaCdnUrl,
+        mediaThumbnailB64
     }
 }
 
@@ -626,17 +688,27 @@ export async function POST(request: Request) {
         )
         const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
 
-        // Inserir mensagem
+        // Inserir mensagem (media_ref guarda CDN URL para fallback de download)
         const insMsg = await sql.unsafe(
-            `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
-             VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, COALESCE(to_timestamp($6 / 1000.0), now()))
+            `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, media_ref, created_at)
+             VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, $6, COALESCE(to_timestamp($7 / 1000.0), now()))
              RETURNING id`,
-            [contactId, conversationId, msg.body || 'Mídia enviada', msg.mediaType, msg.whatsappId, msg.timestampMs]
+            [contactId, conversationId, msg.body || 'Mídia enviada', msg.mediaType, msg.whatsappId, msg.mediaCdnUrl, msg.timestampMs]
         )
 
         const messageId = (insMsg[0] as { id?: string } | undefined)?.id
         if (!messageId) {
             return NextResponse.json({ success: true })
+        }
+
+        // Salvar thumbnail base64 se disponível (para fallback de análise visual)
+        if (msg.mediaThumbnailB64 && msg.mediaType === 'image') {
+            try {
+                await sql.unsafe(
+                    `UPDATE ${sch}.messages SET media_thumbnail = $2 WHERE id = $1::uuid`,
+                    [messageId, msg.mediaThumbnailB64]
+                )
+            } catch { /* non-fatal — coluna pode não existir ainda */ }
         }
 
         // Reset follow-up anchor (cliente respondeu)

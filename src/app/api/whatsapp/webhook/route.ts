@@ -56,9 +56,12 @@ function getEventType(data: Record<string, unknown>): string {
 /**
  * Extrai JID (telefone) do campo remoteJid ou key.remoteJid.
  * Ex: "5511999999999@s.whatsapp.net" → "5511999999999"
+ * Ignora LIDs (Linked IDs) que terminam em @lid — não são telefones.
  */
 function jidToPhone(jid: string | undefined | null): string {
     if (!jid) return ''
+    // LIDs (ex: "93020586258459@lid") não são telefones reais — ignorar
+    if (jid.includes('@lid')) return ''
     return jid.split('@')[0]?.replace(/\D/g, '') || ''
 }
 
@@ -209,9 +212,9 @@ function extractFromPhone(data: Record<string, unknown>): string {
         if (jid) return jid
     }
 
-    // Formato flat uazapiGO: message.sender, message.chatid
+    // Formato flat uazapiGO: sender_pn tem o telefone real, sender pode ter LID
     if (msgOuter) {
-        for (const k of ['sender', 'chatid', 'phone', 'from', 'number', 'remoteJid']) {
+        for (const k of ['sender_pn', 'sender', 'chatid', 'phone', 'from', 'number', 'remoteJid']) {
             const v = msgOuter[k]
             if (typeof v === 'string' && v) {
                 const digits = jidToPhone(v)

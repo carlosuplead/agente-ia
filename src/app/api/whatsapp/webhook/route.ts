@@ -169,6 +169,7 @@ function extractMessageBody(data: Record<string, unknown>): { body: string; medi
 
 /**
  * Extrai ID da mensagem do WhatsApp para deduplicação.
+ * Suporta formato Baileys (message.key.id) e formato flat do uazapiGO (message.messageid).
  */
 function extractWhatsAppId(data: Record<string, unknown>): string {
     // message.key.id (padrão Baileys)
@@ -176,7 +177,16 @@ function extractWhatsAppId(data: Record<string, unknown>): string {
     const key = (msgOuter?.key ?? data.key) as Record<string, unknown> | undefined
     if (key && typeof key.id === 'string') return key.id
 
-    // Fallback: messageId, id, whatsapp_id
+    // Formato flat uazapiGO: message.messageid, message.id
+    if (msgOuter) {
+        for (const k of ['messageId', 'messageid', 'id', 'msgId']) {
+            if (typeof msgOuter[k] === 'string' && (msgOuter[k] as string).trim()) {
+                return (msgOuter[k] as string).trim()
+            }
+        }
+    }
+
+    // Fallback: campos no top-level
     for (const k of ['messageId', 'messageid', 'id', 'whatsapp_id', 'msgId']) {
         if (typeof data[k] === 'string' && (data[k] as string).trim()) {
             return (data[k] as string).trim()
@@ -188,6 +198,7 @@ function extractWhatsAppId(data: Record<string, unknown>): string {
 
 /**
  * Extrai o telefone do remetente.
+ * Suporta formato Baileys (message.key.remoteJid) e formato flat do uazapiGO (message.sender, message.chatid).
  */
 function extractFromPhone(data: Record<string, unknown>): string {
     // message.key.remoteJid (padrão Baileys)
@@ -198,7 +209,18 @@ function extractFromPhone(data: Record<string, unknown>): string {
         if (jid) return jid
     }
 
-    // Campos diretos
+    // Formato flat uazapiGO: message.sender, message.chatid
+    if (msgOuter) {
+        for (const k of ['sender', 'chatid', 'phone', 'from', 'number', 'remoteJid']) {
+            const v = msgOuter[k]
+            if (typeof v === 'string' && v) {
+                const digits = jidToPhone(v)
+                if (digits.length >= 8) return digits
+            }
+        }
+    }
+
+    // Campos diretos no top-level
     for (const k of ['phone', 'from', 'sender', 'number', 'remoteJid', 'chatId']) {
         const v = data[k]
         if (typeof v === 'string' && v) {
@@ -207,10 +229,10 @@ function extractFromPhone(data: Record<string, unknown>): string {
         }
     }
 
-    // chat object
+    // chat object (wa_chatid no formato uazapiGO)
     const chat = data.chat as Record<string, unknown> | undefined
     if (chat) {
-        const jid = jidToPhone((chat.id ?? chat.jid ?? chat.remoteJid) as string | undefined)
+        const jid = jidToPhone((chat.wa_chatid ?? chat.id ?? chat.jid ?? chat.remoteJid) as string | undefined)
         if (jid) return jid
     }
 
@@ -219,16 +241,22 @@ function extractFromPhone(data: Record<string, unknown>): string {
 
 /**
  * Verifica se a mensagem foi enviada pela API (por nós), para ignorar eco.
+ * Suporta Baileys (key.fromMe) e uazapiGO flat (message.fromMe, message.wasSentByApi).
  */
 function isSentByUs(data: Record<string, unknown>): boolean {
-    // wasSentByApi flag
+    // wasSentByApi flag (top-level)
     if (data.wasSentByApi === true) return true
     if (typeof data.wasSentByApi === 'string' && data.wasSentByApi.toLowerCase() === 'true') return true
 
-    // fromMe flag no key
+    // fromMe flag no key (Baileys)
     const msgOuter = data.message as Record<string, unknown> | undefined
     const key = (msgOuter?.key ?? data.key) as Record<string, unknown> | undefined
     if (key?.fromMe === true) return true
+
+    // fromMe / wasSentByApi dentro de message (uazapiGO flat)
+    if (msgOuter?.fromMe === true) return true
+    if (msgOuter?.wasSentByApi === true) return true
+    if (typeof msgOuter?.wasSentByApi === 'string' && (msgOuter.wasSentByApi as string).toLowerCase() === 'true') return true
 
     return false
 }
@@ -330,18 +358,23 @@ function parseUazapiStatusEvent(data: Record<string, unknown>): ParsedUazapiStat
 export async function POST(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
-        const instanceToken = searchParams.get('token')?.trim()
-
-        if (!instanceToken) {
-            console.warn('[uazapi-webhook] POST sem ?token= no query string')
-            return NextResponse.json({ error: 'Missing token param' }, { status: 400 })
-        }
+        let instanceToken = searchParams.get('token')?.trim() || ''
 
         let data: Record<string, unknown>
         try {
             data = (await request.json()) as Record<string, unknown>
         } catch {
             return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+        }
+
+        // Fallback: token no body do payload (uazapiGO envia body.token)
+        if (!instanceToken && typeof data.token === 'string' && data.token.trim()) {
+            instanceToken = data.token.trim()
+        }
+
+        if (!instanceToken) {
+            console.warn('[uazapi-webhook] POST sem token (nem query, nem body)')
+            return NextResponse.json({ error: 'Missing token param' }, { status: 400 })
         }
 
         const eventType = getEventType(data)

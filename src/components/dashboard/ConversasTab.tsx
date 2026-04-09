@@ -181,10 +181,26 @@ export function ConversasTab() {
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 
-    // Send text
+    // Send text (optimistic UI — mensagem aparece instantaneamente)
     async function handleSendText(e: React.FormEvent) {
         e.preventDefault()
         if (!slug || !selectedContactId || !composeText.trim() || sending) return
+        const text = composeText.trim()
+
+        // Optimistic: adiciona mensagem na UI imediatamente
+        const optimisticId = `opt-${Date.now()}`
+        const optimisticMsg: ChatMsg = {
+            id: optimisticId,
+            body: text,
+            sender_type: 'user',
+            status: 'sending',
+            media_url: null,
+            media_type: null,
+            created_at: new Date().toISOString()
+        }
+        setChatMessages(prev => [...prev, optimisticMsg])
+        setComposeText('')
+
         setSending(true)
         try {
             const res = await fetch('/api/whatsapp/send', {
@@ -194,17 +210,26 @@ export function ConversasTab() {
                 body: JSON.stringify({
                     workspace_slug: slug,
                     contact_id: selectedContactId,
-                    message: composeText.trim()
+                    message: text
                 })
             })
             if (res.ok) {
-                setComposeText('')
+                // Recarrega para obter o ID real da mensagem
                 await loadChat(selectedContactId)
-                loadConversations().catch(() => {})
+                loadConversations(true).catch(() => {})
             } else {
+                // Marca como falha na UI
+                setChatMessages(prev => prev.map(m =>
+                    m.id === optimisticId ? { ...m, status: 'failed' } : m
+                ))
                 const err = await res.json().catch(() => ({}))
                 d.setToast({ message: (err as { error?: string }).error || 'Erro ao enviar', variant: 'error' })
             }
+        } catch {
+            setChatMessages(prev => prev.map(m =>
+                m.id === optimisticId ? { ...m, status: 'failed' } : m
+            ))
+            d.setToast({ message: 'Erro de conexão', variant: 'error' })
         } finally {
             setSending(false)
         }

@@ -202,19 +202,49 @@ function extractWhatsAppId(data: Record<string, unknown>): string {
 /**
  * Extrai o telefone do remetente.
  * Suporta formato Baileys (message.key.remoteJid) e formato flat do uazapiGO (message.sender, message.chatid).
+ *
+ * Prioridade:
+ *   1. sender_pn (telefone real explícito)
+ *   2. chatid (sempre @s.whatsapp.net, nunca @lid)
+ *   3. key.remoteJid
+ *   4. sender (pode ser @lid — rejeitado por jidToPhone)
+ *   5. campos top-level
  */
 function extractFromPhone(data: Record<string, unknown>): string {
-    // message.key.remoteJid (padrão Baileys)
     const msgOuter = data.message as Record<string, unknown> | undefined
+
+    // 1. sender_pn — telefone real explícito do uazapiGO (sempre confiável)
+    for (const obj of [msgOuter, data]) {
+        if (!obj) continue
+        const pn = obj.sender_pn
+        if (typeof pn === 'string' && pn) {
+            const digits = jidToPhone(pn)
+            if (digits.length >= 8) return digits
+        }
+    }
+
+    // 2. chatid — sempre @s.whatsapp.net, nunca @lid
+    for (const obj of [msgOuter, data]) {
+        if (!obj) continue
+        for (const k of ['chatid', 'chatId']) {
+            const v = obj[k]
+            if (typeof v === 'string' && v) {
+                const digits = jidToPhone(v)
+                if (digits.length >= 8) return digits
+            }
+        }
+    }
+
+    // 3. message.key.remoteJid (padrão Baileys)
     const key = (msgOuter?.key ?? data.key) as Record<string, unknown> | undefined
     if (key) {
         const jid = jidToPhone(key.remoteJid as string | undefined)
         if (jid) return jid
     }
 
-    // Formato flat uazapiGO: sender_pn tem o telefone real, sender pode ter LID
+    // 4. sender e outros campos (sender pode ser @lid — rejeitado por jidToPhone)
     if (msgOuter) {
-        for (const k of ['sender_pn', 'sender', 'chatid', 'phone', 'from', 'number', 'remoteJid']) {
+        for (const k of ['sender', 'phone', 'from', 'number', 'remoteJid']) {
             const v = msgOuter[k]
             if (typeof v === 'string' && v) {
                 const digits = jidToPhone(v)
@@ -223,8 +253,8 @@ function extractFromPhone(data: Record<string, unknown>): string {
         }
     }
 
-    // Campos diretos no top-level
-    for (const k of ['phone', 'from', 'sender', 'number', 'remoteJid', 'chatId']) {
+    // 5. Campos diretos no top-level
+    for (const k of ['phone', 'from', 'sender', 'number', 'remoteJid']) {
         const v = data[k]
         if (typeof v === 'string' && v) {
             const digits = jidToPhone(v)
@@ -232,7 +262,7 @@ function extractFromPhone(data: Record<string, unknown>): string {
         }
     }
 
-    // chat object (wa_chatid no formato uazapiGO)
+    // 6. chat object (wa_chatid no formato uazapiGO)
     const chat = data.chat as Record<string, unknown> | undefined
     if (chat) {
         const jid = jidToPhone((chat.wa_chatid ?? chat.id ?? chat.jid ?? chat.remoteJid) as string | undefined)

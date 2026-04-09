@@ -424,7 +424,7 @@ export async function sendMediaAudio(
     opts?: SendMediaAudioOptions
 ): Promise<{ messageId: string | null; raw: unknown }> {
     const t = instanceToken.trim()
-    const type = opts?.uazapiType ?? 'audio'
+    const type = opts?.uazapiType ?? 'ptt'
     const delay = opts?.delayMs ?? 1200
     const base64 = Buffer.from(audioBytes).toString('base64')
     const base = getUazapiBaseUrl()

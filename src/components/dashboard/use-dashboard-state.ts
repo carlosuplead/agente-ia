@@ -443,11 +443,12 @@ export function useDashboardController() {
         }
         const json = await res.json()
         setWorkspaces(json.workspaces || [])
-        setSelectedSlug(prev => {
-            if (prev && json.workspaces?.some((w: WorkspaceRow) => w.slug === prev)) return prev
-            return json.workspaces?.[0]?.slug ?? null
-        })
-    }, [])
+        // Preserve URL-restored slug or current selection if it still exists
+        const current = selectedSlugRef.current
+        if (!current || !json.workspaces?.some((w: WorkspaceRow) => w.slug === current)) {
+            setSelectedSlug(json.workspaces?.[0]?.slug ?? null)
+        }
+    }, [setSelectedSlug])
 
     const loadMe = useCallback(async () => {
         const res = await fetch('/api/auth/me', { credentials: 'include' })

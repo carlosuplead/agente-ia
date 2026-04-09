@@ -174,15 +174,17 @@ export async function POST(request: Request) {
             } else {
                 // Uazapi — send via /send/media
                 const base = getUazapiBaseUrl()
+                // Audio vai como 'ptt' (Push-to-Talk = nota de voz no WhatsApp)
+                const uazapiType = media_type === 'audio' ? 'ptt' : media_type
                 const sendBody: Record<string, unknown> = {
                     number: contact.phone,
-                    type: media_type,
+                    type: uazapiType,
                     file: base64Data,
                     mimetype,
                     delay: 1200
                 }
                 if (caption) sendBody.caption = caption
-                if (filename) sendBody.fileName = filename
+                if (filename) sendBody.filename = filename
 
                 const res = await fetch(`${base}/send/media`, {
                     method: 'POST',

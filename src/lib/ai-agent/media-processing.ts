@@ -106,8 +106,10 @@ export async function downloadMediaUazapi(
             const keys = Object.keys(data)
             console.log(`[downloadMediaUazapi] Response keys: ${keys.join(', ')}`)
 
-            // Uazapi pode retornar { base64, mimetype } ou { data, mime } etc.
+            // Uazapi retorna { base64Data, mimetype, fileURL, cached }
+            // Também checa variantes para compatibilidade com outras versões
             const b64 =
+                (typeof data.base64Data === 'string' ? data.base64Data : '') ||
                 (typeof data.base64 === 'string' ? data.base64 : '') ||
                 (typeof data.data === 'string' ? data.data : '') ||
                 (typeof data.file === 'string' ? data.file : '') ||

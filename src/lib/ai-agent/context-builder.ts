@@ -41,14 +41,14 @@ export async function buildContext(
         : [contactId, opts.aiConversationId, cutoff]
 
     const messages = (await sql.unsafe(
-        `SELECT sender_type, body, media_type FROM (
-            SELECT sender_type, body, media_type, created_at FROM ${sch}.messages
+        `SELECT sender_type, body, media_type, media_processed FROM (
+            SELECT sender_type, body, media_type, media_processed, created_at FROM ${sch}.messages
             WHERE contact_id = $1::uuid AND ${innerWhere}
             ORDER BY created_at DESC
             LIMIT ${limit}
         ) sub ORDER BY sub.created_at ASC`,
         params
-    )) as unknown as { sender_type: string; body: string | null; media_type: string | null }[]
+    )) as unknown as { sender_type: string; body: string | null; media_type: string | null; media_processed: boolean | null }[]
 
     const lines = messages.map(m => {
         const sender =
@@ -67,7 +67,21 @@ export async function buildContext(
                 : m.media_type === 'document' ? 'documento'
                 : m.media_type === 'sticker' ? 'sticker'
                 : m.media_type
-            content = `[${mediaLabel}] ${m.body || ''}`
+
+            // Se é mídia de contato e ainda não foi processada, indicar claramente
+            const bodyText = m.body || ''
+            const isPlaceholder = ['Imagem enviada', 'Áudio enviado', 'Mídia enviada', 'Midia enviada', 'Vídeo enviado', 'Documento enviado', ''].includes(bodyText.trim())
+
+            if (m.sender_type === 'contact' && isPlaceholder && !m.media_processed) {
+                // Mídia ainda não processada — dizer explicitamente à IA
+                content = m.media_type === 'image'
+                    ? `[${mediaLabel}] [Você não conseguiu ver esta imagem. Peça ao cliente para descrever o que a imagem mostra.]`
+                    : m.media_type === 'audio'
+                        ? `[${mediaLabel}] [Você não conseguiu ouvir este áudio. Peça ao cliente para digitar a mensagem.]`
+                        : `[${mediaLabel}] [Mídia recebida mas não processada]`
+            } else {
+                content = `[${mediaLabel}] ${bodyText}`
+            }
         }
         // Delimitadores claros para dificultar prompt injection via mensagens do contato
         return `[${sender}]: ${content.trim() || '[Mídia]'}`

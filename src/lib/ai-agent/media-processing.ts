@@ -72,46 +72,93 @@ export async function downloadMediaUazapi(
     whatsappId: string
 ): Promise<{ buffer: Buffer; mimetype: string } | null> {
     const base = getUazapiBaseUrl()
-    try {
-        const res = await fetch(`${base}/message/download`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                token: instanceToken.trim()
-            },
-            body: JSON.stringify({ id: whatsappId, return_base64: true }),
-            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-        })
-        if (!res.ok) {
-            console.error(`downloadMediaUazapi: HTTP ${res.status}`)
+    const token = instanceToken.trim()
+
+    // Tentar até 2x com pequeno delay entre tentativas
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            console.log(`[downloadMediaUazapi] Tentativa ${attempt}: POST ${base}/message/download id=${whatsappId}`)
+
+            const res = await fetch(`${base}/message/download`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    token
+                },
+                body: JSON.stringify({ id: whatsappId, return_base64: true }),
+                signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+            })
+
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '')
+                console.error(`[downloadMediaUazapi] HTTP ${res.status}: ${errText.slice(0, 200)}`)
+                if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 2000))
+                    continue
+                }
+                return null
+            }
+
+            const data = (await res.json()) as Record<string, unknown>
+            const keys = Object.keys(data)
+            console.log(`[downloadMediaUazapi] Response keys: ${keys.join(', ')}`)
+
+            // Uazapi pode retornar { base64, mimetype } ou { data, mime } etc.
+            const b64 =
+                (typeof data.base64 === 'string' ? data.base64 : '') ||
+                (typeof data.data === 'string' ? data.data : '') ||
+                (typeof data.file === 'string' ? data.file : '') ||
+                (typeof data.body === 'string' ? data.body : '')
+            const mime =
+                (typeof data.mimetype === 'string' ? data.mimetype : '') ||
+                (typeof data.mimeType === 'string' ? data.mimeType : '') ||
+                (typeof data.mime === 'string' ? data.mime : '') ||
+                (typeof data.mime_type === 'string' ? data.mime_type : '') ||
+                (typeof data.content_type === 'string' ? data.content_type : '') ||
+                'application/octet-stream'
+
+            if (!b64) {
+                console.error(`[downloadMediaUazapi] Nenhum campo base64 na resposta. Keys: ${keys.join(', ')}. Valores (primeiros 50 chars):`,
+                    keys.reduce((acc, k) => {
+                        const v = data[k]
+                        acc[k] = typeof v === 'string' ? v.slice(0, 50) + '...' : typeof v
+                        return acc
+                    }, {} as Record<string, unknown>)
+                )
+                if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 2000))
+                    continue
+                }
+                return null
+            }
+
+            const buffer = Buffer.from(b64, 'base64')
+            console.log(`[downloadMediaUazapi] Download OK: ${buffer.length} bytes, mime=${mime}`)
+
+            if (buffer.length > MAX_MEDIA_SIZE_BYTES) {
+                console.warn('[downloadMediaUazapi] Arquivo muito grande:', buffer.length)
+                return null
+            }
+            if (buffer.length < 100) {
+                console.warn(`[downloadMediaUazapi] Arquivo muito pequeno (${buffer.length} bytes), possível erro`)
+                if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 2000))
+                    continue
+                }
+            }
+
+            return { buffer, mimetype: mime.split(';')[0].trim() }
+        } catch (e) {
+            console.error(`[downloadMediaUazapi] Tentativa ${attempt} erro:`, e)
+            if (attempt < 2) {
+                await new Promise(r => setTimeout(r, 2000))
+                continue
+            }
             return null
         }
-        const data = (await res.json()) as Record<string, unknown>
-        // Uazapi pode retornar { base64, mimetype } ou { data, mime } etc.
-        const b64 =
-            (typeof data.base64 === 'string' ? data.base64 : '') ||
-            (typeof data.data === 'string' ? data.data : '') ||
-            (typeof data.file === 'string' ? data.file : '')
-        const mime =
-            (typeof data.mimetype === 'string' ? data.mimetype : '') ||
-            (typeof data.mimeType === 'string' ? data.mimeType : '') ||
-            (typeof data.mime === 'string' ? data.mime : '') ||
-            (typeof data.mime_type === 'string' ? data.mime_type : '') ||
-            'application/octet-stream'
-        if (!b64) {
-            console.error('downloadMediaUazapi: no base64 field in response')
-            return null
-        }
-        const buffer = Buffer.from(b64, 'base64')
-        if (buffer.length > MAX_MEDIA_SIZE_BYTES) {
-            console.warn('downloadMediaUazapi: file too large', buffer.length)
-            return null
-        }
-        return { buffer, mimetype: mime.split(';')[0].trim() }
-    } catch (e) {
-        console.error('downloadMediaUazapi:', e)
-        return null
     }
+
+    return null
 }
 
 // ─── Download — Meta Cloud API (Official) ───────────────────────
@@ -418,8 +465,9 @@ export async function processUnprocessedMedia(
     await ensureMediaColumns(workspaceSlug)
 
     // Mensagens recentes com mídia por processar
+    // Inclui created_at para decidir se vale retry ou se deve desistir
     const mediaMessages = (await sql.unsafe(
-        `SELECT id, whatsapp_id, media_type, body, media_ref
+        `SELECT id, whatsapp_id, media_type, body, media_ref, created_at
          FROM ${sch}.messages
          WHERE contact_id = $1::uuid
            AND sender_type = 'contact'
@@ -434,6 +482,7 @@ export async function processUnprocessedMedia(
         media_type: string
         body: string | null
         media_ref: string | null
+        created_at: string | Date
     }>
 
     if (!mediaMessages.length) return
@@ -441,6 +490,8 @@ export async function processUnprocessedMedia(
     console.log(`[media-processing] ${workspaceSlug}: ${mediaMessages.length} mídias pendentes para contacto ${contactId}`)
 
     const startMs = Date.now()
+    /** Máximo de tempo que tentamos re-download antes de desistir (10 min) */
+    const MAX_RETRY_AGE_MS = 10 * 60 * 1000
 
     // Processa em paralelo (máx MAX_MEDIA_PER_RUN itens)
     await Promise.allSettled(
@@ -451,8 +502,11 @@ export async function processUnprocessedMedia(
                 return
             }
 
+            const msgAgeMs = Date.now() - new Date(msg.created_at).getTime()
+            const isOldEnoughToGiveUp = msgAgeMs > MAX_RETRY_AGE_MS
+
             try {
-                console.log(`[media-processing] Processando msg ${msg.id}: type=${msg.media_type}, wa_id=${msg.whatsapp_id}, provider=${providerInfo.providerType}`)
+                console.log(`[media-processing] Processando msg ${msg.id}: type=${msg.media_type}, wa_id=${msg.whatsapp_id}, provider=${providerInfo.providerType}, age=${Math.round(msgAgeMs / 1000)}s`)
 
                 // ── Download ──
                 let mediaData: { buffer: Buffer; mimetype: string } | null = null
@@ -482,8 +536,20 @@ export async function processUnprocessedMedia(
                 }
 
                 if (!mediaData) {
-                    console.warn(`[media-processing] Nenhum dado de mídia obtido para msg ${msg.id}, marcando como processado`)
-                    await markProcessed(sql, sch, msg.id)
+                    if (isOldEnoughToGiveUp) {
+                        // Mensagem antiga demais — desiste e atualiza body para IA saber
+                        console.warn(`[media-processing] Desistindo do download msg ${msg.id} (age=${Math.round(msgAgeMs / 1000)}s)`)
+                        const failBody = msg.media_type === 'image'
+                            ? '[O cliente enviou uma imagem, mas não foi possível visualizá-la. Peça para o cliente descrever o que a imagem mostra.]'
+                            : '[O cliente enviou um áudio, mas não foi possível ouvi-lo. Peça para o cliente digitar a mensagem.]'
+                        await sql.unsafe(
+                            `UPDATE ${sch}.messages SET body = $2, media_processed = true WHERE id = $1::uuid`,
+                            [msg.id, failBody]
+                        )
+                    } else {
+                        // Mensagem recente — NÃO marca como processada para tentar novamente
+                        console.warn(`[media-processing] Download falhou para msg ${msg.id}, tentará novamente no próximo ciclo (age=${Math.round(msgAgeMs / 1000)}s)`)
+                    }
                     return
                 }
 
@@ -531,12 +597,28 @@ export async function processUnprocessedMedia(
                         [msg.id, processedBody]
                     )
                 } else {
+                    // Análise retornou vazio — definir body informativo e marcar
                     console.warn(`[media-processing] Análise retornou vazio para msg ${msg.id} (${msg.media_type})`)
-                    await markProcessed(sql, sch, msg.id)
+                    const emptyBody = msg.media_type === 'image'
+                        ? '[O cliente enviou uma imagem, mas não foi possível analisá-la. Peça para o cliente descrever o que a imagem mostra.]'
+                        : '[O cliente enviou um áudio, mas não foi possível transcrevê-lo. Peça para o cliente digitar a mensagem.]'
+                    await sql.unsafe(
+                        `UPDATE ${sch}.messages SET body = $2, media_processed = true WHERE id = $1::uuid`,
+                        [msg.id, emptyBody]
+                    )
                 }
             } catch (e) {
                 console.error(`[media-processing] ERRO msg=${msg.id}:`, e)
-                await markProcessed(sql, sch, msg.id)
+                if (isOldEnoughToGiveUp) {
+                    const errorBody = msg.media_type === 'image'
+                        ? '[O cliente enviou uma imagem, mas ocorreu um erro ao processá-la. Peça para o cliente descrever o que a imagem mostra.]'
+                        : '[O cliente enviou um áudio, mas ocorreu um erro ao processá-lo. Peça para o cliente digitar a mensagem.]'
+                    await sql.unsafe(
+                        `UPDATE ${sch}.messages SET body = $2, media_processed = true WHERE id = $1::uuid`,
+                        [msg.id, errorBody]
+                    ).catch(() => {})
+                }
+                // Se recente, não marca — tentará novamente
             }
         })
     )

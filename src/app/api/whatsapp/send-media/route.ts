@@ -101,8 +101,8 @@ export async function POST(request: Request) {
             activeConvId = (convRows[0] as unknown as { id: string } | undefined)?.id ?? null
         } catch { /* ignore */ }
 
-        // Save message to DB
-        const bodyText = caption || `[${media_type}]`
+        // Save message to DB — inclui nome do arquivo e caption
+        const bodyText = caption || (filename ? `[${media_type}: ${filename}]` : `[${media_type}]`)
         const savedRows = await sql.unsafe(
             `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status)
              VALUES ($1::uuid, $2::uuid, 'user', $3, $4, 'sending')
@@ -183,8 +183,18 @@ export async function POST(request: Request) {
                     mimetype,
                     delay: 1200
                 }
+                // caption: texto que aparece junto da media no WhatsApp
                 if (caption) sendBody.caption = caption
-                if (filename) sendBody.filename = filename
+                // fileName (camelCase): nome do arquivo que aparece pro destinatário
+                // Uazapi espera fileName, não filename
+                if (filename) {
+                    sendBody.fileName = filename
+                    sendBody.filename = filename // fallback para versões diferentes do Uazapi
+                    // Se não tem caption e é documento, usa o nome do arquivo como caption
+                    if (!caption && media_type === 'document') {
+                        sendBody.caption = filename
+                    }
+                }
 
                 const res = await fetch(`${base}/send/media`, {
                     method: 'POST',

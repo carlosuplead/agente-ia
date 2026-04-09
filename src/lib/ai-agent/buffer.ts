@@ -4,15 +4,34 @@ const MAX_RETRIES = 3
 const BASE_DELAY_MS = 1000
 
 /**
+ * Resolve a base URL do site para chamadas internas.
+ * Prioridade:
+ *   1. NEXT_PUBLIC_SITE_URL (set explícito)
+ *   2. VERCEL_URL (auto-set pelo Vercel — sempre disponível em runtime)
+ *   3. localhost fallback (dev)
+ */
+function getBaseUrl(): string {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+    if (siteUrl && siteUrl !== 'http://localhost:3000') {
+        return siteUrl
+    }
+    const vercelUrl = process.env.VERCEL_URL?.trim()
+    if (vercelUrl) {
+        return `https://${vercelUrl}`
+    }
+    return 'http://localhost:3000'
+}
+
+/**
  * Agenda processamento IA para um contato, com retry e fallback queue.
  * Se todas tentativas de chamar /api/ai/schedule falharem, insere na
  * tabela public.ai_process_fallback_queue para reprocessamento posterior.
  */
 export async function addToBuffer(workspaceSlug: string, contactId: string, _messageId: string) {
     const secret = process.env.INTERNAL_AI_SECRET
-    const base = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    const base = getBaseUrl()
     if (!secret) {
-        console.error('[buffer] INTERNAL_AI_SECRET missing; skip AI schedule')
+        console.error('[buffer] INTERNAL_AI_SECRET missing; skip AI schedule. Set INTERNAL_AI_SECRET env var.')
         return
     }
 

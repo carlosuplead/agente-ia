@@ -20,6 +20,7 @@ import { addToBuffer } from '@/lib/ai-agent/buffer'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { resetFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
+import { ensureMediaColumns } from '@/lib/ai-agent/media-processing'
 
 // ─── Payload parsing ──────────────────────────────────────────────
 
@@ -458,6 +459,11 @@ export async function POST(request: Request) {
         if (!contactId) {
             console.error('[uazapi-webhook] Não conseguiu criar/encontrar contato:', normalized)
             return NextResponse.json({ success: true })
+        }
+
+        // Garantir colunas media_ref/media_processed se houver mídia
+        if (msg.mediaType && ['audio', 'image', 'video', 'document'].includes(msg.mediaType)) {
+            await ensureMediaColumns(ws).catch(() => {})
         }
 
         // Buscar conversa ativa

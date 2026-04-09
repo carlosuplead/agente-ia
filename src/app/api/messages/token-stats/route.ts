@@ -118,16 +118,16 @@ export async function GET(request: Request) {
 
         /* Em série: evita 5 queries em paralelo a competirem pelo pool e rejeições órfãs no Promise.all. */
         const totalRow = await sql.unsafe(
-            `SELECT COALESCE(SUM(total_tokens), 0)::bigint AS g
+            `SELECT COALESCE(SUM(total_tokens), 0)::text AS g
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')`,
             [rangeDays]
         )
         const modelRows = await sql.unsafe(
             `SELECT provider, model,
-                    SUM(prompt_tokens)::bigint AS prompt_tokens,
-                    SUM(completion_tokens)::bigint AS completion_tokens,
-                    SUM(total_tokens)::bigint AS total_tokens
+                    SUM(prompt_tokens)::text AS prompt_tokens,
+                    SUM(completion_tokens)::text AS completion_tokens,
+                    SUM(total_tokens)::text AS total_tokens
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
              GROUP BY provider, model
@@ -137,7 +137,7 @@ export async function GET(request: Request) {
         const dayRows = await sql.unsafe(
             `SELECT (created_at AT TIME ZONE 'UTC')::date::text AS d,
                     model,
-                    SUM(total_tokens)::bigint AS t
+                    SUM(total_tokens)::text AS t
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
              GROUP BY 1, 2
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
         const monthRows = await sql.unsafe(
             `SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS ym,
                     model,
-                    SUM(total_tokens)::bigint AS t
+                    SUM(total_tokens)::text AS t
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
              GROUP BY 1, 2
@@ -158,7 +158,7 @@ export async function GET(request: Request) {
             `SELECT u.ai_conversation_id::text AS ai_conversation_id,
                     COALESCE(c.name, '') AS contact_name,
                     COALESCE(c.phone, '') AS contact_phone,
-                    SUM(u.total_tokens)::bigint AS total_tokens,
+                    SUM(u.total_tokens)::text AS total_tokens,
                     MAX(u.created_at)::text AS last_activity_at
              FROM ${sch}.llm_usage u
              JOIN ${sch}.contacts c ON c.id = u.contact_id

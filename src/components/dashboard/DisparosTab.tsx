@@ -678,18 +678,18 @@ export function DisparosTab() {
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept=".csv,text/csv"
+                            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                             style={{ display: 'none' }}
                             onChange={onPickImportFile}
                         />
                         <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={!canManage || loading || importing}
+                            disabled={!canManage || importing}
                             onClick={() => fileInputRef.current?.click()}
                         >
                             <Upload size={15} />
-                            {importing ? 'A importar…' : 'Importar CSV'}
+                            {importing ? 'A importar…' : 'Importar CSV/Excel'}
                         </button>
                         <a
                             href="/examples/contacts-import-sample.csv"

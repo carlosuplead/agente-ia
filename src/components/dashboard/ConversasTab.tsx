@@ -29,6 +29,7 @@ type ChatMsg = {
     media_url: string | null
     media_type: string | null
     created_at: string
+    whatsapp_id?: string | null
 }
 
 type ContactInfo = {
@@ -90,6 +91,11 @@ export function ConversasTab() {
     const [sending, setSending] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
+
+    // File preview (mostrar antes de enviar, com opção de caption)
+    const [pendingFile, setPendingFile] = useState<File | null>(null)
+    const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
+    const [pendingFileName, setPendingFileName] = useState<string>('')
 
     // Audio recording
     const [isRecording, setIsRecording] = useState(false)
@@ -181,14 +187,45 @@ export function ConversasTab() {
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 
-    // Send text (optimistic UI — mensagem aparece instantaneamente)
+    // ── Helpers para file preview ──
+    function selectFileForPreview(file: File) {
+        setPendingFile(file)
+        setPendingFileName(file.name)
+        // Gera preview para imagens
+        if (file.type.startsWith('image/')) {
+            const url = URL.createObjectURL(file)
+            setPendingFilePreview(url)
+        } else {
+            setPendingFilePreview(null)
+        }
+    }
+
+    function clearPendingFile() {
+        if (pendingFilePreview) URL.revokeObjectURL(pendingFilePreview)
+        setPendingFile(null)
+        setPendingFilePreview(null)
+        setPendingFileName('')
+    }
+
+    // ── Send text (optimistic, sem bloqueio — pode enviar várias seguidas) ──
     async function handleSendText(e: React.FormEvent) {
         e.preventDefault()
-        if (!slug || !selectedContactId || !composeText.trim() || sending) return
+        if (!slug || !selectedContactId) return
+
+        // Se tem arquivo pendente, envia como media com caption
+        if (pendingFile) {
+            const caption = composeText.trim() || undefined
+            void handleSendMedia(pendingFile, caption)
+            clearPendingFile()
+            setComposeText('')
+            return
+        }
+
+        if (!composeText.trim()) return
         const text = composeText.trim()
 
         // Optimistic: adiciona mensagem na UI imediatamente
-        const optimisticId = `opt-${Date.now()}`
+        const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
         const optimisticMsg: ChatMsg = {
             id: optimisticId,
             body: text,
@@ -201,7 +238,7 @@ export function ConversasTab() {
         setChatMessages(prev => [...prev, optimisticMsg])
         setComposeText('')
 
-        setSending(true)
+        // Não bloqueia — pode enviar outra mensagem imediatamente
         try {
             const res = await fetch('/api/whatsapp/send', {
                 method: 'POST',
@@ -214,11 +251,9 @@ export function ConversasTab() {
                 })
             })
             if (res.ok) {
-                // Recarrega para obter o ID real da mensagem
                 await loadChat(selectedContactId)
                 loadConversations(true).catch(() => {})
             } else {
-                // Marca como falha na UI
                 setChatMessages(prev => prev.map(m =>
                     m.id === optimisticId ? { ...m, status: 'failed' } : m
                 ))
@@ -229,21 +264,30 @@ export function ConversasTab() {
             setChatMessages(prev => prev.map(m =>
                 m.id === optimisticId ? { ...m, status: 'failed' } : m
             ))
-            d.setToast({ message: 'Erro de conexão', variant: 'error' })
-        } finally {
-            setSending(false)
         }
     }
 
-    // Send media file
-    async function handleSendMedia(file: File) {
-        if (!slug || !selectedContactId || sending) return
-        setSending(true)
+    // ── Send media (com caption opcional) ──
+    async function handleSendMedia(file: File, caption?: string) {
+        if (!slug || !selectedContactId) return
 
         let media_type = 'document'
         if (file.type.startsWith('image/')) media_type = 'image'
         else if (file.type.startsWith('video/')) media_type = 'video'
         else if (file.type.startsWith('audio/')) media_type = 'audio'
+
+        // Optimistic: mostra na UI imediatamente
+        const optimisticId = `opt-media-${Date.now()}`
+        const optimisticMsg: ChatMsg = {
+            id: optimisticId,
+            body: caption || `[${media_type}: ${file.name}]`,
+            sender_type: 'user',
+            status: 'sending',
+            media_url: null,
+            media_type,
+            created_at: new Date().toISOString()
+        }
+        setChatMessages(prev => [...prev, optimisticMsg])
 
         try {
             const formData = new FormData()
@@ -252,6 +296,7 @@ export function ConversasTab() {
             formData.append('media_type', media_type)
             formData.append('file', file)
             formData.append('filename', file.name)
+            if (caption) formData.append('caption', caption)
 
             const res = await fetch('/api/whatsapp/send-media', {
                 method: 'POST',
@@ -260,12 +305,17 @@ export function ConversasTab() {
             })
             if (res.ok) {
                 await loadChat(selectedContactId)
-                loadConversations().catch(() => {})
+                loadConversations(true).catch(() => {})
             } else {
+                setChatMessages(prev => prev.map(m =>
+                    m.id === optimisticId ? { ...m, status: 'failed' } : m
+                ))
                 d.setToast({ message: 'Erro ao enviar midia', variant: 'error' })
             }
-        } finally {
-            setSending(false)
+        } catch {
+            setChatMessages(prev => prev.map(m =>
+                m.id === optimisticId ? { ...m, status: 'failed' } : m
+            ))
         }
     }
 
@@ -289,7 +339,8 @@ export function ConversasTab() {
                 const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
                 if (blob.size < 1000) return // too short
 
-                const file = new File([blob], 'audio.webm', { type: 'audio/webm' })
+                const file = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' })
+                // Audio de gravação envia direto (sem preview)
                 await handleSendMedia(file)
             }
 
@@ -603,6 +654,13 @@ export function ConversasTab() {
                             const senderCls = `chat-bubble-sender--${st === 'contact' ? 'contact' : st === 'ai' ? 'ai' : 'user'}`
                             const SenderIcon = st === 'ai' ? Bot : User
 
+                            // URL da media: usa media_url se existir, senão proxy via whatsapp_id
+                            const mediaUrl = msg.media_url
+                                ? msg.media_url
+                                : (msg.media_type && msg.whatsapp_id && slug)
+                                    ? `/api/whatsapp/media?workspace_slug=${encodeURIComponent(slug)}&whatsapp_id=${encodeURIComponent(msg.whatsapp_id)}`
+                                    : null
+
                             return (
                                 <div key={msg.id} className={`chat-msg-row ${rowCls}`}>
                                     <div className={`chat-bubble ${bubbleCls}`}>
@@ -611,26 +669,26 @@ export function ConversasTab() {
                                             {senderLabel(st)}
                                         </div>
 
-                                        {/* Media */}
-                                        {msg.media_type && msg.media_url && (
+                                        {/* Media — usa proxy se media_url não existir */}
+                                        {msg.media_type && mediaUrl && (
                                             <div className="chat-bubble-media">
                                                 {msg.media_type === 'image' && (
-                                                    <img src={msg.media_url} alt="imagem" loading="lazy" />
+                                                    <img src={mediaUrl} alt="imagem" loading="lazy" />
                                                 )}
                                                 {msg.media_type === 'video' && (
-                                                    <video src={msg.media_url} controls preload="metadata" />
+                                                    <video src={mediaUrl} controls preload="metadata" />
                                                 )}
                                                 {msg.media_type === 'audio' && (
-                                                    <audio src={msg.media_url} controls preload="metadata" />
+                                                    <audio src={mediaUrl} controls preload="metadata" />
                                                 )}
                                                 {msg.media_type === 'document' && (
-                                                    <a href={msg.media_url} target="_blank" rel="noreferrer">
+                                                    <a href={mediaUrl} target="_blank" rel="noreferrer">
                                                         <FileText size={14} /> Documento anexado
                                                     </a>
                                                 )}
                                             </div>
                                         )}
-                                        {msg.media_type && !msg.media_url && (
+                                        {msg.media_type && !mediaUrl && (
                                             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                                 [{msg.media_type}]
                                             </div>
@@ -699,7 +757,7 @@ export function ConversasTab() {
                             </button>
                         </div>
                     ) : (
-                        <form onSubmit={handleSendText} className="chat-compose">
+                        <form onSubmit={handleSendText} className="chat-compose-wrapper">
                             <input
                                 type="file"
                                 ref={fileInputRef}
@@ -707,43 +765,70 @@ export function ConversasTab() {
                                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
                                 onChange={e => {
                                     const file = e.target.files?.[0]
-                                    if (file) void handleSendMedia(file)
+                                    if (file) selectFileForPreview(file)
                                     e.target.value = ''
                                 }}
                             />
-                            <button
-                                type="button"
-                                className="chat-compose-btn"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={sending}
-                                title="Enviar arquivo"
-                            >
-                                <Paperclip size={18} />
-                            </button>
-                            <button
-                                type="button"
-                                className="chat-compose-btn"
-                                onClick={startRecording}
-                                disabled={sending}
-                                title="Gravar audio"
-                            >
-                                <Mic size={18} />
-                            </button>
-                            <input
-                                type="text"
-                                className="input"
-                                placeholder="Digite uma mensagem..."
-                                value={composeText}
-                                onChange={e => setComposeText(e.target.value)}
-                                disabled={sending}
-                            />
-                            <button
-                                type="submit"
-                                disabled={!composeText.trim() || sending}
-                                className="btn btn-primary btn-compact chat-compose-send"
-                            >
-                                <Send size={14} />
-                            </button>
+
+                            {/* Barra de preview do arquivo selecionado */}
+                            {pendingFile && (
+                                <div className="chat-file-preview">
+                                    {pendingFilePreview ? (
+                                        <img src={pendingFilePreview} alt="preview" className="chat-file-preview-img" />
+                                    ) : (
+                                        <div className="chat-file-preview-icon">
+                                            <FileText size={20} />
+                                        </div>
+                                    )}
+                                    <div className="chat-file-preview-info">
+                                        <span className="chat-file-preview-name">{pendingFileName}</span>
+                                        <span className="chat-file-preview-size">
+                                            {(pendingFile.size / 1024).toFixed(0)} KB
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="chat-file-preview-close"
+                                        onClick={clearPendingFile}
+                                        title="Cancelar"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="chat-compose">
+                                <button
+                                    type="button"
+                                    className="chat-compose-btn"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Anexar arquivo"
+                                >
+                                    <Paperclip size={18} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className="chat-compose-btn"
+                                    onClick={startRecording}
+                                    title="Gravar audio"
+                                >
+                                    <Mic size={18} />
+                                </button>
+                                <input
+                                    type="text"
+                                    className="input"
+                                    placeholder={pendingFile ? "Escreva uma legenda (opcional)..." : "Digite uma mensagem..."}
+                                    value={composeText}
+                                    onChange={e => setComposeText(e.target.value)}
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!composeText.trim() && !pendingFile}
+                                    className="btn btn-primary btn-compact chat-compose-send"
+                                >
+                                    <Send size={14} />
+                                </button>
+                            </div>
                         </form>
                     )}
                 </div>

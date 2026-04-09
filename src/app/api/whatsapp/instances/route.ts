@@ -52,13 +52,22 @@ export async function POST(request: Request) {
         }
 
         // Auto-configurar webhook via POST /webhook (spec uazapiGO v2)
-        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
-        if (siteUrl) {
-            const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
-            const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(instanceToken)}`
-            const webhookSet = await uazapi.configureInstanceWebhook(instanceToken, webhookUrl)
+        // Se WHATSAPP_WEBHOOK_RELAY_URL estiver definido, usa relay (ex: n8n) em vez de direto pro Vercel
+        const relayUrl = (process.env.WHATSAPP_WEBHOOK_RELAY_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
+        if (relayUrl) {
+            const webhookSet = await uazapi.configureInstanceWebhook(instanceToken, relayUrl)
             if (!webhookSet) {
-                console.warn(`[instances] Webhook auto-config falhou para ${workspace_slug}. Configure manualmente no painel Uazapi: ${webhookUrl}`)
+                console.warn(`[instances] Webhook relay auto-config falhou para ${workspace_slug}. URL: ${relayUrl}`)
+            }
+        } else {
+            const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
+            if (siteUrl) {
+                const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
+                const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(instanceToken)}`
+                const webhookSet = await uazapi.configureInstanceWebhook(instanceToken, webhookUrl)
+                if (!webhookSet) {
+                    console.warn(`[instances] Webhook auto-config falhou para ${workspace_slug}. Configure manualmente: ${webhookUrl}`)
+                }
             }
         }
 
@@ -182,11 +191,16 @@ export async function GET(request: Request) {
                 // Auto-configure webhook only when status just changed to connected
                 const justConnected = remote.dbStatus === 'connected' && r.status !== 'connected'
                 if (justConnected && r.instance_token) {
-                    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
-                    if (siteUrl) {
-                        const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
-                        const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(r.instance_token)}`
-                        uazapi.configureInstanceWebhook(r.instance_token, webhookUrl).catch(() => {})
+                    const relayUrl = (process.env.WHATSAPP_WEBHOOK_RELAY_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
+                    if (relayUrl) {
+                        uazapi.configureInstanceWebhook(r.instance_token, relayUrl).catch(() => {})
+                    } else {
+                        const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '').replace(/[\r\n]+/g, '').replace(/\/+$/, '')
+                        if (siteUrl) {
+                            const baseUrl = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`
+                            const webhookUrl = `${baseUrl}/api/whatsapp/webhook?token=${encodeURIComponent(r.instance_token)}`
+                            uazapi.configureInstanceWebhook(r.instance_token, webhookUrl).catch(() => {})
+                        }
                     }
                 }
             } else if (r.status === 'connected' || r.status === 'connecting') {

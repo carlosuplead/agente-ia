@@ -61,6 +61,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
             messages: messages || [],
             contact: contactRows[0] || null,
             conversation: convRows[0] || null
+        }, {
+            headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' }
         })
     } catch (e) {
         if (isMissingTenantSchema(e)) {

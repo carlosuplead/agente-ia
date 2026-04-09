@@ -128,11 +128,18 @@ export function ConversasTab() {
         loadConversationsRef.current = true
         if (!silent) setLoading(true)
         try {
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), 10000) // 10s timeout
             const res = await fetch(`/api/workspace/conversations?workspace_slug=${encodeURIComponent(slug)}`, {
-                credentials: 'include'
+                credentials: 'include',
+                cache: 'no-store',
+                signal: controller.signal
             })
+            clearTimeout(timer)
             const json = await res.json().catch(() => ({}))
             setConversations(Array.isArray(json.conversations) ? json.conversations : [])
+        } catch {
+            // Timeout ou erro de rede — ignora silenciosamente, tentará de novo no próximo ciclo
         } finally {
             loadConversationsRef.current = false
             if (!silent) setLoading(false)
@@ -143,30 +150,39 @@ export function ConversasTab() {
         void loadConversations()
     }, [loadConversations])
 
-    // Auto-refresh conversations list every 12s (silent, sem loading indicator)
+    // Auto-refresh conversations list every 8s
     useEffect(() => {
         if (!slug) return
         const id = setInterval(() => {
             void loadConversations(true)
-        }, 12000)
+        }, 8000)
         return () => clearInterval(id)
     }, [slug, loadConversations])
 
     // Load chat for selected contact
+    const loadChatRef = useRef(false)
     const loadChat = useCallback(async (contactId: string) => {
         if (!slug) return
-        setChatLoading(true)
+        if (loadChatRef.current) return // evita requests paralelos
+        loadChatRef.current = true
+        setChatLoading(prev => prev) // mantém loading anterior em refresh silencioso
         try {
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), 8000) // 8s timeout
             const res = await fetch(
                 `/api/workspace/conversations/${contactId}?workspace_slug=${encodeURIComponent(slug)}`,
-                { credentials: 'include' }
+                { credentials: 'include', cache: 'no-store', signal: controller.signal }
             )
+            clearTimeout(timer)
             const json = await res.json().catch(() => ({}))
             setChatMessages(Array.isArray(json.messages) ? json.messages : [])
             setContactInfo(json.contact || null)
             setConvInfo(json.conversation || null)
             setNotesText(json.conversation?.internal_notes || '')
+        } catch {
+            // Timeout ou erro — ignora, tenta de novo
         } finally {
+            loadChatRef.current = false
             setChatLoading(false)
         }
     }, [slug])
@@ -180,10 +196,10 @@ export function ConversasTab() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
 
-    // Auto-refresh chat every 5s
+    // Auto-refresh chat every 4s (rápido para espelhar IA)
     useEffect(() => {
         if (!selectedContactId || !slug) return
-        const id = setInterval(() => void loadChat(selectedContactId), 5000)
+        const id = setInterval(() => void loadChat(selectedContactId), 4000)
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 

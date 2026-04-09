@@ -69,7 +69,9 @@ export async function GET(request: Request) {
             []
         )
 
-        return NextResponse.json({ conversations: rows })
+        return NextResponse.json({ conversations: rows }, {
+            headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' }
+        })
     } catch (e) {
         if (isMissingTenantSchema(e) || isStatementTimeout(e)) {
             return NextResponse.json({ conversations: [] })

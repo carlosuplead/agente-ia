@@ -438,15 +438,22 @@ export async function processUnprocessedMedia(
 
     if (!mediaMessages.length) return
 
+    console.log(`[media-processing] ${workspaceSlug}: ${mediaMessages.length} mídias pendentes para contacto ${contactId}`)
+
     const startMs = Date.now()
 
     // Processa em paralelo (máx MAX_MEDIA_PER_RUN itens)
     await Promise.allSettled(
         mediaMessages.map(async msg => {
             // Guarda contra timeout global
-            if (Date.now() - startMs > PROCESSING_TIMEOUT_MS) return
+            if (Date.now() - startMs > PROCESSING_TIMEOUT_MS) {
+                console.warn(`[media-processing] Timeout global atingido, pulando msg ${msg.id}`)
+                return
+            }
 
             try {
+                console.log(`[media-processing] Processando msg ${msg.id}: type=${msg.media_type}, wa_id=${msg.whatsapp_id}, provider=${providerInfo.providerType}`)
+
                 // ── Download ──
                 let mediaData: { buffer: Buffer; mimetype: string } | null = null
 
@@ -458,6 +465,9 @@ export async function processUnprocessedMedia(
                         providerInfo.instanceToken,
                         msg.whatsapp_id
                     )
+                    if (!mediaData) {
+                        console.error(`[media-processing] Download Uazapi FALHOU para wa_id=${msg.whatsapp_id}`)
+                    }
                 } else if (
                     providerInfo.providerType === 'official' &&
                     msg.media_ref &&
@@ -467,12 +477,17 @@ export async function processUnprocessedMedia(
                         providerInfo.accessToken,
                         msg.media_ref
                     )
+                } else {
+                    console.warn(`[media-processing] Sem condições para download: provider=${providerInfo.providerType}, wa_id=${msg.whatsapp_id}, media_ref=${msg.media_ref}`)
                 }
 
                 if (!mediaData) {
+                    console.warn(`[media-processing] Nenhum dado de mídia obtido para msg ${msg.id}, marcando como processado`)
                     await markProcessed(sql, sch, msg.id)
                     return
                 }
+
+                console.log(`[media-processing] Download OK: ${mediaData.buffer.length} bytes, mime=${mediaData.mimetype}`)
 
                 // ── Transcrição / análise ──
                 let processedBody: string | null = null
@@ -510,15 +525,17 @@ export async function processUnprocessedMedia(
                 }
 
                 if (processedBody) {
+                    console.log(`[media-processing] Análise OK msg ${msg.id}: ${processedBody.slice(0, 80)}...`)
                     await sql.unsafe(
                         `UPDATE ${sch}.messages SET body = $2, media_processed = true WHERE id = $1::uuid`,
                         [msg.id, processedBody]
                     )
                 } else {
+                    console.warn(`[media-processing] Análise retornou vazio para msg ${msg.id} (${msg.media_type})`)
                     await markProcessed(sql, sch, msg.id)
                 }
             } catch (e) {
-                console.error(`processUnprocessedMedia msg=${msg.id}:`, e)
+                console.error(`[media-processing] ERRO msg=${msg.id}:`, e)
                 await markProcessed(sql, sch, msg.id)
             }
         })

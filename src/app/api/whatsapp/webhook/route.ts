@@ -79,54 +79,66 @@ function extractMessageBody(data: Record<string, unknown>): { body: string; medi
     const msgOuter = data.message as Record<string, unknown> | undefined
     const msgInner = msgOuter?.message as Record<string, unknown> | undefined
 
-    // Texto simples
+    // ── 0. Detectar media type do formato flat do uazapiGO ──
+    // uazapiGO envia message.type = "image", "audio", "ptt", "video", "document", "sticker"
+    // ou message.msgtype / message.mediaType / data.type
+    const flatMediaType = detectFlatMediaType(msgOuter, data)
+
+    // ── 1. Formato Baileys (nested message) ──
     if (msgInner) {
         if (typeof msgInner.conversation === 'string' && msgInner.conversation) {
             return { body: msgInner.conversation, mediaType: null }
         }
-        // Extended text (respostas citadas, links)
         const ext = msgInner.extendedTextMessage as Record<string, unknown> | undefined
         if (ext && typeof ext.text === 'string') {
             return { body: ext.text, mediaType: null }
         }
-        // Imagem com caption
         const img = msgInner.imageMessage as Record<string, unknown> | undefined
         if (img) {
             const caption = typeof img.caption === 'string' ? img.caption : ''
             return { body: caption || 'Imagem enviada', mediaType: 'image' }
         }
-        // Vídeo com caption
         const vid = msgInner.videoMessage as Record<string, unknown> | undefined
         if (vid) {
             const caption = typeof vid.caption === 'string' ? vid.caption : ''
             return { body: caption || 'Vídeo enviado', mediaType: 'video' }
         }
-        // Documento
         const doc = msgInner.documentMessage as Record<string, unknown> | undefined
         if (doc) {
             const fileName = typeof doc.fileName === 'string' ? doc.fileName : ''
             return { body: fileName || 'Documento enviado', mediaType: 'document' }
         }
-        // Áudio / PTT
         const audio = msgInner.audioMessage as Record<string, unknown> | undefined
         if (audio) {
             return { body: 'Áudio enviado', mediaType: 'audio' }
         }
-        // Sticker
         if (msgInner.stickerMessage) {
             return { body: 'Sticker enviado', mediaType: 'sticker' }
         }
-        // Contato
         if (msgInner.contactMessage || msgInner.contactsArrayMessage) {
             return { body: 'Contato enviado', mediaType: 'contact' }
         }
-        // Localização
         if (msgInner.locationMessage || msgInner.liveLocationMessage) {
             return { body: 'Localização enviada', mediaType: 'location' }
         }
     }
 
-    // Button reply (botões interativos)
+    // ── 2. Formato flat — se detectou media type, retorna com body correto ──
+    if (flatMediaType) {
+        // Buscar caption/body do formato flat
+        const caption = extractFlatCaption(msgOuter, data)
+        const bodyLabels: Record<string, string> = {
+            image: 'Imagem enviada',
+            audio: 'Áudio enviado',
+            video: 'Vídeo enviado',
+            document: 'Documento enviado',
+            sticker: 'Sticker enviado'
+        }
+        const defaultBody = bodyLabels[flatMediaType] || 'Mídia enviada'
+        return { body: caption || defaultBody, mediaType: flatMediaType }
+    }
+
+    // ── 3. Botões e listas interativas ──
     const buttonReply = data.buttonReply as Record<string, unknown> | undefined
     if (buttonReply && typeof buttonReply.selectedButtonId === 'string') {
         return {
@@ -134,26 +146,21 @@ function extractMessageBody(data: Record<string, unknown>): { body: string; medi
             mediaType: null
         }
     }
-    // buttonOrListid shorthand
     if (typeof data.buttonOrListid === 'string' && data.buttonOrListid) {
         return { body: data.buttonOrListid, mediaType: null }
     }
-
-    // List reply (listas interativas)
     const listReply = data.listReply as Record<string, unknown> | undefined
     if (listReply && typeof listReply.title === 'string') {
         return { body: listReply.title, mediaType: null }
     }
 
-    // Campos diretos no objeto raiz
+    // ── 4. Texto direto (formato flat — mensagem de texto normal) ──
     if (typeof data.body === 'string' && data.body) {
         return { body: data.body, mediaType: null }
     }
     if (typeof data.text === 'string' && data.text) {
         return { body: data.text, mediaType: null }
     }
-
-    // Campos diretos no msgOuter
     if (msgOuter) {
         if (typeof msgOuter.body === 'string' && msgOuter.body) {
             return { body: msgOuter.body, mediaType: null }
@@ -161,13 +168,66 @@ function extractMessageBody(data: Record<string, unknown>): { body: string; medi
         if (typeof msgOuter.text === 'string' && msgOuter.text) {
             return { body: msgOuter.text, mediaType: null }
         }
-        // caption fallback
-        if (typeof msgOuter.caption === 'string' && msgOuter.caption) {
-            return { body: msgOuter.caption, mediaType: 'image' }
-        }
     }
 
     return { body: 'Mídia enviada', mediaType: 'media' }
+}
+
+/**
+ * Detecta tipo de media no formato flat do uazapiGO.
+ * Campos possíveis: message.type, message.msgtype, message.mediaType, data.type
+ */
+function detectFlatMediaType(
+    msgOuter: Record<string, unknown> | undefined,
+    data: Record<string, unknown>
+): string | null {
+    // Mapa de tipos do Uazapi → nossos tipos internos
+    const typeMap: Record<string, string> = {
+        image: 'image',
+        photo: 'image',
+        audio: 'audio',
+        ptt: 'audio',        // Push-to-Talk = áudio de voz
+        voice: 'audio',
+        video: 'video',
+        document: 'document',
+        file: 'document',
+        sticker: 'sticker',
+        gif: 'video'
+    }
+
+    for (const obj of [msgOuter, data]) {
+        if (!obj) continue
+        for (const k of ['type', 'msgtype', 'mediaType', 'media_type']) {
+            const v = obj[k]
+            if (typeof v === 'string' && v) {
+                const normalized = v.toLowerCase().trim()
+                // Ignorar "text", "chat", "conversation" — não são media
+                if (['text', 'chat', 'conversation', 'message', 'extended'].includes(normalized)) continue
+                if (typeMap[normalized]) return typeMap[normalized]
+            }
+        }
+    }
+
+    return null
+}
+
+/**
+ * Extrai caption/texto de mensagens de media no formato flat.
+ */
+function extractFlatCaption(
+    msgOuter: Record<string, unknown> | undefined,
+    data: Record<string, unknown>
+): string {
+    for (const obj of [msgOuter, data]) {
+        if (!obj) continue
+        for (const k of ['caption', 'body', 'text', 'fileName', 'filename']) {
+            const v = obj[k]
+            if (typeof v === 'string' && v.trim()) {
+                return v.trim()
+            }
+        }
+    }
+    return ''
 }
 
 /**

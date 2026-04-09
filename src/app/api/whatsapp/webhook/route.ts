@@ -538,9 +538,12 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true })
     } catch (e) {
-        console.error('[uazapi-webhook] error:', e)
+        const errMsg = e instanceof Error ? e.message : String(e)
+        const errStack = e instanceof Error ? e.stack : ''
+        console.error('[uazapi-webhook] CRITICAL error:', errMsg)
+        console.error('[uazapi-webhook] stack:', errStack)
         // Retorna 200 para o Uazapi não reenviar infinitamente
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true, _debug_error: errMsg })
     }
 }
 

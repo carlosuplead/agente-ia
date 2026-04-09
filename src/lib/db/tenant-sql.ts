@@ -44,8 +44,8 @@ interface TenantSqlLike {
  * ou DNS ENOTFOUND para conexão direta IPv6).
  */
 function createRpcFallback(): TenantSqlLike {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
     if (!supabaseUrl || !serviceKey) {
         throw new Error('NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são necessários para fallback RPC')
     }
@@ -93,7 +93,7 @@ export function getTenantSql(): TenantSqlLike {
         return createRpcFallback()
     }
 
-    const url = process.env.DATABASE_URL
+    const url = (process.env.DATABASE_URL || '').trim()
     if (!url) {
         // Sem DATABASE_URL, tenta RPC fallback
         console.warn('[tenant-sql] DATABASE_URL em falta, usando RPC fallback')

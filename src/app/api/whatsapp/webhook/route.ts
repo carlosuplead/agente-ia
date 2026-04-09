@@ -432,9 +432,10 @@ export async function POST(request: Request) {
 
         // Buscar ou criar contato
         const variants = generateBrazilianPhoneVariants(normalized)
+        const phonePlaceholders = variants.map((_, i) => `$${i + 1}`).join(', ')
         const rows = await sql.unsafe(
-            `SELECT id FROM ${sch}.contacts WHERE phone = ANY($1::text[]) LIMIT 1`,
-            [variants]
+            `SELECT id FROM ${sch}.contacts WHERE phone IN (${phonePlaceholders}) LIMIT 1`,
+            variants
         )
         let contactId = (rows[0] as { id?: string } | undefined)?.id
         let isNewContact = false

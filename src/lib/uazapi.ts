@@ -343,6 +343,45 @@ async function tryConnectPayloadFromStatus(instanceToken: string): Promise<Uazap
     return null
 }
 
+// ──────────────────────────────────────────────── Profile Picture
+
+/**
+ * POST /contact/getProfilePicture (ou GET /contact/profilepic)
+ * Busca a URL da foto de perfil de um contato WhatsApp.
+ * Auth: header `token` (token da instância).
+ */
+export async function fetchProfilePicture(
+    instanceToken: string,
+    phone: string
+): Promise<string | null> {
+    const t = instanceToken.trim()
+    if (!t || !phone) return null
+
+    const base = getUazapiBaseUrl()
+    try {
+        const res = await fetch(`${base}/contact/getProfilePicture`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                token: t
+            },
+            body: JSON.stringify({ number: phone })
+        })
+
+        if (!res.ok) return null
+        const data = (await res.json()) as Record<string, unknown>
+        // Uazapi pode retornar { url, profilePicUrl, imgUrl, picture }
+        const url =
+            (typeof data.url === 'string' && data.url ? data.url : '') ||
+            (typeof data.profilePicUrl === 'string' ? data.profilePicUrl : '') ||
+            (typeof data.imgUrl === 'string' ? data.imgUrl : '') ||
+            (typeof data.picture === 'string' ? data.picture : '')
+        return url || null
+    } catch {
+        return null
+    }
+}
+
 // ──────────────────────────────────────────────── Send Messages
 
 export type SendTextOptions = {

@@ -528,6 +528,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true })
         }
 
+        // Atualizar nome do contato se temos pushName e o contato tem nome = telefone
+        if (msg.fromName && !isNewContact) {
+            try {
+                await sql.unsafe(
+                    `UPDATE ${sch}.contacts SET name = $2 WHERE id = $1::uuid AND (name = phone OR name IS NULL OR name = '')`,
+                    [contactId, msg.fromName]
+                )
+            } catch { /* non-fatal */ }
+        }
+
         // Garantir colunas media_ref/media_processed se houver mídia
         if (msg.mediaType && ['audio', 'image', 'video', 'document'].includes(msg.mediaType)) {
             await ensureMediaColumns(ws).catch(() => {})

@@ -1,12 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/ai/followup-cron",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/whatsapp/broadcast-cron",
-      "schedule": "*/2 * * * *"
-    }
-  ]
 }

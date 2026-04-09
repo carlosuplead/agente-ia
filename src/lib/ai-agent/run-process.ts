@@ -523,7 +523,13 @@ export async function runAiProcess(
                         [savedMsg.id, sendRes.messageId]
                     )
                 }
-            } catch {
+            } catch (sendErr) {
+                const errDetail = sendErr instanceof Error ? sendErr.message : String(sendErr)
+                console.error(`[runAiProcess] SEND FAILED chunk ${i + 1}/${chunks.length}:`, errDetail, {
+                    workspace: workspace_slug,
+                    contact: contact_id,
+                    conversation: conversationId
+                })
                 sendFailed = true
                 if (savedMsg) {
                     await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [

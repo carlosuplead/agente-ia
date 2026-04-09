@@ -129,10 +129,43 @@ function applyAiConfigToForm(
 
 export function useDashboardController() {
     const router = useRouter()
-    const [activeTab, setActiveTab] = useState<DashboardTab>('workspaces')
+    const [activeTab, setActiveTabRaw] = useState<DashboardTab>(() => {
+        if (typeof window === 'undefined') return 'workspaces'
+        const sp = new URLSearchParams(window.location.search)
+        const t = sp.get('tab') as DashboardTab | null
+        const validTabs: DashboardTab[] = ['workspaces', 'connection', 'conversas', 'disparos', 'relatorios', 'atividade', 'config', 'workspace_settings']
+        return t && validTabs.includes(t) ? t : 'workspaces'
+    })
+    const setActiveTab = useCallback((tab: DashboardTab) => {
+        setActiveTabRaw(tab)
+        if (typeof window !== 'undefined') {
+            const u = new URL(window.location.href)
+            if (tab === 'workspaces') {
+                u.searchParams.delete('tab')
+            } else {
+                u.searchParams.set('tab', tab)
+            }
+            window.history.replaceState({}, '', u.toString())
+        }
+    }, [])
     const [mobileNavOpen, setMobileNavOpen] = useState(false)
     const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([])
-    const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+    const [selectedSlug, setSelectedSlugRaw] = useState<string | null>(() => {
+        if (typeof window === 'undefined') return null
+        return new URLSearchParams(window.location.search).get('ws') || null
+    })
+    const setSelectedSlug = useCallback((slug: string | null) => {
+        setSelectedSlugRaw(slug)
+        if (typeof window !== 'undefined') {
+            const u = new URL(window.location.href)
+            if (slug) {
+                u.searchParams.set('ws', slug)
+            } else {
+                u.searchParams.delete('ws')
+            }
+            window.history.replaceState({}, '', u.toString())
+        }
+    }, [])
     const selectedSlugRef = useRef(selectedSlug)
     selectedSlugRef.current = selectedSlug
     const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)

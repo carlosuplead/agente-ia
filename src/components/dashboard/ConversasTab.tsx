@@ -115,9 +115,12 @@ export function ConversasTab() {
     const [savingNotes, setSavingNotes] = useState(false)
 
     // Load conversation list
-    const loadConversations = useCallback(async () => {
+    const loadConversationsRef = useRef(false)
+    const loadConversations = useCallback(async (silent?: boolean) => {
         if (!slug) return
-        setLoading(true)
+        if (loadConversationsRef.current) return // evita requests paralelos
+        loadConversationsRef.current = true
+        if (!silent) setLoading(true)
         try {
             const res = await fetch(`/api/workspace/conversations?workspace_slug=${encodeURIComponent(slug)}`, {
                 credentials: 'include'
@@ -125,7 +128,8 @@ export function ConversasTab() {
             const json = await res.json().catch(() => ({}))
             setConversations(Array.isArray(json.conversations) ? json.conversations : [])
         } finally {
-            setLoading(false)
+            loadConversationsRef.current = false
+            if (!silent) setLoading(false)
         }
     }, [slug])
 
@@ -133,12 +137,12 @@ export function ConversasTab() {
         void loadConversations()
     }, [loadConversations])
 
-    // Auto-refresh conversations list every 8s
+    // Auto-refresh conversations list every 12s (silent, sem loading indicator)
     useEffect(() => {
         if (!slug) return
         const id = setInterval(() => {
-            void loadConversations()
-        }, 8000)
+            void loadConversations(true)
+        }, 12000)
         return () => clearInterval(id)
     }, [slug, loadConversations])
 

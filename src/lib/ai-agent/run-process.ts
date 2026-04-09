@@ -269,6 +269,33 @@ export async function runAiProcess(
         return { ok: false, status: 500, error: 'No conversation' }
     }
 
+    // ── Guard: se já respondemos e não tem mensagem nova do contato, pula ──
+    // Evita processamento duplo quando múltiplos buffers disparam pro mesmo contato
+    try {
+        const lastAiRows = await sql.unsafe(
+            `SELECT created_at FROM ${sch}.messages
+             WHERE contact_id = $1::uuid AND conversation_id = $2::uuid AND sender_type = 'ai'
+             ORDER BY created_at DESC LIMIT 1`,
+            [contact_id, conversationId]
+        )
+        const lastAiAt = (lastAiRows[0] as unknown as { created_at: string | Date } | undefined)?.created_at
+        if (lastAiAt) {
+            const newContactRows = await sql.unsafe(
+                `SELECT COUNT(*)::int as cnt FROM ${sch}.messages
+                 WHERE contact_id = $1::uuid AND sender_type = 'contact'
+                 AND created_at > $2::timestamptz`,
+                [contact_id, lastAiAt]
+            )
+            const cnt = Number((newContactRows[0] as unknown as { cnt: number } | undefined)?.cnt) || 0
+            if (cnt === 0) {
+                return { ok: true, reason: 'No new contact messages since last AI reply (dedup)' }
+            }
+        }
+    } catch (dedupErr) {
+        // Non-fatal — proceed with processing
+        console.warn('runAiProcess: dedup check error', dedupErr)
+    }
+
     if (conversationCreatedAt === undefined) {
         const cr = await sql.unsafe(
             `SELECT created_at FROM ${sch}.ai_conversations WHERE id = $1::uuid LIMIT 1`,

@@ -133,12 +133,35 @@ export function parseMetaWebhookPayload(payload: unknown): MetaWebhookParsed[] {
                 const type = typeof msg.type === 'string' ? msg.type : ''
                 const mediaType = type === 'text' || type === 'interactive' || type === 'button' ? null : type || null
                 const fallback = mediaType ? 'Midia enviada' : ''
+
+                // Extrair caption de mensagens de mídia (imagem/vídeo/documento)
+                let caption = ''
+                if (type === 'image') {
+                    caption = (msg.image as { caption?: string } | undefined)?.caption || ''
+                } else if (type === 'video') {
+                    caption = (msg.video as { caption?: string } | undefined)?.caption || ''
+                } else if (type === 'document') {
+                    caption =
+                        (msg.document as { caption?: string } | undefined)?.caption ||
+                        (msg.document as { filename?: string } | undefined)?.filename || ''
+                }
+
+                // Extrair media_id para download posterior (Graph API)
+                let mediaId: string | null = null
+                if (mediaType && msg[type] && typeof msg[type] === 'object') {
+                    const mediaObj = msg[type] as { id?: string }
+                    if (typeof mediaObj.id === 'string' && mediaObj.id) {
+                        mediaId = mediaObj.id
+                    }
+                }
+
                 return {
                     whatsappId: String(msg.id || ''),
                     fromPhone,
                     fromName,
-                    body: textBody || fallback,
+                    body: textBody || caption || fallback,
                     mediaType,
+                    mediaId,
                     timestampMs: msg.timestamp ? Number(msg.timestamp) * 1000 : null
                 }
             }).filter(m => m.whatsappId && m.fromPhone)

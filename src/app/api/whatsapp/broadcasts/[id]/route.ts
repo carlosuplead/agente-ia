@@ -33,7 +33,7 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
             .from('whatsapp_broadcasts')
             .select('id, workspace_slug, status, scheduled_at')
             .eq('id', broadcastId)
-            .single()
+            .maybeSingle()
 
         if (fetchErr || !row || row.workspace_slug !== workspace_slug) {
             return NextResponse.json({ error: 'Campanha não encontrada' }, { status: 404 })

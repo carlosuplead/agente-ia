@@ -7,6 +7,7 @@ import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { resetFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { parseMetaWebhookPayload } from '@/lib/whatsapp/providers/official.provider'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
+import { ensureMediaColumns } from '@/lib/ai-agent/media-processing'
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || ''
 
@@ -69,6 +70,12 @@ export async function POST(request: Request) {
                 await sql.unsafe(`UPDATE ${sch}.messages SET status = $2 WHERE whatsapp_id = $1`, [st.whatsappId, st.status])
             }
 
+            // Garantir colunas media_ref/media_processed se houver mídia neste batch
+            const hasMediaInBatch = c.messages.some(m => m.mediaType && m.mediaId)
+            if (hasMediaInBatch) {
+                await ensureMediaColumns(ws).catch(() => {})
+            }
+
             for (const m of c.messages) {
                 const dup = await sql.unsafe(`SELECT id FROM ${sch}.messages WHERE whatsapp_id = $1 LIMIT 1`, [m.whatsappId])
                 if (dup.length) continue
@@ -112,12 +119,21 @@ export async function POST(request: Request) {
                 )
                 const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
 
-                const insMsg = await sql.unsafe(
-                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
-                     VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, COALESCE(to_timestamp($6 / 1000.0), now()))
-                     RETURNING id`,
-                    [contactId, conversationId, m.body || 'Midia enviada', m.mediaType, m.whatsappId, m.timestampMs]
-                )
+                // Se há media_id, salvar em media_ref para download posterior
+                const hasMediaRef = m.mediaId && hasMediaInBatch
+                const insMsg = hasMediaRef
+                    ? await sql.unsafe(
+                        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, media_ref, created_at)
+                         VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, $6, COALESCE(to_timestamp($7 / 1000.0), now()))
+                         RETURNING id`,
+                        [contactId, conversationId, m.body || 'Midia enviada', m.mediaType, m.whatsappId, m.mediaId, m.timestampMs]
+                    )
+                    : await sql.unsafe(
+                        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
+                         VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, COALESCE(to_timestamp($6 / 1000.0), now()))
+                         RETURNING id`,
+                        [contactId, conversationId, m.body || 'Midia enviada', m.mediaType, m.whatsappId, m.timestampMs]
+                    )
                 const messageId = (insMsg[0] as { id?: string } | undefined)?.id
                 if (messageId) {
                     await resetFollowupAnchorForContact(ws, contactId).catch(() => {})

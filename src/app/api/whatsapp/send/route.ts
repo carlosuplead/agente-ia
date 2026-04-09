@@ -27,7 +27,7 @@ export async function POST(request: Request) {
             .from('whatsapp_instances')
             .select('instance_token, status')
             .eq('workspace_slug', workspace_slug)
-            .single()
+            .maybeSingle()
 
         if (!instance || instance.status !== 'connected') {
             return NextResponse.json({ error: 'WhatsApp is not connected' }, { status: 400 })

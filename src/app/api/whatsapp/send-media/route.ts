@@ -71,7 +71,7 @@ export async function POST(request: Request) {
             .from('whatsapp_instances')
             .select('instance_token, status, provider')
             .eq('workspace_slug', workspace_slug)
-            .single()
+            .maybeSingle()
 
         if (!instance || instance.status !== 'connected') {
             return NextResponse.json({ error: 'WhatsApp is not connected' }, { status: 400 })
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
                     .from('whatsapp_instances')
                     .select('phone_number_id, meta_access_token')
                     .eq('workspace_slug', workspace_slug)
-                    .single()
+                    .maybeSingle()
 
                 if (!inst?.phone_number_id || !inst?.meta_access_token) {
                     throw new Error('Official provider credentials missing')

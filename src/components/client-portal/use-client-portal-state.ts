@@ -37,11 +37,14 @@ export function useClientPortalState() {
         })
     }, [])
 
+    const [userName, setUserName] = useState<string | null>(null)
+
     const loadMe = useCallback(async () => {
         const res = await fetch('/api/auth/me', { credentials: 'include' })
         if (!res.ok) return
         const json = await res.json()
         setUserEmail(json.user?.email ?? null)
+        setUserName(json.user?.full_name ?? null)
     }, [])
 
     const loadInstance = useCallback(async (slug: string, opts?: { syncUazapi?: boolean }) => {
@@ -201,12 +204,62 @@ export function useClientPortalState() {
         qrPayload?.qrcode &&
         (qrPayload.qrcode.startsWith('data:') ? qrPayload.qrcode : `data:image/png;base64,${qrPayload.qrcode}`)
 
+    async function updateProfile(newName: string): Promise<boolean> {
+        setBusy(true)
+        try {
+            const res = await fetch('/api/auth/me', {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: newName })
+            })
+            if (!res.ok) {
+                const j = (await res.json().catch(() => ({}))) as { error?: string }
+                setToast({ message: j.error || 'Falha ao atualizar perfil.', variant: 'error' })
+                return false
+            }
+            setUserName(newName)
+            setToast({ message: 'Nome atualizado.', variant: 'success' })
+            return true
+        } catch {
+            setToast({ message: 'Erro ao atualizar perfil.', variant: 'error' })
+            return false
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    async function changePassword(currentPassword: string, newPassword: string): Promise<boolean> {
+        setBusy(true)
+        try {
+            const res = await fetch('/api/auth/password', {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+            })
+            const j = (await res.json().catch(() => ({}))) as { error?: string }
+            if (!res.ok) {
+                setToast({ message: j.error || 'Falha ao alterar senha.', variant: 'error' })
+                return false
+            }
+            setToast({ message: 'Senha alterada com sucesso.', variant: 'success' })
+            return true
+        } catch {
+            setToast({ message: 'Erro ao alterar senha.', variant: 'error' })
+            return false
+        } finally {
+            setBusy(false)
+        }
+    }
+
     return {
         workspaces,
         selectedSlug,
         setSelectedSlug,
         selectedWs,
         userEmail,
+        userName,
         instance,
         messages,
         stats,
@@ -226,7 +279,9 @@ export function useClientPortalState() {
         loadStats,
         logout,
         provisionInstance,
-        connectWhatsapp
+        connectWhatsapp,
+        updateProfile,
+        changePassword
     }
 }
 

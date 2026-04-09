@@ -69,7 +69,8 @@ export function AdminPanel() {
     }, [loadWorkspaces, loadUsers])
 
     async function handleDeleteWorkspace(slug: string) {
-        if (!window.confirm(`Tem certeza que deseja remover o workspace "${slug}"? Esta ação não pode ser desfeita.`)) return
+        if (!window.confirm(`Tem certeza que deseja remover o workspace "${slug}"?\n\nTODOS os dados (contatos, mensagens, configurações) serão removidos permanentemente.`)) return
+        setError('')
         const res = await fetch('/api/admin/workspaces', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
@@ -77,6 +78,46 @@ export function AdminPanel() {
         })
         if (res.ok) {
             setWorkspaces(prev => prev.filter(w => w.slug !== slug))
+        } else {
+            const data = await res.json().catch(() => ({})) as { error?: string }
+            setError(data.error || `Falha ao remover workspace "${slug}"`)
+        }
+    }
+
+    async function handleDeleteUser(userId: string, userEmail: string) {
+        if (!window.confirm(`Tem certeza que deseja REMOVER o usuário "${userEmail}"?\n\nEsta ação é irreversível. O usuário perderá acesso à plataforma.`)) return
+        setError('')
+        const res = await fetch('/api/admin/users', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        })
+        if (res.ok) {
+            setUsers(prev => prev.filter(u => u.id !== userId))
+        } else {
+            const data = await res.json().catch(() => ({})) as { error?: string }
+            setError(data.error || `Falha ao remover usuário "${userEmail}"`)
+        }
+    }
+
+    async function handleResetPassword(userId: string, userEmail: string) {
+        const newPassword = window.prompt(`Nova senha para ${userEmail}:\n(mínimo 6 caracteres)`)
+        if (!newPassword) return
+        if (newPassword.length < 6) {
+            setError('A senha deve ter pelo menos 6 caracteres')
+            return
+        }
+        setError('')
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, new_password: newPassword })
+        })
+        if (res.ok) {
+            alert(`Senha de ${userEmail} foi atualizada com sucesso.`)
+        } else {
+            const data = await res.json().catch(() => ({})) as { error?: string }
+            setError(data.error || `Falha ao resetar senha de "${userEmail}"`)
         }
     }
 
@@ -256,15 +297,35 @@ export function AdminPanel() {
                                             {u.last_sign_in_at ? fmtDate(u.last_sign_in_at) : 'Nunca'}
                                         </td>
                                         <td>
-                                            {!u.is_platform_admin && u.workspaces.length === 0 && (
-                                                <button
-                                                    className="btn btn-primary"
-                                                    style={{ fontSize: 12, padding: '4px 12px' }}
-                                                    onClick={() => handleApproveUser(u.id, u.email, u.full_name)}
-                                                >
-                                                    Aprovar
-                                                </button>
-                                            )}
+                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                {!u.is_platform_admin && u.workspaces.length === 0 && (
+                                                    <button
+                                                        className="btn btn-primary"
+                                                        style={{ fontSize: 12, padding: '4px 12px' }}
+                                                        onClick={() => handleApproveUser(u.id, u.email, u.full_name)}
+                                                    >
+                                                        Aprovar
+                                                    </button>
+                                                )}
+                                                {!u.is_platform_admin && (
+                                                    <>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ fontSize: 12, padding: '4px 8px' }}
+                                                            onClick={() => handleResetPassword(u.id, u.email)}
+                                                        >
+                                                            Resetar senha
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ fontSize: 12, padding: '4px 8px', color: '#ef4444' }}
+                                                            onClick={() => handleDeleteUser(u.id, u.email)}
+                                                        >
+                                                            Remover
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

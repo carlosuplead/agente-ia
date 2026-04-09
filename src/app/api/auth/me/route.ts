@@ -44,3 +44,39 @@ export async function GET() {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }
+
+/** PATCH /api/auth/me — atualiza o perfil (nome). */
+export async function PATCH(request: Request) {
+    try {
+        const supabase = await createClient()
+        const {
+            data: { user },
+            error
+        } = await supabase.auth.getUser()
+        if (error || !user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const body = await request.json().catch(() => null)
+        const fullName = typeof body?.full_name === 'string' ? body.full_name.trim() : null
+
+        if (fullName === null || fullName.length === 0) {
+            return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
+        }
+        if (fullName.length > 100) {
+            return NextResponse.json({ error: 'Nome muito longo' }, { status: 400 })
+        }
+
+        const { error: updateErr } = await supabase.auth.updateUser({
+            data: { full_name: fullName }
+        })
+        if (updateErr) {
+            console.error('auth me patch:', updateErr)
+            return NextResponse.json({ error: 'Falha ao atualizar perfil' }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true, full_name: fullName })
+    } catch {
+        return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+    }
+}

@@ -29,6 +29,8 @@ export type MetaWebhookMessageEvent = {
     fromName: string | null
     body: string
     mediaType: string | null
+    /** ID do ficheiro de mídia no Graph API (para download). */
+    mediaId: string | null
     timestampMs: number | null
 }
 

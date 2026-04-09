@@ -62,3 +62,88 @@ export async function GET() {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }
+
+/** DELETE /api/admin/users — remove um usuário e todas as suas memberships */
+export async function DELETE(request: Request) {
+    try {
+        const supabase = await createClient()
+        const admin = await requirePlatformAdmin(supabase)
+        if (!admin.ok) return admin.response
+
+        const body = await request.json().catch(() => null)
+        const userId = typeof body?.user_id === 'string' ? body.user_id.trim() : ''
+        if (!userId) {
+            return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 })
+        }
+
+        // Impedir deletar a si mesmo
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        if (currentUser?.id === userId) {
+            return NextResponse.json({ error: 'Não é possível remover o próprio usuário' }, { status: 400 })
+        }
+
+        // Impedir deletar outros platform_admins (proteção)
+        const { data: pa } = await supabase
+            .from('platform_admins')
+            .select('user_id')
+            .eq('user_id', userId)
+            .maybeSingle()
+        if (pa) {
+            return NextResponse.json({ error: 'Não é possível remover um administrador da plataforma' }, { status: 400 })
+        }
+
+        const adminSb = await createAdminClient()
+
+        // 1. Remover memberships do usuário
+        try {
+            await adminSb.from('workspace_members').delete().eq('user_id', userId)
+        } catch { /* pode não ter memberships */ }
+
+        // 2. Remover o usuário do Supabase Auth
+        const { error: deleteErr } = await adminSb.auth.admin.deleteUser(userId)
+        if (deleteErr) {
+            console.error('admin delete user:', deleteErr)
+            return NextResponse.json({ error: 'Falha ao remover usuário: ' + deleteErr.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch (err) {
+        console.error('admin delete user:', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
+/** PATCH /api/admin/users — reset de senha de um usuário */
+export async function PATCH(request: Request) {
+    try {
+        const supabase = await createClient()
+        const admin = await requirePlatformAdmin(supabase)
+        if (!admin.ok) return admin.response
+
+        const body = await request.json().catch(() => null)
+        const userId = typeof body?.user_id === 'string' ? body.user_id.trim() : ''
+        const newPassword = typeof body?.new_password === 'string' ? body.new_password.trim() : ''
+
+        if (!userId) {
+            return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 })
+        }
+        if (!newPassword || newPassword.length < 6) {
+            return NextResponse.json({ error: 'Nova senha deve ter pelo menos 6 caracteres' }, { status: 400 })
+        }
+
+        const adminSb = await createAdminClient()
+
+        const { error: updateErr } = await adminSb.auth.admin.updateUserById(userId, {
+            password: newPassword
+        })
+        if (updateErr) {
+            console.error('admin reset password:', updateErr)
+            return NextResponse.json({ error: 'Falha ao resetar senha: ' + updateErr.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch (err) {
+        console.error('admin reset password:', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}

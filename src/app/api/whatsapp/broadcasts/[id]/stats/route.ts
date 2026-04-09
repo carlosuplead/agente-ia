@@ -26,7 +26,7 @@ export async function GET(request: Request, ctx: RouteCtx) {
             .from('whatsapp_broadcasts')
             .select('id, workspace_slug, max_sends_per_day, send_timezone')
             .eq('id', broadcastId)
-            .single()
+            .maybeSingle()
 
         if (bErr || !b || b.workspace_slug !== workspace_slug) {
             return NextResponse.json({ error: 'Campanha não encontrada' }, { status: 404 })

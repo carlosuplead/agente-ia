@@ -8,6 +8,7 @@ import { setFollowupAnchorForConversation } from '@/lib/ai-agent/followup-anchor
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from './types'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
+import { processUnprocessedMedia, type MediaProviderInfo } from '@/lib/ai-agent/media-processing'
 
 const EMPTY_LLM_FALLBACK =
     'Desculpe, não consegui gerar uma resposta agora. Pode repetir a sua pergunta?'
@@ -290,7 +291,7 @@ export async function runAiProcess(
 
     const { data: instance } = await supabase
         .from('whatsapp_instances')
-        .select('instance_token')
+        .select('instance_token, provider, meta_access_token')
         .eq('workspace_slug', workspace_slug)
         .eq('status', 'connected')
         .maybeSingle()
@@ -394,6 +395,22 @@ export async function runAiProcess(
             )
             return { ok: true, reason: 'Keyword handoff' }
         }
+    }
+
+    // ── Processar mídias pendentes (áudio/imagem) antes de montar contexto ──
+    try {
+        const providerType = ((instance as { provider?: string }).provider || 'uazapi') as 'uazapi' | 'official'
+        const mediaProvider: MediaProviderInfo = {
+            providerType,
+            instanceToken: instance.instance_token,
+            accessToken: providerType === 'official'
+                ? ((instance as { meta_access_token?: string }).meta_access_token || '')
+                : undefined
+        }
+        await processUnprocessedMedia(workspace_slug, contact_id, config, mediaProvider)
+    } catch (e) {
+        // Falha no processamento de mídia não deve bloquear a resposta da IA
+        console.error('runAiProcess: media processing error (non-fatal):', e)
     }
 
     const context = await buildContext(workspace_slug, contact_id, {

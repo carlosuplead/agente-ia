@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { requirePlatformAdmin } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 
@@ -117,25 +117,67 @@ export async function POST(request: Request) {
     }
 }
 
-/** DELETE — desativa um workspace (soft delete: remove da lista, não apaga schema) */
+/** DELETE — remove um workspace e todos os dados relacionados */
 export async function DELETE(request: Request) {
     try {
         const supabase = await createClient()
         const admin = await requirePlatformAdmin(supabase)
         if (!admin.ok) return admin.response
 
-        const { slug } = await request.json()
+        const body = await request.json().catch(() => null)
+        const slug = typeof body?.slug === 'string' ? body.slug.trim() : ''
         if (!slug) {
             return NextResponse.json({ error: 'slug obrigatório' }, { status: 400 })
         }
 
-        const { error } = await supabase.from('workspaces').delete().eq('slug', slug)
+        // 1. Dropar schema do tenant primeiro (remove todas tabelas internas de uma vez)
+        try {
+            const sql = getTenantSql()
+            const sch = quotedSchema(slug)
+            await sql.unsafe(`DROP SCHEMA IF EXISTS ${sch} CASCADE`)
+        } catch (e) {
+            console.warn('admin delete workspace: drop schema:', e)
+        }
+
+        // 2. Limpar tabelas públicas que referenciam workspace_slug (service role = bypass RLS)
+        const adminSb = await createAdminClient()
+        const publicTables = [
+            'whatsapp_broadcast_queue',
+            'whatsapp_broadcasts',
+            'workspace_members',
+            'whatsapp_instances',
+            'workspace_google_calendar',
+            'ai_process_fallback_queue'
+        ]
+        for (const table of publicTables) {
+            try {
+                await adminSb.from(table).delete().eq('workspace_slug', slug)
+            } catch {
+                // Tabela pode não existir neste projeto — ignorar
+            }
+        }
+
+        // 3. Remover o workspace
+        const { error } = await adminSb.from('workspaces').delete().eq('slug', slug)
         if (error) {
-            return NextResponse.json({ error: 'Erro ao remover workspace' }, { status: 500 })
+            console.error('admin delete workspace:', error)
+            return NextResponse.json({ error: 'Erro ao remover workspace: ' + error.message }, { status: 500 })
+        }
+
+        // 4. Fallback: se ainda existir por qualquer FK desconhecida, forçar via SQL
+        try {
+            const sql = getTenantSql()
+            const check = await sql.unsafe(`SELECT id FROM public.workspaces WHERE slug = $1`, [slug])
+            if (check.length > 0) {
+                await sql.unsafe(`DELETE FROM public.workspaces WHERE slug = $1`, [slug])
+            }
+        } catch (e) {
+            console.warn('admin delete workspace: sql fallback:', e)
         }
 
         return NextResponse.json({ success: true })
-    } catch {
+    } catch (e) {
+        console.error('admin delete workspace:', e)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }

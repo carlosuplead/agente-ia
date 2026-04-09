@@ -105,7 +105,7 @@ export async function processBroadcastQueueBatch(
             .from('whatsapp_broadcasts')
             .select('id, template_name, template_language, template_components, status')
             .eq('id', item.broadcast_id)
-            .single()
+            .maybeSingle()
 
         if (bErr || !broadcast || !['running', 'scheduled'].includes((broadcast as BroadcastRow).status)) {
             await supabase
@@ -295,7 +295,7 @@ async function finalizeBroadcastIfDone(supabase: SupabaseClient, broadcastId: st
         .from('whatsapp_broadcasts')
         .select('status, sent_count, failed_count')
         .eq('id', broadcastId)
-        .single()
+        .maybeSingle()
     if (!b || b.status === 'cancelled' || b.status === 'completed' || b.status === 'failed' || b.status === 'draft') return
     if (b.status !== 'running' && b.status !== 'scheduled') return
 

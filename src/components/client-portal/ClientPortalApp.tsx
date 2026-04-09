@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Zap } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 import { Toast } from '@/components/dashboard/Toast'
@@ -19,6 +19,168 @@ function connectionLabel(status: string | undefined): string {
     if (status === 'connected') return 'Ligado ao WhatsApp'
     if (status === 'disconnected') return 'Desligado — gera um novo QR Code para voltar a ligar'
     return status
+}
+
+function AccountSection({ p }: { p: ReturnType<typeof useClientPortalState> }) {
+    const [editingName, setEditingName] = useState(false)
+    const [nameInput, setNameInput] = useState(p.userName || '')
+    const [showPasswordForm, setShowPasswordForm] = useState(false)
+    const [currentPwd, setCurrentPwd] = useState('')
+    const [newPwd, setNewPwd] = useState('')
+    const [confirmPwd, setConfirmPwd] = useState('')
+
+    async function saveName(e: React.FormEvent) {
+        e.preventDefault()
+        const name = nameInput.trim()
+        if (!name) return
+        const ok = await p.updateProfile(name)
+        if (ok) setEditingName(false)
+    }
+
+    async function savePassword(e: React.FormEvent) {
+        e.preventDefault()
+        if (!currentPwd.trim()) {
+            p.setToast({ message: 'Preenche a senha atual.', variant: 'error' })
+            return
+        }
+        if (newPwd.length < 6) {
+            p.setToast({ message: 'Nova senha: mínimo 6 caracteres.', variant: 'error' })
+            return
+        }
+        if (newPwd !== confirmPwd) {
+            p.setToast({ message: 'As senhas não coincidem.', variant: 'error' })
+            return
+        }
+        const ok = await p.changePassword(currentPwd, newPwd)
+        if (ok) {
+            setCurrentPwd('')
+            setNewPwd('')
+            setConfirmPwd('')
+            setShowPasswordForm(false)
+        }
+    }
+
+    return (
+        <div className="card">
+            <div className="card-header">
+                <span className="card-title">Minha conta</span>
+            </div>
+
+            {/* Nome */}
+            <div style={{ marginBottom: 20 }}>
+                <label className="input-label">Nome</label>
+                {editingName ? (
+                    <form onSubmit={saveName} style={{ display: 'flex', gap: 8, maxWidth: 420 }}>
+                        <input
+                            className="input"
+                            value={nameInput}
+                            onChange={e => setNameInput(e.target.value)}
+                            autoComplete="name"
+                            autoFocus
+                        />
+                        <button type="submit" className="btn btn-primary" disabled={p.busy}>
+                            Guardar
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                                setEditingName(false)
+                                setNameInput(p.userName || '')
+                            }}
+                        >
+                            Cancelar
+                        </button>
+                    </form>
+                ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 15 }}>{p.userName || '(não definido)'}</span>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ fontSize: 12, padding: '2px 10px' }}
+                            onClick={() => {
+                                setNameInput(p.userName || '')
+                                setEditingName(true)
+                            }}
+                        >
+                            Editar
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Email (readonly) */}
+            <div style={{ marginBottom: 20 }}>
+                <label className="input-label">Email</label>
+                <span style={{ fontSize: 15, color: 'var(--text-secondary)' }}>{p.userEmail || '—'}</span>
+            </div>
+
+            {/* Senha */}
+            <div>
+                <label className="input-label">Senha</label>
+                {showPasswordForm ? (
+                    <form onSubmit={savePassword} style={{ maxWidth: 420 }}>
+                        <input
+                            type="password"
+                            className="input"
+                            placeholder="Senha atual"
+                            value={currentPwd}
+                            onChange={e => setCurrentPwd(e.target.value)}
+                            autoComplete="current-password"
+                            style={{ marginBottom: 10 }}
+                        />
+                        <input
+                            type="password"
+                            className="input"
+                            placeholder="Nova senha (mínimo 6 caracteres)"
+                            value={newPwd}
+                            onChange={e => setNewPwd(e.target.value)}
+                            autoComplete="new-password"
+                            style={{ marginBottom: 10 }}
+                        />
+                        <input
+                            type="password"
+                            className="input"
+                            placeholder="Confirmar nova senha"
+                            value={confirmPwd}
+                            onChange={e => setConfirmPwd(e.target.value)}
+                            autoComplete="new-password"
+                            style={{ marginBottom: 12 }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button type="submit" className="btn btn-primary" disabled={p.busy}>
+                                Alterar senha
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setShowPasswordForm(false)
+                                    setCurrentPwd('')
+                                    setNewPwd('')
+                                    setConfirmPwd('')
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                    <div>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ fontSize: 13 }}
+                            onClick={() => setShowPasswordForm(true)}
+                        >
+                            Alterar senha
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
 }
 
 export function ClientPortalApp() {
@@ -81,12 +243,15 @@ export function ClientPortalApp() {
                 )}
 
                 {!p.selectedSlug && p.workspaces.length === 0 && (
-                    <div className="card">
-                        <p className="client-portal-muted">
-                            Ainda não tens acesso a nenhuma empresa. Pedir à equipa que te adicione como membro
-                            do workspace.
-                        </p>
-                    </div>
+                    <>
+                        <div className="card">
+                            <p className="client-portal-muted">
+                                Ainda não tens acesso a nenhuma empresa. Pedir à equipa que te adicione como membro
+                                do workspace.
+                            </p>
+                        </div>
+                        <AccountSection p={p} />
+                    </>
                 )}
 
                 {p.selectedSlug && (
@@ -229,6 +394,8 @@ export function ClientPortalApp() {
                                 )}
                             </div>
                         </div>
+
+                        <AccountSection p={p} />
                     </>
                 )}
             </main>

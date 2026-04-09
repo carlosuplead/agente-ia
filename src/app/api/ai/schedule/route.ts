@@ -39,7 +39,7 @@ export async function POST(request: Request) {
             const { data: lockOk, error: lockErr } = await supabase.rpc('try_ai_process_lock', {
                 p_slug: workspace_slug,
                 p_contact: contact_id,
-                p_ttl_seconds: 45
+                p_ttl_seconds: 90
             })
             if (lockErr) {
                 console.error('try_ai_process_lock', lockErr)

@@ -586,12 +586,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true })
         }
 
-        // Ignorar mensagens enviadas por nós (eco)
-        if (msg.fromMe) {
-            return NextResponse.json({ success: true })
-        }
-
-        // Deduplicação
+        // Deduplicação (antes do fromMe check — dedup cobre ambos os lados)
         const dup = await sql.unsafe(
             `SELECT id FROM ${sch}.messages WHERE whatsapp_id = $1 LIMIT 1`,
             [msg.whatsappId]
@@ -603,6 +598,34 @@ export async function POST(request: Request) {
         // Normalizar telefone e filtrar grupos
         const normalized = normalizePhoneForBrazil(msg.fromPhone)
         if (!normalized || isWhatsAppGroup(msg.fromPhone)) {
+            return NextResponse.json({ success: true })
+        }
+
+        // ── Mensagens enviadas por nós (eco do WhatsApp/celular/Web) ──
+        // Salvar no banco para aparecer no painel, mas NÃO disparar IA
+        if (msg.fromMe) {
+            // Buscar contato existente pelo telefone do destinatário (remoteJid)
+            const variants = generateBrazilianPhoneVariants(normalized)
+            const phonePlaceholders = variants.map((_, i) => `$${i + 1}`).join(', ')
+            const rows = await sql.unsafe(
+                `SELECT id FROM ${sch}.contacts WHERE phone IN (${phonePlaceholders}) LIMIT 1`,
+                variants
+            )
+            const contactId = (rows[0] as { id?: string } | undefined)?.id
+            if (contactId) {
+                // Buscar conversa ativa
+                const convRows = await sql.unsafe(
+                    `SELECT id FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+                    [contactId]
+                )
+                const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
+                // Salvar como 'user' (mensagem do atendente via WhatsApp direto)
+                await sql.unsafe(
+                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
+                     VALUES ($1::uuid, $2::uuid, 'user', $3, $4, 'sent', $5, COALESCE(to_timestamp($6 / 1000.0), now()))`,
+                    [contactId, conversationId, msg.body || '', msg.mediaType, msg.whatsappId, msg.timestampMs]
+                )
+            }
             return NextResponse.json({ success: true })
         }
 

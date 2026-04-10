@@ -175,7 +175,17 @@ export function ConversasTab() {
             )
             clearTimeout(timer)
             const json = await res.json().catch(() => ({}))
-            setChatMessages(Array.isArray(json.messages) ? json.messages : [])
+            const serverMsgs: ChatMsg[] = Array.isArray(json.messages) ? json.messages : []
+            // Merge: manter mensagens otimistas (opt-*) que ainda não apareceram no servidor
+            setChatMessages(prev => {
+                const optimistic = prev.filter(m => m.id.startsWith('opt-'))
+                if (optimistic.length === 0) return serverMsgs
+                // Verifica se a mensagem otimista já apareceu no servidor (por body + sender_type)
+                const remaining = optimistic.filter(om =>
+                    !serverMsgs.some(sm => sm.body === om.body && sm.sender_type === om.sender_type)
+                )
+                return remaining.length > 0 ? [...serverMsgs, ...remaining] : serverMsgs
+            })
             setContactInfo(json.contact || null)
             setConvInfo(json.conversation || null)
             setNotesText(json.conversation?.internal_notes || '')

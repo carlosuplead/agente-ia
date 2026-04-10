@@ -97,12 +97,18 @@ async function handleUserResetCommand(
     )
     const latest = convRows[0] as unknown as { id: string; status: string } | undefined
 
-    if (latest?.status === 'active') {
-        await sql.unsafe(
-            `UPDATE ${sch}.ai_conversations SET status = 'expired', ended_at = now(), handoff_reason = $2 WHERE id = $1::uuid`,
-            [latest.id, 'Comando /reset']
-        )
-    }
+    // Fechar todas as conversas anteriores
+    await sql.unsafe(
+        `UPDATE ${sch}.ai_conversations SET status = 'expired', ended_at = now(), handoff_reason = 'Comando /reset'
+         WHERE contact_id = $1::uuid AND status IN ('active', 'handed_off')`,
+        [contact_id]
+    )
+
+    // Apagar todo o histórico de mensagens do contato (reset total)
+    await sql.unsafe(
+        `UPDATE ${sch}.messages SET is_deleted = true WHERE contact_id = $1::uuid`,
+        [contact_id]
+    )
 
     const inserted = await sql.unsafe(
         `INSERT INTO ${sch}.ai_conversations (contact_id, status) VALUES ($1::uuid, 'active') RETURNING id, messages_count, created_at`,

@@ -51,9 +51,12 @@ export async function buildContext(
     )) as unknown as { sender_type: string; body: string | null; media_type: string | null; media_processed: boolean | null }[]
 
     const lines = messages.map(m => {
+        // Usar "Cliente" no transcript — NÃO revelar nome/telefone reais à IA.
+        // A IA só sabe o nome se o cliente disser durante a conversa.
+        // Isso garante que /reset realmente "esqueça" o cliente.
         const sender =
             m.sender_type === 'contact'
-                ? contact.name
+                ? 'Cliente'
                 : m.sender_type === 'ai'
                   ? opts.labelAssistant
                   : opts.labelTeam

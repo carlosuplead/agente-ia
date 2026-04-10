@@ -33,34 +33,39 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
         const sql = getTenantSql()
         const sch = quotedSchema(workspace_slug)
 
-        const messages = await sql.unsafe(
-            `SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
-             FROM ${sch}.messages
-             WHERE contact_id = $1::uuid AND is_deleted = false
-             ORDER BY created_at ASC
-             LIMIT $2`,
+        // Uma única query com CTEs em vez de 3 queries sequenciais (elimina 2 roundtrips)
+        const result = await sql.unsafe(
+            `WITH contact_data AS (
+                SELECT id, phone, name, avatar_url
+                FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1
+            ),
+            conv_data AS (
+                SELECT id, status, handoff_reason, internal_notes, messages_count
+                FROM ${sch}.ai_conversations
+                WHERE contact_id = $1::uuid
+                ORDER BY created_at DESC LIMIT 1
+            ),
+            msg_data AS (
+                SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
+                FROM ${sch}.messages
+                WHERE contact_id = $1::uuid AND is_deleted = false
+                ORDER BY created_at ASC
+                LIMIT $2
+            )
+            SELECT json_build_object(
+                'messages', COALESCE((SELECT json_agg(row_to_json(msg_data) ORDER BY msg_data.created_at ASC) FROM msg_data), '[]'::json),
+                'contact', (SELECT row_to_json(contact_data) FROM contact_data),
+                'conversation', (SELECT row_to_json(conv_data) FROM conv_data)
+            ) AS payload`,
             [contactId, limit]
         )
 
-        // Also get contact info
-        const contactRows = await sql.unsafe(
-            `SELECT id, phone, name, avatar_url FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
-            [contactId]
-        )
-
-        // Get conversation status
-        const convRows = await sql.unsafe(
-            `SELECT id, status, handoff_reason, internal_notes, messages_count
-             FROM ${sch}.ai_conversations
-             WHERE contact_id = $1::uuid
-             ORDER BY created_at DESC LIMIT 1`,
-            [contactId]
-        )
+        const payload = (result[0] as unknown as { payload: { messages: ChatMessage[]; contact: unknown; conversation: unknown } } | undefined)?.payload
 
         return NextResponse.json({
-            messages: messages || [],
-            contact: contactRows[0] || null,
-            conversation: convRows[0] || null
+            messages: payload?.messages || [],
+            contact: payload?.contact || null,
+            conversation: payload?.conversation || null
         }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' }
         })

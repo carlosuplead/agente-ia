@@ -10,6 +10,33 @@ import type { AiAgentConfig } from './types'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 import { processUnprocessedMedia, type MediaProviderInfo } from '@/lib/ai-agent/media-processing'
 
+// ─── Cache de configuração do agente IA ───────────────────────────
+// A config raramente muda, mas é buscada a cada mensagem recebida.
+// Cache em memória com TTL de 60s elimina ~95% das queries ao banco.
+type CachedConfig = { config: AiAgentConfig; fetchedAt: number }
+const configCache = new Map<string, CachedConfig>()
+const CONFIG_CACHE_TTL_MS = 60_000
+
+async function getAgentConfig(workspaceSlug: string): Promise<AiAgentConfig | undefined> {
+    const cached = configCache.get(workspaceSlug)
+    if (cached && Date.now() - cached.fetchedAt < CONFIG_CACHE_TTL_MS) {
+        return cached.config
+    }
+    const sql = getTenantSql()
+    const sch = quotedSchema(workspaceSlug)
+    const rows = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
+    const config = rows[0] as unknown as AiAgentConfig | undefined
+    if (config) {
+        configCache.set(workspaceSlug, { config, fetchedAt: Date.now() })
+    }
+    return config
+}
+
+/** Invalida cache quando config é alterada (chamar do PATCH da config route). */
+export function invalidateAgentConfigCache(workspaceSlug: string): void {
+    configCache.delete(workspaceSlug)
+}
+
 const EMPTY_LLM_FALLBACK =
     'Desculpe, não consegui gerar uma resposta agora. Pode repetir a sua pergunta?'
 
@@ -165,35 +192,41 @@ export async function runAiProcess(
     const sql = getTenantSql()
     const sch = quotedSchema(workspace_slug)
 
-    const configs = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
-    const config = configs[0] as unknown as AiAgentConfig | undefined
+    const config = await getAgentConfig(workspace_slug)
 
     if (!config || !config.enabled) {
         return { ok: true, reason: 'AI disabled' }
     }
 
-    const phoneRows = await sql.unsafe(`SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`, [
-        contact_id
-    ])
-    const contactPhone = (phoneRows[0] as unknown as { phone?: string } | undefined)?.phone ?? ''
+    // ── Query consolidada: phone + last inbound + conversation ativa (1 roundtrip) ──
+    const initRows = await sql.unsafe(
+        `SELECT
+            (SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1) AS contact_phone,
+            (SELECT body FROM ${sch}.messages WHERE contact_id = $1::uuid AND sender_type = 'contact' ORDER BY created_at DESC LIMIT 1) AS last_inbound_body,
+            (SELECT row_to_json(sub) FROM (
+                SELECT id, status, messages_count, created_at
+                FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid
+                ORDER BY created_at DESC LIMIT 1
+            ) sub) AS latest_conv`,
+        [contact_id]
+    )
+    const initData = initRows[0] as unknown as {
+        contact_phone: string | null
+        last_inbound_body: string | null
+        latest_conv: { id: string; status: string; messages_count: number; created_at: string | Date } | null
+    } | undefined
+
+    const contactPhone = initData?.contact_phone ?? ''
     if (!shouldAcceptInboundForTestMode(config, contactPhone)) {
         return { ok: true, reason: 'Test mode allowlist' }
     }
 
-    const lastInboundRows = await sql.unsafe(
-        `SELECT body FROM ${sch}.messages WHERE contact_id = $1::uuid AND sender_type = 'contact' ORDER BY created_at DESC LIMIT 1`,
-        [contact_id]
-    )
-    const lastInboundBody = (lastInboundRows[0] as unknown as { body: string | null } | undefined)?.body
+    const lastInboundBody = initData?.last_inbound_body ?? null
     if (isUserResetCommand(lastInboundBody)) {
         return handleUserResetCommand(supabase, workspace_slug, contact_id, contactPhone, config)
     }
 
-    const convRows = await sql.unsafe(
-        `SELECT id, status, messages_count, created_at FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid ORDER BY created_at DESC LIMIT 1`,
-        [contact_id]
-    )
-    let aiConv = convRows[0] as unknown as AiConvRow | undefined
+    let aiConv = initData?.latest_conv as AiConvRow | undefined
 
     let conversationId = aiConv?.id
     let messageCount = aiConv?.messages_count ?? 0
@@ -316,13 +349,22 @@ export async function runAiProcess(
         return { ok: true, reason: 'Limit reached' }
     }
 
-    const { data: instance } = await supabase
-        .from('whatsapp_instances')
-        .select('instance_token, provider, meta_access_token')
-        .eq('workspace_slug', workspace_slug)
-        .eq('status', 'connected')
-        .maybeSingle()
+    // ── Instance + Calendar em paralelo (elimina 1 roundtrip) ──
+    const [instanceResult, calResult] = await Promise.all([
+        supabase
+            .from('whatsapp_instances')
+            .select('instance_token, provider, meta_access_token')
+            .eq('workspace_slug', workspace_slug)
+            .eq('status', 'connected')
+            .maybeSingle(),
+        supabase
+            .from('workspace_google_calendar')
+            .select('refresh_token, calendar_id, default_timezone')
+            .eq('workspace_slug', workspace_slug)
+            .maybeSingle()
+    ])
 
+    const instance = instanceResult.data
     if (!instance) {
         return { ok: false, status: 400, error: 'No instance connected' }
     }
@@ -332,13 +374,7 @@ export async function runAiProcess(
         calendar_id: string | null
         default_timezone: string | null
     }
-    const { data: calRow } = await supabase
-        .from('workspace_google_calendar')
-        .select('refresh_token, calendar_id, default_timezone')
-        .eq('workspace_slug', workspace_slug)
-        .maybeSingle()
-
-    const cal = calRow as CalConn | null
+    const cal = calResult.data as CalConn | null
     const rt = cal?.refresh_token?.trim()
     const googleCalendar = rt
         ? {
@@ -361,11 +397,7 @@ export async function runAiProcess(
                 'Vou direcionar você para um atendente humano. Um momento.'
             const sendOpts = sendOptionsFromConfig(config)
             const textToSend = parseMessageForWhatsApp(reply)
-            const phoneRows = await sql.unsafe(
-                `SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
-                [contact_id]
-            )
-            const contactPhone = (phoneRows[0] as unknown as { phone: string } | undefined)?.phone
+            // Usa contactPhone já obtido no início — sem query duplicada
             if (!contactPhone) {
                 return { ok: false, status: 500, error: 'Contact phone missing' }
             }

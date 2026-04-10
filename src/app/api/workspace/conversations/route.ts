@@ -54,14 +54,14 @@ export async function GET(request: Request) {
                 SELECT body, created_at, sender_type
                 FROM ${sch}.messages
                 WHERE contact_id = c.id AND is_deleted = false
-                ORDER BY created_at DESC
+                ORDER BY contact_id, created_at DESC
                 LIMIT 1
              ) m ON true
              LEFT JOIN LATERAL (
                 SELECT id, status, handoff_reason, internal_notes, messages_count
                 FROM ${sch}.ai_conversations
                 WHERE contact_id = c.id
-                ORDER BY created_at DESC
+                ORDER BY contact_id, created_at DESC
                 LIMIT 1
              ) conv ON true
              ORDER BY m.created_at DESC NULLS LAST

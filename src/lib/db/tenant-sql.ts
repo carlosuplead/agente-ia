@@ -3,6 +3,28 @@ import postgres from 'postgres'
 const globalForSql = globalThis as unknown as {
     tenantPostgres?: ReturnType<typeof postgres>
     tenantPostgresFailed?: boolean
+    tenantPostgresFailedAt?: number
+}
+
+/** Após 2 minutos, tenta reconectar em vez de ficar no fallback permanentemente. */
+const CIRCUIT_BREAKER_RESET_MS = 2 * 60 * 1000
+
+function isCircuitOpen(): boolean {
+    if (!globalForSql.tenantPostgresFailed) return false
+    const failedAt = globalForSql.tenantPostgresFailedAt ?? 0
+    if (Date.now() - failedAt > CIRCUIT_BREAKER_RESET_MS) {
+        // Reset: tentar conexão direta novamente
+        console.info('[tenant-sql] Circuit breaker reset — tentando conexão direta novamente')
+        globalForSql.tenantPostgresFailed = false
+        globalForSql.tenantPostgresFailedAt = undefined
+        // Fechar conexão anterior para forçar reconexão
+        if (globalForSql.tenantPostgres) {
+            globalForSql.tenantPostgres.end({ timeout: 1 }).catch(() => {})
+            globalForSql.tenantPostgres = undefined
+        }
+        return false
+    }
+    return true
 }
 
 /**
@@ -88,8 +110,8 @@ function createRpcFallback(): TenantSqlLike {
  * Se falhar (DNS, pooler), usa fallback via Supabase REST API + RPC.
  */
 export function getTenantSql(): TenantSqlLike {
-    // Se já sabemos que a conexão direta falha, vai direto pro fallback
-    if (globalForSql.tenantPostgresFailed) {
+    // Se já sabemos que a conexão direta falha E o circuit breaker não resetou, vai direto pro fallback
+    if (isCircuitOpen()) {
         return createRpcFallback()
     }
 
@@ -98,6 +120,7 @@ export function getTenantSql(): TenantSqlLike {
         // Sem DATABASE_URL, tenta RPC fallback
         console.warn('[tenant-sql] DATABASE_URL em falta, usando RPC fallback')
         globalForSql.tenantPostgresFailed = true
+        globalForSql.tenantPostgresFailedAt = Date.now()
         return createRpcFallback()
     }
 
@@ -132,8 +155,9 @@ export function getTenantSql(): TenantSqlLike {
                     msg.includes('Connection terminated')
 
                 if (isFatal) {
-                    console.warn(`[tenant-sql] Conexão direta falhou (${msg.substring(0, 80)}), usando RPC fallback`)
+                    console.warn(`[tenant-sql] Conexão direta falhou (${msg.substring(0, 80)}), usando RPC fallback — circuit breaker ativado`)
                     globalForSql.tenantPostgresFailed = true
+                    globalForSql.tenantPostgresFailedAt = Date.now()
                     const fallback = createRpcFallback()
                     return fallback.unsafe(query, params)
                 }

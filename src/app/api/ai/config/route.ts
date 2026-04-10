@@ -7,6 +7,7 @@ import { parseFollowupStepsFromBody } from '@/lib/ai-agent/followup-steps'
 import { sanitizeAiConfigForClient } from '@/lib/dashboard/ai-config'
 import { hasValidAllowlistEntry } from '@/lib/ai-agent/test-mode-allowlist'
 import { encryptWorkspaceLlmKeyIfConfigured } from '@/lib/crypto/workspace-llm-keys'
+import { invalidateAgentConfigCache } from '@/lib/ai-agent/run-process'
 
 type N8nToolRow = {
     tool_name: string
@@ -419,6 +420,9 @@ export async function POST(request: Request) {
         const finalRows = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
         const finalRaw = finalRows[0] as Record<string, unknown> | undefined
         const config = finalRaw ? sanitizeAiConfigForClient(finalRaw) : sanitizeAiConfigForClient(updated)
+
+        // Invalidar cache em memória para que a próxima mensagem use a config atualizada
+        invalidateAgentConfigCache(workspace_slug as string)
 
         return NextResponse.json({ success: true, config })
     } catch (e) {

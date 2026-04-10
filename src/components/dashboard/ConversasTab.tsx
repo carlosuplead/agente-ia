@@ -150,12 +150,12 @@ export function ConversasTab() {
         void loadConversations()
     }, [loadConversations])
 
-    // Auto-refresh conversations list every 8s
+    // Auto-refresh conversations list every 4s
     useEffect(() => {
         if (!slug) return
         const id = setInterval(() => {
             void loadConversations(true)
-        }, 8000)
+        }, 4000)
         return () => clearInterval(id)
     }, [slug, loadConversations])
 
@@ -168,7 +168,7 @@ export function ConversasTab() {
         setChatLoading(prev => prev) // mantém loading anterior em refresh silencioso
         try {
             const controller = new AbortController()
-            const timer = setTimeout(() => controller.abort(), 8000) // 8s timeout
+            const timer = setTimeout(() => controller.abort(), 5000) // 5s timeout
             const res = await fetch(
                 `/api/workspace/conversations/${contactId}?workspace_slug=${encodeURIComponent(slug)}`,
                 { credentials: 'include', cache: 'no-store', signal: controller.signal }
@@ -206,10 +206,10 @@ export function ConversasTab() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
 
-    // Auto-refresh chat every 4s (rápido para espelhar IA)
+    // Auto-refresh chat every 2.5s (rápido para espelhar IA)
     useEffect(() => {
         if (!selectedContactId || !slug) return
-        const id = setInterval(() => void loadChat(selectedContactId), 4000)
+        const id = setInterval(() => void loadChat(selectedContactId), 2500)
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 

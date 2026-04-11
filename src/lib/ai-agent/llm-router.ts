@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import type { FunctionDeclarationsTool } from '@google/generative-ai'
+import { VertexAI } from '@google-cloud/vertexai'
 import OpenAI from 'openai'
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import Anthropic from '@anthropic-ai/sdk'
@@ -136,6 +137,61 @@ function resolveGoogleApiKey(config: AiAgentConfig): string {
     const w = typeof config.google_api_key === 'string' ? config.google_api_key.trim() : ''
     if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
     return process.env.GOOGLE_API_KEY?.trim() || ''
+}
+
+// ─── Vertex AI support ──────────────────────────────────────────────
+// Se GOOGLE_VERTEX_PROJECT estiver configurado, usa Vertex AI (enterprise).
+// Senão, usa Google AI Studio com API key (padrão).
+
+function isVertexConfigured(): boolean {
+    return !!(process.env.GOOGLE_VERTEX_PROJECT?.trim())
+}
+
+/**
+ * Retorna um GenerativeModel compatível — de Vertex AI ou Google AI Studio.
+ * Ambos SDKs têm a mesma interface (getGenerativeModel, generateContent, startChat).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getGeminiModel(config: AiAgentConfig, modelConfig: Record<string, any>): any {
+    if (isVertexConfigured()) {
+        const project = process.env.GOOGLE_VERTEX_PROJECT!.trim()
+        const location = process.env.GOOGLE_VERTEX_LOCATION?.trim() || 'us-central1'
+        const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const vertexOpts: any = { project, location }
+
+        // Se tem service account JSON (necessário fora do Google Cloud, ex: Vercel)
+        if (saJson) {
+            try {
+                const credentials = JSON.parse(saJson)
+                vertexOpts.googleAuthOptions = { credentials }
+            } catch (e) {
+                console.error('[vertex] Falha ao parsear GOOGLE_SERVICE_ACCOUNT_JSON:', e)
+            }
+        }
+
+        const vertexAI = new VertexAI(vertexOpts)
+        // Vertex SDK espera { model: string } — extrair model do config
+        const vertexModelConfig = {
+            model: modelConfig.model || 'gemini-2.5-flash',
+            systemInstruction: modelConfig.systemInstruction,
+            generationConfig: modelConfig.generationConfig,
+            tools: modelConfig.tools
+        }
+        return vertexAI.getGenerativeModel(vertexModelConfig)
+    }
+
+    // Fallback: Google AI Studio com API Key
+    const apiKey = resolveGoogleApiKey(config)
+    if (!apiKey) throw new Error('Chave Google (Gemini) em falta — configure GOOGLE_API_KEY ou GOOGLE_VERTEX_PROJECT')
+    const genAI = new GoogleGenerativeAI(apiKey)
+    return genAI.getGenerativeModel({
+        model: modelConfig.model || 'gemini-2.5-flash',
+        systemInstruction: modelConfig.systemInstruction,
+        generationConfig: modelConfig.generationConfig,
+        tools: modelConfig.tools
+    })
 }
 
 function resolveAnthropicApiKey(config: AiAgentConfig): string {
@@ -355,15 +411,13 @@ async function plainCompletion(config: AiAgentConfig, systemPrompt: string, user
         }
     }
 
-    const gKey = resolveGoogleApiKey(config)
-    if (!gKey) throw new Error('Chave Google (Gemini) em falta (workspace ou GOOGLE_API_KEY no servidor)')
-    const genAI = new GoogleGenerativeAI(gKey)
-    const model = genAI.getGenerativeModel({
+    const model = getGeminiModel(config, {
         model: config.model || 'gemini-2.5-flash',
         systemInstruction: systemPrompt,
         generationConfig: { temperature: config.temperature }
     })
-    const result = await withTimeout(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await withTimeout(
         model.generateContent(userMessage),
         LLM_TIMEOUT_MS,
         'Timeout Gemini'
@@ -625,9 +679,6 @@ async function callGeminiWithTools(
     teamNotificationOn: boolean,
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
-    const apiKey = resolveGoogleApiKey(config)
-    if (!apiKey) throw new Error('Chave Google (Gemini) em falta (workspace ou GOOGLE_API_KEY no servidor)')
-
     const declarations: Array<Record<string, unknown>> = []
     if (handoffOn) {
         declarations.push({
@@ -706,8 +757,7 @@ async function callGeminiWithTools(
         })
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
+    const model = getGeminiModel(config, {
         model: config.model || 'gemini-2.5-flash',
         systemInstruction: systemInstructions,
         generationConfig: { temperature: config.temperature, maxOutputTokens: 2048 },
@@ -715,11 +765,12 @@ async function callGeminiWithTools(
     })
 
     const chat = model.startChat({ history: [] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let response = await withTimeout(
         chat.sendMessage(userMessage),
         LLM_TIMEOUT_MS,
         'Timeout Gemini'
-    ).then(r => r.response)
+    ).then((r: any) => r.response)
 
     const voiceDeliveries: VoiceDeliveryRecord[] = []
     let usageAcc: LlmUsageSnapshot | undefined
@@ -728,7 +779,8 @@ async function callGeminiWithTools(
         usageAcc = sumUsage(usageAcc, geminiUsageFromResponse(response as GeminiUsageMeta))
         const calls = response.functionCalls?.() || []
 
-        const transferCall = calls.find(c => c.name === TOOL_NAME_TRANSFER)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const transferCall = calls.find((c: any) => c.name === TOOL_NAME_TRANSFER)
         if (transferCall && handoffOn) {
             const reason =
                 typeof (transferCall.args as { reason?: string })?.reason === 'string'
@@ -749,7 +801,8 @@ async function callGeminiWithTools(
             }
         }
 
-        const otherCalls = calls.filter(c => c.name !== TOOL_NAME_TRANSFER)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const otherCalls = calls.filter((c: any) => c.name !== TOOL_NAME_TRANSFER)
         if (otherCalls.length && meta) {
             const functionResponseParts: Array<{
                 functionResponse: { name: string; response: { result: string } }
@@ -879,7 +932,8 @@ async function callGeminiWithTools(
             }
 
             if (functionResponseParts.length === 0) break
-            const followUp = await withTimeout(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const followUp: any = await withTimeout(
                 chat.sendMessage(functionResponseParts),
                 LLM_TIMEOUT_MS,
                 'Timeout Gemini (tools follow-up)'
@@ -1249,16 +1303,14 @@ export async function callFollowupLLM(
         return completion.choices[0]?.message?.content || ''
     }
 
-    // Gemini
-    const gKey = resolveGoogleApiKey(config)
-    if (!gKey) throw new Error('Chave Gemini em falta')
-    const genAI = new GoogleGenerativeAI(gKey)
-    const model = genAI.getGenerativeModel({
+    // Gemini (AI Studio ou Vertex AI)
+    const model = getGeminiModel(config, {
         model: config.model || 'gemini-2.5-flash',
         systemInstruction: systemPrompt,
         generationConfig: { temperature: config.temperature ?? 0.7, maxOutputTokens: 512 }
     })
-    const result = await withTimeout(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await withTimeout(
         model.generateContent(userContent),
         LLM_TIMEOUT_MS,
         'Timeout Gemini follow-up'

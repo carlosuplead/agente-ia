@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { buildContext } from '@/lib/ai-agent/context-builder'
 import { callLLM } from '@/lib/ai-agent/llm-router'
+import type { LLMResponse } from '@/lib/ai-agent/types'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { splitAiResponseForChunks, type AiChunkSplitMode } from '@/lib/ai-agent/split-ai-response'
 import { setFollowupAnchorForConversation } from '@/lib/ai-agent/followup-anchor'
@@ -490,12 +491,18 @@ export async function runAiProcess(
         return { ok: false, status: 500, error: 'Failed to build context' }
     }
 
-    const response = await callLLM(config, context, {
-        conversationId,
-        workspaceSlug: workspace_slug,
-        whatsappInstanceToken: instance.instance_token,
-        googleCalendar
-    })
+    let response: LLMResponse
+    try {
+        response = await callLLM(config, context, {
+            conversationId,
+            workspaceSlug: workspace_slug,
+            whatsappInstanceToken: instance.instance_token,
+            googleCalendar
+        })
+    } catch (llmErr) {
+        console.error('runAiProcess: callLLM threw', llmErr)
+        response = { text: EMPTY_LLM_FALLBACK, shouldHandoff: false }
+    }
 
     if (response.usage && response.usage.total_tokens > 0) {
         try {

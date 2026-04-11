@@ -150,12 +150,12 @@ export function ConversasTab() {
         void loadConversations()
     }, [loadConversations])
 
-    // Auto-refresh conversations list every 4s
+    // Auto-refresh conversations list every 8s
     useEffect(() => {
         if (!slug) return
         const id = setInterval(() => {
             void loadConversations(true)
-        }, 4000)
+        }, 8000)
         return () => clearInterval(id)
     }, [slug, loadConversations])
 
@@ -206,10 +206,10 @@ export function ConversasTab() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
 
-    // Auto-refresh chat every 2.5s (rápido para espelhar IA)
+    // Auto-refresh chat every 5s
     useEffect(() => {
         if (!selectedContactId || !slug) return
-        const id = setInterval(() => void loadChat(selectedContactId), 2500)
+        const id = setInterval(() => void loadChat(selectedContactId), 5000)
         return () => clearInterval(id)
     }, [selectedContactId, slug, loadChat])
 
@@ -349,7 +349,14 @@ export function ConversasTab() {
     async function startRecording() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+            // Prefere OGG Opus (aceito pela Meta API); fallback WebM (Chrome)
+            const chosenMime = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+                ? 'audio/ogg;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm'
+            const chosenExt = chosenMime.startsWith('audio/ogg') ? 'ogg' : 'webm'
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: chosenMime })
             mediaRecorderRef.current = mediaRecorder
             audioChunksRef.current = []
 
@@ -362,10 +369,10 @@ export function ConversasTab() {
                 if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
                 setRecordingTime(0)
 
-                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+                const blob = new Blob(audioChunksRef.current, { type: chosenMime })
                 if (blob.size < 1000) return // too short
 
-                const file = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' })
+                const file = new File([blob], `audio-${Date.now()}.${chosenExt}`, { type: chosenMime })
                 // Audio de gravação envia direto (sem preview)
                 await handleSendMedia(file)
             }

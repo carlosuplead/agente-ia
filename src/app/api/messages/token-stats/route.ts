@@ -23,7 +23,7 @@ function monthKeysInRange(rangeDays: number): string[] {
 }
 
 function buildDailyFromRows(
-    rows: { d: string; model: string; t: string | number | bigint }[],
+    rows: { d: string; model: string; tok: string | number | bigint }[],
     rangeDays: number
 ): TokenUsageByDayRow[] {
     const byDate = new Map<string, { total_tokens: number; by_model: Record<string, number> }>()
@@ -37,13 +37,13 @@ function buildDailyFromRows(
     }
     for (const r of rows) {
         const day = r.d
-        const tok = Number(r.t)
-        if (!Number.isFinite(tok) || tok <= 0) continue
+        const tokens = Number(r.tok)
+        if (!Number.isFinite(tokens) || tokens <= 0) continue
         const entry = byDate.get(day)
         if (!entry) continue
-        entry.total_tokens += tok
+        entry.total_tokens += tokens
         const m = r.model || '—'
-        entry.by_model[m] = (entry.by_model[m] || 0) + tok
+        entry.by_model[m] = (entry.by_model[m] || 0) + tokens
     }
     return Array.from(byDate.entries()).map(([date, v]) => ({ date, ...v }))
 }
@@ -79,7 +79,7 @@ function emptyTokenPayload(rangeDays: number): TokenUsagePayload {
 }
 
 function buildMonthlyFromRows(
-    rows: { ym: string; model: string; t: string | number | bigint }[],
+    rows: { ym: string; model: string; tok: string | number | bigint }[],
     rangeDays: number
 ): TokenUsageByMonthRow[] {
     const monthKeys = monthKeysInRange(rangeDays)
@@ -89,13 +89,13 @@ function buildMonthlyFromRows(
     }
     for (const r of rows) {
         const ym = r.ym
-        const tok = Number(r.t)
-        if (!Number.isFinite(tok) || tok <= 0) continue
+        const tokens = Number(r.tok)
+        if (!Number.isFinite(tokens) || tokens <= 0) continue
         const entry = byMonth.get(ym)
         if (!entry) continue
-        entry.total_tokens += tok
+        entry.total_tokens += tokens
         const mod = r.model || '—'
-        entry.by_model[mod] = (entry.by_model[mod] || 0) + tok
+        entry.by_model[mod] = (entry.by_model[mod] || 0) + tokens
     }
     return monthKeys.map(month => {
         const v = byMonth.get(month) ?? { total_tokens: 0, by_model: {} }
@@ -142,7 +142,7 @@ export async function GET(request: Request) {
         const dayRows = await sql.unsafe(
             `SELECT (created_at AT TIME ZONE 'UTC')::date::text AS d,
                     model,
-                    SUM(total_tokens)::text AS t
+                    SUM(total_tokens)::text AS tok
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
              GROUP BY 1, 2
@@ -152,7 +152,7 @@ export async function GET(request: Request) {
         const monthRows = await sql.unsafe(
             `SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS ym,
                     model,
-                    SUM(total_tokens)::text AS t
+                    SUM(total_tokens)::text AS tok
              FROM ${sch}.llm_usage
              WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
              GROUP BY 1, 2
@@ -185,12 +185,12 @@ export async function GET(request: Request) {
         }))
 
         const by_day = buildDailyFromRows(
-            dayRows as unknown as { d: string; model: string; t: string | number | bigint }[],
+            dayRows as unknown as { d: string; model: string; tok: string | number | bigint }[],
             rangeDays
         )
 
         const by_month = buildMonthlyFromRows(
-            monthRows as unknown as { ym: string; model: string; t: string | number | bigint }[],
+            monthRows as unknown as { ym: string; model: string; tok: string | number | bigint }[],
             rangeDays
         )
 
@@ -218,8 +218,13 @@ export async function GET(request: Request) {
         if (isSoftTokenStatsSchemaError(e) || isStatementTimeout(e)) {
             return NextResponse.json(emptyTokenPayload(rangeDays))
         }
-        console.error('messages token-stats', e)
         const msg = e instanceof Error ? e.message : 'Internal Server Error'
+        // row_to_json(text) => fallback RPC wrapping issue — return empty instead of 500
+        if (msg.includes('row_to_json')) {
+            console.warn('[token-stats] row_to_json issue (RPC fallback?), returning empty:', msg)
+            return NextResponse.json(emptyTokenPayload(rangeDays))
+        }
+        console.error('messages token-stats', e)
         return NextResponse.json({ error: msg }, { status: 500 })
     }
 }

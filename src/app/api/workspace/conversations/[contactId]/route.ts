@@ -33,37 +33,56 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
         const sql = getTenantSql()
         const sch = quotedSchema(workspace_slug)
 
-        // Subquery: pega as N mais recentes (DESC) e reordena ASC para exibição
-        // Sem isso, se houver >80 msgs, as mais novas (resposta da IA) ficam cortadas
-        const messages = await sql.unsafe(
-            `SELECT * FROM (
-                SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
-                FROM ${sch}.messages
-                WHERE contact_id = $1::uuid AND is_deleted = false
-                ORDER BY created_at DESC
-                LIMIT $2
-             ) sub
-             ORDER BY created_at ASC`,
-            [contactId, limit]
-        )
+        // Query consolidada: contact + conversa + mensagens em paralelo (2 roundtrips em vez de 3)
+        const [metaRows, messages] = await Promise.all([
+            sql.unsafe(
+                `SELECT
+                    c.id, c.phone, c.name, c.avatar_url,
+                    conv.id AS conv_id, conv.status AS conv_status,
+                    conv.handoff_reason, conv.internal_notes,
+                    COALESCE(conv.messages_count, 0)::int AS messages_count
+                 FROM ${sch}.contacts c
+                 LEFT JOIN LATERAL (
+                    SELECT id, status, handoff_reason, internal_notes, messages_count
+                    FROM ${sch}.ai_conversations
+                    WHERE contact_id = c.id
+                    ORDER BY created_at DESC LIMIT 1
+                 ) conv ON true
+                 WHERE c.id = $1::uuid
+                 LIMIT 1`,
+                [contactId]
+            ),
+            sql.unsafe(
+                `SELECT * FROM (
+                    SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
+                    FROM ${sch}.messages
+                    WHERE contact_id = $1::uuid AND is_deleted = false
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                 ) sub
+                 ORDER BY created_at ASC`,
+                [contactId, limit]
+            )
+        ])
 
-        const contactRows = await sql.unsafe(
-            `SELECT id, phone, name, avatar_url FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
-            [contactId]
-        )
+        const meta = metaRows[0] as unknown as {
+            id: string; phone: string; name: string; avatar_url: string | null
+            conv_id: string | null; conv_status: string | null
+            handoff_reason: string | null; internal_notes: string | null
+            messages_count: number
+        } | undefined
 
-        const convRows = await sql.unsafe(
-            `SELECT id, status, handoff_reason, internal_notes, messages_count
-             FROM ${sch}.ai_conversations
-             WHERE contact_id = $1::uuid
-             ORDER BY created_at DESC LIMIT 1`,
-            [contactId]
-        )
+        const contact = meta ? { id: meta.id, phone: meta.phone, name: meta.name, avatar_url: meta.avatar_url } : null
+        const conversation = meta?.conv_id ? {
+            id: meta.conv_id, status: meta.conv_status,
+            handoff_reason: meta.handoff_reason, internal_notes: meta.internal_notes,
+            messages_count: meta.messages_count
+        } : null
 
         return NextResponse.json({
             messages: messages || [],
-            contact: contactRows[0] || null,
-            conversation: convRows[0] || null
+            contact,
+            conversation
         }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' }
         })

@@ -4,8 +4,29 @@ import { requireWorkspaceMember } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { setFollowupAnchorForContact } from '@/lib/ai-agent/followup-anchor'
 import { getUazapiBaseUrl } from '@/lib/uazapi'
-import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import { GRAPH_API_BASE } from '@/lib/meta/graph-version'
+
+/** MIME types suportados pela Meta para audio — audio/webm NÃO é aceito */
+function metaSafeMime(mime: string, mediaType: string): string {
+    if (mediaType !== 'audio') return mime
+    // Meta rejeita audio/webm; remap para audio/ogg (mesmo codec Opus)
+    if (mime.startsWith('audio/webm')) return 'audio/ogg'
+    return mime
+}
+
+/** Extensão padrão para o MIME */
+function extForMime(mime: string): string {
+    if (mime.startsWith('audio/ogg')) return 'ogg'
+    if (mime.startsWith('audio/webm')) return 'webm'
+    if (mime.startsWith('audio/mp4') || mime.startsWith('audio/m4a')) return 'm4a'
+    if (mime.startsWith('audio/mpeg')) return 'mp3'
+    if (mime.startsWith('image/png')) return 'png'
+    if (mime.startsWith('image/jpeg') || mime.startsWith('image/jpg')) return 'jpg'
+    if (mime.startsWith('image/webp')) return 'webp'
+    if (mime.startsWith('video/mp4')) return 'mp4'
+    if (mime.startsWith('application/pdf')) return 'pdf'
+    return 'bin'
+}
 
 /**
  * POST — send media (image, video, audio, document) via WhatsApp
@@ -119,13 +140,6 @@ export async function POST(request: Request) {
 
             if (instance.provider === 'official') {
                 // Official Meta Cloud API — upload media then send
-                const { provider: _ } = await getProviderForWorkspace(supabase, workspace_slug)
-
-                // 1. Upload media to Meta
-                const uploadForm = new FormData()
-                uploadForm.append('messaging_product', 'whatsapp')
-                uploadForm.append('type', mimetype)
-                uploadForm.append('file', new Blob([Buffer.from(base64Data, 'base64')], { type: mimetype }), filename || 'file')
 
                 const { data: inst } = await supabase
                     .from('whatsapp_instances')
@@ -137,15 +151,35 @@ export async function POST(request: Request) {
                     throw new Error('Official provider credentials missing')
                 }
 
+                // 1. Upload media to Meta
+                // Remap MIME type (Meta rejeita audio/webm → usa audio/ogg)
+                const safeMime = metaSafeMime(mimetype, media_type)
+                const safeFilename = filename
+                    ? filename.replace(/\.webm$/, safeMime === 'audio/ogg' ? '.ogg' : '.webm')
+                    : `media-${Date.now()}.${extForMime(safeMime)}`
+
+                const buffer = Buffer.from(base64Data, 'base64')
+                const uploadForm = new FormData()
+                uploadForm.append('messaging_product', 'whatsapp')
+                uploadForm.append('type', safeMime)
+                uploadForm.append('file', new Blob([buffer], { type: safeMime }), safeFilename)
+
+                console.log(`[send-media] official upload: mime=${safeMime} file=${safeFilename} size=${buffer.length}`)
+
                 const uploadRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/media`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${inst.meta_access_token}` },
                     body: uploadForm
                 })
-                const uploadJson = (await uploadRes.json().catch(() => ({}))) as { id?: string }
+                const uploadText = await uploadRes.text()
+                let uploadJson: { id?: string; error?: { message?: string } } = {}
+                try { uploadJson = JSON.parse(uploadText) } catch { /* not JSON */ }
+
                 if (!uploadRes.ok || !uploadJson.id) {
-                    throw new Error(`Meta media upload failed (${uploadRes.status})`)
+                    console.error(`[send-media] Meta upload FAILED (${uploadRes.status}):`, uploadText)
+                    throw new Error(`Meta media upload failed (${uploadRes.status}): ${uploadJson.error?.message || uploadText.slice(0, 200)}`)
                 }
+                console.log('[send-media] Meta upload OK, media_id=', uploadJson.id)
 
                 // 2. Send message with uploaded media
                 const msgBody: Record<string, unknown> = {
@@ -230,9 +264,13 @@ export async function POST(request: Request) {
             }
 
             return NextResponse.json({ success: true, messageId: savedMessage.id })
-        } catch {
-            await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMessage.id])
-            return NextResponse.json({ error: 'Failed to send media' }, { status: 502 })
+        } catch (sendErr) {
+            console.error('[send-media] SEND ERROR:', sendErr instanceof Error ? sendErr.message : sendErr)
+            await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMessage.id]).catch(() => {})
+            return NextResponse.json(
+                { error: sendErr instanceof Error ? sendErr.message : 'Failed to send media' },
+                { status: 502 }
+            )
         }
     } catch (error) {
         console.error('whatsapp send-media', error)

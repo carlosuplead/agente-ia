@@ -65,11 +65,8 @@ export function LoginForm() {
                         {loading ? 'A entrar…' : 'Entrar'}
                     </button>
                 </form>
-                <p className="login-sub" style={{ marginTop: '1rem' }}>
-                    Não tem conta?{' '}
-                    <a href="/signup" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
-                        Criar conta
-                    </a>
+                <p className="login-sub" style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#999' }}>
+                    Acesso exclusivo para clientes autorizados.
                 </p>
             </div>
         </div>

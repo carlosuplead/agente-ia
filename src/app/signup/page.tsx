@@ -1,18 +1,6 @@
-import { Suspense } from 'react'
-import { SignupForm } from './SignupForm'
+import { redirect } from 'next/navigation'
 
+/** Signup desativado — apenas admin cria contas pelo painel. */
 export default function SignupPage() {
-    return (
-        <Suspense
-            fallback={
-                <div className="login-wrap">
-                    <div className="login-card">
-                        <p className="login-sub">A carregar...</p>
-                    </div>
-                </div>
-            }
-        >
-            <SignupForm />
-        </Suspense>
-    )
+    redirect('/login')
 }

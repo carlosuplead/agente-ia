@@ -63,6 +63,81 @@ export async function GET() {
     }
 }
 
+/** POST /api/admin/users — cria um novo cliente (usuário + workspace) */
+export async function POST(request: Request) {
+    try {
+        const supabase = await createClient()
+        const admin = await requirePlatformAdmin(supabase)
+        if (!admin.ok) return admin.response
+
+        const body = await request.json().catch(() => null)
+        const name = typeof body?.name === 'string' ? body.name.trim() : ''
+        const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
+        const password = typeof body?.password === 'string' ? body.password : ''
+
+        if (!name || !email || !password) {
+            return NextResponse.json({ error: 'Nome, email e senha são obrigatórios' }, { status: 400 })
+        }
+        if (password.length < 6) {
+            return NextResponse.json({ error: 'Senha deve ter pelo menos 6 caracteres' }, { status: 400 })
+        }
+
+        const adminSb = await createAdminClient()
+
+        // 1. Criar usuário no Supabase Auth
+        const { data: userData, error: createErr } = await adminSb.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { full_name: name }
+        })
+
+        if (createErr) {
+            if (createErr.message?.includes('already been registered')) {
+                return NextResponse.json({ error: 'Este email já está cadastrado.' }, { status: 409 })
+            }
+            return NextResponse.json({ error: 'Falha ao criar usuário: ' + createErr.message }, { status: 500 })
+        }
+
+        const userId = userData.user?.id
+        if (!userId) {
+            return NextResponse.json({ error: 'Erro interno ao criar usuário' }, { status: 500 })
+        }
+
+        // 2. Gerar slug do workspace
+        const slug = name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '')
+            .slice(0, 40) + '_' + Date.now().toString(36)
+
+        // 3. Criar workspace
+        const { error: wsErr } = await supabase
+            .from('workspaces')
+            .insert({ name, slug })
+        if (wsErr) {
+            console.error('admin create client: workspace', wsErr)
+            return NextResponse.json({ error: 'Usuário criado, mas falhou ao criar workspace: ' + wsErr.message }, { status: 500 })
+        }
+
+        // 4. Atribuir como owner
+        const { error: memErr } = await supabase
+            .from('workspace_members')
+            .insert({ user_id: userId, workspace_slug: slug, role: 'owner' })
+        if (memErr) {
+            console.error('admin create client: membership', memErr)
+            return NextResponse.json({ error: 'Workspace criado, mas falhou ao atribuir acesso' }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true, user_id: userId, workspace_slug: slug, email })
+    } catch (err) {
+        console.error('admin create client:', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
 /** DELETE /api/admin/users — remove um usuário e todas as suas memberships */
 export async function DELETE(request: Request) {
     try {

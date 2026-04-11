@@ -147,6 +147,51 @@ export function AdminPanel() {
         }
     }
 
+    // ── Estado do modal Novo Cliente ──
+    const [showNewClient, setShowNewClient] = useState(false)
+    const [newName, setNewName] = useState('')
+    const [newEmail, setNewEmail] = useState('')
+    const [newPassword, setNewPassword] = useState('')
+    const [newClientLoading, setNewClientLoading] = useState(false)
+    const [newClientResult, setNewClientResult] = useState<{ email: string; password: string } | null>(null)
+
+    async function handleCreateClient(e: React.FormEvent) {
+        e.preventDefault()
+        setError('')
+        setNewClientLoading(true)
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName, email: newEmail, password: newPassword })
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                setError(data.error || 'Erro ao criar cliente')
+                setNewClientLoading(false)
+                return
+            }
+            // Mostrar credenciais para copiar
+            setNewClientResult({ email: newEmail, password: newPassword })
+            setNewName('')
+            setNewEmail('')
+            setNewPassword('')
+            // Recarregar listas
+            await Promise.all([loadWorkspaces(), loadUsers()])
+        } catch {
+            setError('Erro de conexão ao criar cliente')
+        } finally {
+            setNewClientLoading(false)
+        }
+    }
+
+    function generatePassword() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+        let pw = ''
+        for (let i = 0; i < 12; i++) pw += chars[Math.floor(Math.random() * chars.length)]
+        setNewPassword(pw)
+    }
+
     function fmtDate(iso: string) {
         return new Date(iso).toLocaleDateString('pt-BR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
@@ -169,6 +214,9 @@ export function AdminPanel() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Painel Administrativo</h1>
                 <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-primary" onClick={() => { setShowNewClient(true); setNewClientResult(null); generatePassword() }}>
+                        + Novo Cliente
+                    </button>
                     <a href="/" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
                         Voltar ao Dashboard
                     </a>
@@ -247,6 +295,109 @@ export function AdminPanel() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal Novo Cliente ── */}
+            {showNewClient && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                    onClick={e => { if (e.target === e.currentTarget) setShowNewClient(false) }}
+                >
+                    <div style={{
+                        backgroundColor: 'var(--bg-primary, #fff)', borderRadius: 12,
+                        padding: '2rem', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                    }}>
+                        {newClientResult ? (
+                            <>
+                                <h2 style={{ fontSize: '1.2rem', marginBottom: 16, color: '#22c55e' }}>
+                                    Cliente criado com sucesso!
+                                </h2>
+                                <p style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
+                                    Envie estas credenciais para o cliente:
+                                </p>
+                                <div style={{
+                                    backgroundColor: 'var(--bg-secondary, #f5f5f5)', borderRadius: 8,
+                                    padding: 16, fontFamily: 'monospace', fontSize: 14, lineHeight: 1.8
+                                }}>
+                                    <div><strong>Email:</strong> {newClientResult.email}</div>
+                                    <div><strong>Senha:</strong> {newClientResult.password}</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(
+                                                `Email: ${newClientResult.email}\nSenha: ${newClientResult.password}`
+                                            )
+                                            alert('Credenciais copiadas!')
+                                        }}
+                                    >
+                                        Copiar credenciais
+                                    </button>
+                                    <button className="btn btn-secondary" onClick={() => setShowNewClient(false)}>
+                                        Fechar
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h2 style={{ fontSize: '1.2rem', marginBottom: 16 }}>Novo Cliente</h2>
+                                <form onSubmit={handleCreateClient} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    <label className="input-group">
+                                        <span className="input-label">Nome / Empresa</span>
+                                        <input
+                                            className="input"
+                                            type="text"
+                                            value={newName}
+                                            onChange={e => setNewName(e.target.value)}
+                                            required
+                                            placeholder="Ex: Empresa do Cliente"
+                                        />
+                                    </label>
+                                    <label className="input-group">
+                                        <span className="input-label">Email</span>
+                                        <input
+                                            className="input"
+                                            type="email"
+                                            value={newEmail}
+                                            onChange={e => setNewEmail(e.target.value)}
+                                            required
+                                            placeholder="cliente@email.com"
+                                        />
+                                    </label>
+                                    <label className="input-group">
+                                        <span className="input-label">Senha</span>
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <input
+                                                className="input"
+                                                type="text"
+                                                value={newPassword}
+                                                onChange={e => setNewPassword(e.target.value)}
+                                                required
+                                                minLength={6}
+                                                style={{ flex: 1 }}
+                                            />
+                                            <button type="button" className="btn btn-secondary" onClick={generatePassword} title="Gerar senha aleatória" style={{ fontSize: 13 }}>
+                                                Gerar
+                                            </button>
+                                        </div>
+                                    </label>
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                        <button type="submit" className="btn btn-primary" disabled={newClientLoading}>
+                                            {newClientLoading ? 'Criando...' : 'Criar Cliente'}
+                                        </button>
+                                        <button type="button" className="btn btn-secondary" onClick={() => setShowNewClient(false)}>
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

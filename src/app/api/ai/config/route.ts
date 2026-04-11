@@ -441,6 +441,15 @@ export async function POST(request: Request) {
             }
         }
 
+        // ── Fallback provider ──
+        if ('fallback_provider' in body) {
+            const v = body.fallback_provider
+            await sql.unsafe(
+                `UPDATE ${sch}.ai_agent_config SET fallback_provider = $1, updated_at = now() WHERE singleton_key = true`,
+                [typeof v === 'string' && v.trim() ? v.trim() : null]
+            )
+        }
+
         const finalRows = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
         const finalRaw = finalRows[0] as Record<string, unknown> | undefined
         const config = finalRaw ? sanitizeAiConfigForClient(finalRaw) : sanitizeAiConfigForClient(updated)

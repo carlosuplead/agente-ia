@@ -401,6 +401,30 @@ export async function POST(request: Request) {
                 )
             }
         }
+        // ── Vertex AI fields (plain text, not encrypted) ──
+        for (const col of ['google_vertex_project', 'google_vertex_location'] as const) {
+            if (col in body) {
+                const v = body[col]
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET ${col} = $1, updated_at = now() WHERE singleton_key = true`,
+                    [typeof v === 'string' && v.trim() ? v.trim() : null]
+                )
+            }
+        }
+        if ('google_service_account_json' in body) {
+            const v = body.google_service_account_json
+            if (v === null) {
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET google_service_account_json = NULL, updated_at = now() WHERE singleton_key = true`, []
+                )
+            } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET google_service_account_json = $1, updated_at = now() WHERE singleton_key = true`,
+                    [stored]
+                )
+            }
+        }
         if ('elevenlabs_api_key' in body) {
             const v = body.elevenlabs_api_key
             if (v === null) {

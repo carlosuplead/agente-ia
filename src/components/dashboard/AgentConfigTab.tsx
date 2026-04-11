@@ -324,6 +324,59 @@ export function AgentConfigTab() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Vertex AI (opcional) */}
+                        {d.cfgProvider === 'gemini' && (
+                            <details style={{ marginTop: 12 }}>
+                                <summary style={{ cursor: 'pointer', fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                    Vertex AI (opcional — limites enterprise)
+                                </summary>
+                                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                                        Configure para usar Vertex AI em vez do Google AI Studio. Se vazio, usa a chave AI Studio acima.
+                                    </p>
+                                    <div className="two-cols">
+                                        <div className="input-group">
+                                            <label className="input-label" htmlFor="cfg-vertex-project">Project ID</label>
+                                            <input
+                                                id="cfg-vertex-project"
+                                                className="input"
+                                                value={d.cfgVertexProject}
+                                                onChange={e => d.setCfgVertexProject(e.target.value)}
+                                                placeholder="meu-projeto-gcp"
+                                                autoComplete="off"
+                                            />
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label" htmlFor="cfg-vertex-location">Location</label>
+                                            <input
+                                                id="cfg-vertex-location"
+                                                className="input"
+                                                value={d.cfgVertexLocation}
+                                                onChange={e => d.setCfgVertexLocation(e.target.value)}
+                                                placeholder="us-central1"
+                                                autoComplete="off"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="input-group">
+                                        <label className="input-label" htmlFor="cfg-vertex-sa">Service Account JSON</label>
+                                        <textarea
+                                            id="cfg-vertex-sa"
+                                            className="input"
+                                            rows={3}
+                                            value={d.cfgVertexSaJson}
+                                            onChange={e => d.setCfgVertexSaJson(e.target.value)}
+                                            placeholder={d.aiConfig?.google_service_account_json_set ? 'Novo JSON (vazio = manter)' : '{"type":"service_account","project_id":"..."}'}
+                                            style={{ fontFamily: 'monospace', fontSize: 12 }}
+                                        />
+                                        {d.aiConfig?.google_service_account_json_set && (
+                                            <p style={{ marginTop: 4, fontSize: 12, color: 'var(--green)' }}>Configurada</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </details>
+                        )}
                     </div>
 
                     {/* ── Card 3: Prompt do Sistema ── */}

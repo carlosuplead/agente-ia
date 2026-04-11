@@ -140,11 +140,24 @@ function resolveGoogleApiKey(config: AiAgentConfig): string {
 }
 
 // ─── Vertex AI support ──────────────────────────────────────────────
-// Se GOOGLE_VERTEX_PROJECT estiver configurado, usa Vertex AI (enterprise).
-// Senão, usa Google AI Studio com API key (padrão).
+// Prioridade: workspace config → env vars → fallback para Google AI Studio.
 
-function isVertexConfigured(): boolean {
-    return !!(process.env.GOOGLE_VERTEX_PROJECT?.trim())
+function resolveVertexProject(config: AiAgentConfig): string {
+    const ws = typeof config.google_vertex_project === 'string' ? config.google_vertex_project.trim() : ''
+    if (ws) return ws
+    return process.env.GOOGLE_VERTEX_PROJECT?.trim() || ''
+}
+
+function resolveVertexLocation(config: AiAgentConfig): string {
+    const ws = typeof config.google_vertex_location === 'string' ? config.google_vertex_location.trim() : ''
+    if (ws) return ws
+    return process.env.GOOGLE_VERTEX_LOCATION?.trim() || 'us-central1'
+}
+
+function resolveVertexSaJson(config: AiAgentConfig): string {
+    const ws = typeof config.google_service_account_json === 'string' ? config.google_service_account_json.trim() : ''
+    if (ws) return decryptWorkspaceLlmKeyIfNeeded(ws)
+    return process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || ''
 }
 
 /**
@@ -153,26 +166,25 @@ function isVertexConfigured(): boolean {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getGeminiModel(config: AiAgentConfig, modelConfig: Record<string, any>): any {
-    if (isVertexConfigured()) {
-        const project = process.env.GOOGLE_VERTEX_PROJECT!.trim()
-        const location = process.env.GOOGLE_VERTEX_LOCATION?.trim() || 'us-central1'
-        const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim()
+    const vertexProject = resolveVertexProject(config)
+
+    if (vertexProject) {
+        const location = resolveVertexLocation(config)
+        const saJson = resolveVertexSaJson(config)
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const vertexOpts: any = { project, location }
+        const vertexOpts: any = { project: vertexProject, location }
 
-        // Se tem service account JSON (necessário fora do Google Cloud, ex: Vercel)
         if (saJson) {
             try {
                 const credentials = JSON.parse(saJson)
                 vertexOpts.googleAuthOptions = { credentials }
             } catch (e) {
-                console.error('[vertex] Falha ao parsear GOOGLE_SERVICE_ACCOUNT_JSON:', e)
+                console.error('[vertex] Falha ao parsear service account JSON:', e)
             }
         }
 
         const vertexAI = new VertexAI(vertexOpts)
-        // Vertex SDK espera { model: string } — extrair model do config
         const vertexModelConfig = {
             model: modelConfig.model || 'gemini-2.5-flash',
             systemInstruction: modelConfig.systemInstruction,
@@ -184,7 +196,7 @@ function getGeminiModel(config: AiAgentConfig, modelConfig: Record<string, any>)
 
     // Fallback: Google AI Studio com API Key
     const apiKey = resolveGoogleApiKey(config)
-    if (!apiKey) throw new Error('Chave Google (Gemini) em falta — configure GOOGLE_API_KEY ou GOOGLE_VERTEX_PROJECT')
+    if (!apiKey) throw new Error('Chave Google (Gemini) em falta — configure a chave Google ou Vertex AI no painel')
     const genAI = new GoogleGenerativeAI(apiKey)
     return genAI.getGenerativeModel({
         model: modelConfig.model || 'gemini-2.5-flash',

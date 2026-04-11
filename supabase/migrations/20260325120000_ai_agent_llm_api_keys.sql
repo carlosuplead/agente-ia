@@ -61,6 +61,9 @@ BEGIN
             elevenlabs_voice_tool_description TEXT,
             openai_api_key TEXT,
             google_api_key TEXT,
+            google_vertex_project TEXT,
+            google_vertex_location TEXT,
+            google_service_account_json TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )

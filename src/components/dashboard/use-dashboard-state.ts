@@ -71,6 +71,9 @@ function applyAiConfigToForm(
         setCfgTeamNotifyTemplate: (v: string) => void
         setCfgAnthropicKeyInput: (v: string) => void
         setCfgClearAnthropicKey: (v: boolean) => void
+        setCfgVertexProject: (v: string) => void
+        setCfgVertexLocation: (v: string) => void
+        setCfgVertexSaJson: (v: string) => void
         setCfgElevenApiKeyInput: (v: string) => void
         setCfgClearElevenApiKey: (v: boolean) => void
         setCfgFallbackProvider: (v: string | null) => void
@@ -108,6 +111,9 @@ function applyAiConfigToForm(
     setters.setCfgClearGoogleKey(false)
     setters.setCfgAnthropicKeyInput('')
     setters.setCfgClearAnthropicKey(false)
+    setters.setCfgVertexProject(merged.google_vertex_project ?? '')
+    setters.setCfgVertexLocation(merged.google_vertex_location ?? '')
+    setters.setCfgVertexSaJson('')
     setters.setCfgElevenApiKeyInput('')
     setters.setCfgClearElevenApiKey(false)
     setters.setCfgFallbackProvider((merged as Record<string, unknown>).fallback_provider as string ?? null)
@@ -237,6 +243,9 @@ export function useDashboardController() {
     const [cfgClearGoogleKey, setCfgClearGoogleKey] = useState(false)
     const [cfgAnthropicKeyInput, setCfgAnthropicKeyInput] = useState('')
     const [cfgClearAnthropicKey, setCfgClearAnthropicKey] = useState(false)
+    const [cfgVertexProject, setCfgVertexProject] = useState('')
+    const [cfgVertexLocation, setCfgVertexLocation] = useState('')
+    const [cfgVertexSaJson, setCfgVertexSaJson] = useState('')
     const [cfgElevenApiKeyInput, setCfgElevenApiKeyInput] = useState('')
     const [cfgClearElevenApiKey, setCfgClearElevenApiKey] = useState(false)
     const [cfgFallbackProvider, setCfgFallbackProvider] = useState<string | null>(null)
@@ -342,7 +351,10 @@ export function useDashboardController() {
             cfgTeamNotifyAllowlist,
             cfgTeamNotifyDesc,
             cfgTeamNotifyAppendTranscript,
-            cfgTeamNotifyTemplate
+            cfgTeamNotifyTemplate,
+            cfgVertexProject,
+            cfgVertexLocation,
+            cfgVertexSaJson
         }),
         [
             selectedSlug,
@@ -389,7 +401,10 @@ export function useDashboardController() {
             cfgTeamNotifyAllowlist,
             cfgTeamNotifyDesc,
             cfgTeamNotifyAppendTranscript,
-            cfgTeamNotifyTemplate
+            cfgTeamNotifyTemplate,
+            cfgVertexProject,
+            cfgVertexLocation,
+            cfgVertexSaJson
         ]
     )
 
@@ -621,7 +636,10 @@ export function useDashboardController() {
             setCfgClearAnthropicKey,
             setCfgElevenApiKeyInput,
             setCfgClearElevenApiKey,
-            setCfgFallbackProvider
+            setCfgFallbackProvider,
+            setCfgVertexProject,
+            setCfgVertexLocation,
+            setCfgVertexSaJson
         }),
         []
     )
@@ -1314,6 +1332,12 @@ export function useDashboardController() {
         setCfgAnthropicKeyInput,
         cfgClearAnthropicKey,
         setCfgClearAnthropicKey,
+        cfgVertexProject,
+        setCfgVertexProject,
+        cfgVertexLocation,
+        setCfgVertexLocation,
+        cfgVertexSaJson,
+        setCfgVertexSaJson,
         cfgElevenApiKeyInput,
         setCfgElevenApiKeyInput,
         cfgClearElevenApiKey,

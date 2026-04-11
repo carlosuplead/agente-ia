@@ -35,6 +35,9 @@ export type AiConfigFormSnapshotInput = {
     cfgClearGoogleKey: boolean
     cfgAnthropicKeyInput: string
     cfgClearAnthropicKey: boolean
+    cfgVertexProject: string
+    cfgVertexLocation: string
+    cfgVertexSaJson: string
     cfgElevenApiKeyInput: string
     cfgClearElevenApiKey: boolean
     cfgFallbackProvider: string | null
@@ -129,6 +132,12 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         out.elevenlabs_api_key = null
     } else if (i.cfgElevenApiKeyInput.trim()) {
         out.elevenlabs_api_key = i.cfgElevenApiKeyInput.trim()
+    }
+    // Vertex AI
+    out.google_vertex_project = i.cfgVertexProject?.trim() || null
+    out.google_vertex_location = i.cfgVertexLocation?.trim() || null
+    if (i.cfgVertexSaJson?.trim()) {
+        out.google_service_account_json = i.cfgVertexSaJson.trim()
     }
     out.fallback_provider = i.cfgFallbackProvider || null
     return out

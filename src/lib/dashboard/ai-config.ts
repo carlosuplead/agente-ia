@@ -35,6 +35,9 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     google_api_key_set: false,
     anthropic_api_key_set: false,
     elevenlabs_api_key_set: false,
+    google_vertex_project: null,
+    google_vertex_location: null,
+    google_service_account_json_set: false,
     fallback_provider: null,
     ai_chunk_messages_enabled: false,
     ai_chunk_split_mode: 'paragraph',
@@ -58,12 +61,14 @@ export function sanitizeAiConfigForClient(row: Record<string, unknown>): Record<
     const googleSet = typeof row.google_api_key === 'string' && row.google_api_key.length > 0
     const anthropicSet = typeof row.anthropic_api_key === 'string' && row.anthropic_api_key.length > 0
     const elevenlabsSet = typeof row.elevenlabs_api_key === 'string' && row.elevenlabs_api_key.length > 0
-    const { openai_api_key: _o, google_api_key: _g, anthropic_api_key: _a, elevenlabs_api_key: _e, ...rest } = row
+    const saJsonSet = typeof row.google_service_account_json === 'string' && row.google_service_account_json.length > 0
+    const { openai_api_key: _o, google_api_key: _g, anthropic_api_key: _a, elevenlabs_api_key: _e, google_service_account_json: _sa, ...rest } = row
     return {
         ...rest,
         openai_api_key_set: openaiSet,
         google_api_key_set: googleSet,
         anthropic_api_key_set: anthropicSet,
-        elevenlabs_api_key_set: elevenlabsSet
+        elevenlabs_api_key_set: elevenlabsSet,
+        google_service_account_json_set: saJsonSet
     }
 }

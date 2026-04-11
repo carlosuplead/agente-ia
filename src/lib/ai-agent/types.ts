@@ -56,6 +56,12 @@ export type AiAgentConfig = {
     openai_api_key?: string | null
     /** BYOK Gemini; se vazio, usa GOOGLE_API_KEY no servidor. */
     google_api_key?: string | null
+    /** Vertex AI — project ID do Google Cloud (se preenchido, usa Vertex em vez de AI Studio). */
+    google_vertex_project?: string | null
+    /** Vertex AI — região (default: us-central1). */
+    google_vertex_location?: string | null
+    /** Vertex AI — JSON da service account (se preenchido, autentica com service account). */
+    google_service_account_json?: string | null
     /** BYOK Anthropic; se vazio, usa ANTHROPIC_API_KEY no servidor. */
     anthropic_api_key?: string | null
     /** Provedor de fallback quando o primário falha. */

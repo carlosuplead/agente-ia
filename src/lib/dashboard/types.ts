@@ -48,6 +48,9 @@ export type AiConfigRow = {
     google_api_key_set?: boolean
     anthropic_api_key_set?: boolean
     elevenlabs_api_key_set?: boolean
+    google_vertex_project?: string | null
+    google_vertex_location?: string | null
+    google_service_account_json_set?: boolean
     fallback_provider?: string | null
     ai_chunk_messages_enabled?: boolean
     ai_chunk_split_mode?: string | null

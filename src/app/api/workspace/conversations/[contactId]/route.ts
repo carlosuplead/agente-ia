@@ -33,12 +33,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
         const sql = getTenantSql()
         const sch = quotedSchema(workspace_slug)
 
+        // Subquery: pega as N mais recentes (DESC) e reordena ASC para exibição
+        // Sem isso, se houver >80 msgs, as mais novas (resposta da IA) ficam cortadas
         const messages = await sql.unsafe(
-            `SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
-             FROM ${sch}.messages
-             WHERE contact_id = $1::uuid AND is_deleted = false
-             ORDER BY created_at ASC
-             LIMIT $2`,
+            `SELECT * FROM (
+                SELECT id, body, sender_type, status, media_url, media_type, created_at, whatsapp_id
+                FROM ${sch}.messages
+                WHERE contact_id = $1::uuid AND is_deleted = false
+                ORDER BY created_at DESC
+                LIMIT $2
+             ) sub
+             ORDER BY created_at ASC`,
             [contactId, limit]
         )
 

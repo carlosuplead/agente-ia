@@ -13,7 +13,7 @@
  *   { event: "status", ... }
  *   { event: "connection", ... }
  */
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { normalizePhoneForBrazil, generateBrazilianPhoneVariants, isWhatsAppGroup } from '@/lib/phone'
 import { addToBuffer } from '@/lib/ai-agent/buffer'
@@ -511,287 +511,268 @@ function parseUazapiStatusEvent(data: Record<string, unknown>): ParsedUazapiStat
 // ─── Route handler ────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+    // ── Parse rápido e responder 200 imediatamente ──
+    const { searchParams } = new URL(request.url)
+    let instanceToken = searchParams.get('token')?.trim() || ''
+
+    let data: Record<string, unknown>
     try {
-        const { searchParams } = new URL(request.url)
-        let instanceToken = searchParams.get('token')?.trim() || ''
+        data = (await request.json()) as Record<string, unknown>
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
 
-        let data: Record<string, unknown>
+    if (!instanceToken && typeof data.token === 'string' && data.token.trim()) {
+        instanceToken = data.token.trim()
+    }
+
+    if (!instanceToken) {
+        return NextResponse.json({ error: 'Missing token param' }, { status: 400 })
+    }
+
+    const eventType = getEventType(data)
+    if (['connection', 'open', 'close', 'connecting', 'qrcode', 'ready'].includes(eventType)) {
+        return NextResponse.json({ success: true })
+    }
+
+    // Responder 200 imediatamente — processamento pesado vai no after()
+    after(async () => {
         try {
-            data = (await request.json()) as Record<string, unknown>
-        } catch {
-            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+            await processWebhookPayload(instanceToken, eventType, data)
+        } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e)
+            console.error('[uazapi-webhook] CRITICAL error in after():', errMsg)
         }
+    })
 
-        // Fallback: token no body do payload (uazapiGO envia body.token)
-        if (!instanceToken && typeof data.token === 'string' && data.token.trim()) {
-            instanceToken = data.token.trim()
-        }
+    return NextResponse.json({ success: true })
+}
 
-        if (!instanceToken) {
-            console.warn('[uazapi-webhook] POST sem token (nem query, nem body)')
-            return NextResponse.json({ error: 'Missing token param' }, { status: 400 })
-        }
+/** Processamento real do webhook — roda no after() para não bloquear a resposta */
+async function processWebhookPayload(
+    instanceToken: string,
+    eventType: string,
+    data: Record<string, unknown>
+): Promise<void> {
+    const supabase = await createAdminClient()
+    const { data: instance } = await supabase
+        .from('whatsapp_instances')
+        .select('workspace_slug, status, provider')
+        .eq('instance_token', instanceToken)
+        .eq('provider', 'uazapi')
+        .maybeSingle()
 
-        const eventType = getEventType(data)
+    if (!instance?.workspace_slug) return
 
-        // Eventos de conexão/status de instância — ignorar silenciosamente
-        if (['connection', 'open', 'close', 'connecting', 'qrcode', 'ready'].includes(eventType)) {
-            return NextResponse.json({ success: true })
-        }
+    const ws = instance.workspace_slug
+    const sql = getTenantSql()
+    const sch = quotedSchema(ws)
 
-        // Lookup: qual workspace pertence este instance_token?
-        const supabase = await createAdminClient()
-        const { data: instance } = await supabase
-            .from('whatsapp_instances')
-            .select('workspace_slug, status, provider')
-            .eq('instance_token', instanceToken)
-            .eq('provider', 'uazapi')
-            .maybeSingle()
-
-        if (!instance?.workspace_slug) {
-            console.warn('[uazapi-webhook] instance_token não encontrado na BD')
-            return NextResponse.json({ success: true })
-        }
-
-        const ws = instance.workspace_slug
-        const sql = getTenantSql()
-        const sch = quotedSchema(ws)
-
-        // ── Status updates (ack/delivery/read) ──
-        if (eventType === 'status' || eventType === 'ack' || eventType === 'message_ack') {
-            const st = parseUazapiStatusEvent(data)
-            if (st) {
-                await sql.unsafe(
-                    `UPDATE ${sch}.messages SET status = $2 WHERE whatsapp_id = $1`,
-                    [st.whatsappId, st.status]
-                )
-            }
-            return NextResponse.json({ success: true })
-        }
-
-        // ── Mensagens ──
-        // Aceitar "message", "messages", "chat", ou evento vazio/desconhecido com dados de mensagem
-        const isMessageEvent =
-            ['message', 'messages', 'chat', 'messages.upsert'].includes(eventType) ||
-            eventType === '' // payload sem campo event — tenta parsear como mensagem
-
-        if (!isMessageEvent) {
-            // Evento desconhecido — aceitar silenciosamente
-            return NextResponse.json({ success: true })
-        }
-
-        const msg = parseUazapiMessage(data)
-        if (!msg) {
-            // Payload sem dados de mensagem extraíveis — OK
-            return NextResponse.json({ success: true })
-        }
-
-        // Deduplicação (antes do fromMe check — dedup cobre ambos os lados)
-        const dup = await sql.unsafe(
-            `SELECT id FROM ${sch}.messages WHERE whatsapp_id = $1 LIMIT 1`,
-            [msg.whatsappId]
-        )
-        if (dup.length) {
-            return NextResponse.json({ success: true })
-        }
-
-        // Normalizar telefone e filtrar grupos
-        const normalized = normalizePhoneForBrazil(msg.fromPhone)
-        if (!normalized || isWhatsAppGroup(msg.fromPhone)) {
-            return NextResponse.json({ success: true })
-        }
-
-        // ── Mensagens enviadas por nós (eco do WhatsApp/celular/Web) ──
-        // Salvar no banco para aparecer no painel, mas NÃO disparar IA
-        if (msg.fromMe) {
-            // Buscar contato existente pelo telefone do destinatário (remoteJid)
-            const variants = generateBrazilianPhoneVariants(normalized)
-            const phonePlaceholders = variants.map((_, i) => `$${i + 1}`).join(', ')
-            const rows = await sql.unsafe(
-                `SELECT id FROM ${sch}.contacts WHERE phone IN (${phonePlaceholders}) LIMIT 1`,
-                variants
+    // ── Status updates (ack/delivery/read) ──
+    if (eventType === 'status' || eventType === 'ack' || eventType === 'message_ack') {
+        const st = parseUazapiStatusEvent(data)
+        if (st) {
+            await sql.unsafe(
+                `UPDATE ${sch}.messages SET status = $2 WHERE whatsapp_id = $1`,
+                [st.whatsappId, st.status]
             )
-            const contactId = (rows[0] as { id?: string } | undefined)?.id
-            if (contactId) {
-                // Buscar conversa ativa
-                const convRows = await sql.unsafe(
-                    `SELECT id FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-                    [contactId]
-                )
-                const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
-                // Salvar como 'user' (mensagem do atendente via WhatsApp direto)
-                await sql.unsafe(
-                    `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
-                     VALUES ($1::uuid, $2::uuid, 'user', $3, $4, 'sent', $5, COALESCE(to_timestamp($6 / 1000.0), now()))`,
-                    [contactId, conversationId, msg.body || '', msg.mediaType, msg.whatsappId, msg.timestampMs]
-                )
-            }
-            return NextResponse.json({ success: true })
         }
+        return
+    }
 
-        // Verificar test mode
-        const testCfgRows = await sql.unsafe(
-            `SELECT ai_test_mode, ai_test_allowlist_phones FROM ${sch}.ai_agent_config LIMIT 1`,
-            []
-        )
-        const testCfg = testCfgRows[0] as
-            | { ai_test_mode?: boolean | null; ai_test_allowlist_phones?: string | null }
-            | undefined
-        if (!shouldAcceptInboundForTestMode(testCfg ?? {}, normalized)) {
-            return NextResponse.json({ success: true })
-        }
+    // ── Mensagens ──
+    const isMessageEvent =
+        ['message', 'messages', 'chat', 'messages.upsert'].includes(eventType) ||
+        eventType === ''
 
-        // Buscar ou criar contato
+    if (!isMessageEvent) return
+
+    const msg = parseUazapiMessage(data)
+    if (!msg) return
+
+    // Deduplicação
+    const dup = await sql.unsafe(
+        `SELECT id FROM ${sch}.messages WHERE whatsapp_id = $1 LIMIT 1`,
+        [msg.whatsappId]
+    )
+    if (dup.length) return
+
+    const normalized = normalizePhoneForBrazil(msg.fromPhone)
+    if (!normalized || isWhatsAppGroup(msg.fromPhone)) return
+
+    // ── Mensagens enviadas por nós (eco do WhatsApp/celular/Web) ──
+    if (msg.fromMe) {
         const variants = generateBrazilianPhoneVariants(normalized)
         const phonePlaceholders = variants.map((_, i) => `$${i + 1}`).join(', ')
         const rows = await sql.unsafe(
             `SELECT id FROM ${sch}.contacts WHERE phone IN (${phonePlaceholders}) LIMIT 1`,
             variants
         )
-        let contactId = (rows[0] as { id?: string } | undefined)?.id
-        let isNewContact = false
-
-        if (!contactId) {
-            const ins = await sql.unsafe(
-                `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2) ON CONFLICT (phone) DO NOTHING RETURNING id`,
-                [normalized, msg.fromName || normalized]
+        const contactId = (rows[0] as { id?: string } | undefined)?.id
+        if (contactId) {
+            const convRows = await sql.unsafe(
+                `SELECT id FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+                [contactId]
             )
-            if (ins.length > 0) {
-                contactId = (ins[0] as { id?: string } | undefined)?.id
-                isNewContact = true
-            } else {
-                const existing = await sql.unsafe(
-                    `SELECT id FROM ${sch}.contacts WHERE phone = $1 LIMIT 1`,
-                    [normalized]
-                )
-                contactId = (existing[0] as { id?: string } | undefined)?.id
-            }
+            const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
+            await sql.unsafe(
+                `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, created_at)
+                 VALUES ($1::uuid, $2::uuid, 'user', $3, $4, 'sent', $5, COALESCE(to_timestamp($6 / 1000.0), now()))`,
+                [contactId, conversationId, msg.body || '', msg.mediaType, msg.whatsappId, msg.timestampMs]
+            )
         }
+        return
+    }
 
-        if (!contactId) {
-            console.error('[uazapi-webhook] Não conseguiu criar/encontrar contato:', normalized)
-            return NextResponse.json({ success: true })
-        }
+    // Verificar test mode
+    const testCfgRows = await sql.unsafe(
+        `SELECT ai_test_mode, ai_test_allowlist_phones FROM ${sch}.ai_agent_config LIMIT 1`,
+        []
+    )
+    const testCfg = testCfgRows[0] as
+        | { ai_test_mode?: boolean | null; ai_test_allowlist_phones?: string | null }
+        | undefined
+    if (!shouldAcceptInboundForTestMode(testCfg ?? {}, normalized)) return
 
-        // Atualizar nome do contato se temos pushName e o contato tem nome = telefone
-        if (msg.fromName && !isNewContact) {
-            try {
-                await sql.unsafe(
-                    `UPDATE ${sch}.contacts SET name = $2 WHERE id = $1::uuid AND (name = phone OR name IS NULL OR name = '')`,
-                    [contactId, msg.fromName]
-                )
-            } catch { /* non-fatal */ }
-        }
+    // Buscar ou criar contato
+    const variants = generateBrazilianPhoneVariants(normalized)
+    const phonePlaceholders = variants.map((_, i) => `$${i + 1}`).join(', ')
+    const rows = await sql.unsafe(
+        `SELECT id FROM ${sch}.contacts WHERE phone IN (${phonePlaceholders}) LIMIT 1`,
+        variants
+    )
+    let contactId = (rows[0] as { id?: string } | undefined)?.id
+    let isNewContact = false
 
-        // Salvar foto de perfil do WhatsApp (chat.image) no avatar_url do contato
-        const chatObj = data.chat as Record<string, unknown> | undefined
-        const profilePicUrl =
-            (typeof chatObj?.image === 'string' && chatObj.image ? chatObj.image : null) ||
-            (typeof chatObj?.imagePreview === 'string' && chatObj.imagePreview ? chatObj.imagePreview : null) ||
-            (typeof data.profilePicUrl === 'string' && data.profilePicUrl ? data.profilePicUrl : null)
-        if (profilePicUrl) {
-            try {
-                await sql.unsafe(
-                    `UPDATE ${sch}.contacts SET avatar_url = $2, updated_at = now()
-                     WHERE id = $1::uuid AND (avatar_url IS NULL OR avatar_url = '' OR avatar_url != $2)`,
-                    [contactId, profilePicUrl]
-                )
-            } catch { /* non-fatal */ }
-        }
-
-        // Garantir colunas media_ref/media_processed se houver mídia
-        if (msg.mediaType && ['audio', 'image', 'video', 'document'].includes(msg.mediaType)) {
-            await ensureMediaColumns(ws).catch(() => {})
-        }
-
-        // Buscar conversa ativa
-        const convRows = await sql.unsafe(
-            `SELECT id FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-            [contactId]
+    if (!contactId) {
+        const ins = await sql.unsafe(
+            `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2) ON CONFLICT (phone) DO NOTHING RETURNING id`,
+            [normalized, msg.fromName || normalized]
         )
-        const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
-
-        // Inserir mensagem (media_ref guarda CDN URL para fallback de download)
-        const insMsg = await sql.unsafe(
-            `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, media_ref, created_at)
-             VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, $6, COALESCE(to_timestamp($7 / 1000.0), now()))
-             RETURNING id`,
-            [contactId, conversationId, msg.body || 'Mídia enviada', msg.mediaType, msg.whatsappId, msg.mediaCdnUrl, msg.timestampMs]
-        )
-
-        const messageId = (insMsg[0] as { id?: string } | undefined)?.id
-        if (!messageId) {
-            return NextResponse.json({ success: true })
+        if (ins.length > 0) {
+            contactId = (ins[0] as { id?: string } | undefined)?.id
+            isNewContact = true
+        } else {
+            const existing = await sql.unsafe(
+                `SELECT id FROM ${sch}.contacts WHERE phone = $1 LIMIT 1`,
+                [normalized]
+            )
+            contactId = (existing[0] as { id?: string } | undefined)?.id
         }
+    }
 
-        // Salvar thumbnail base64 se disponível (para fallback de análise visual)
-        if (msg.mediaThumbnailB64 && msg.mediaType === 'image') {
-            try {
-                await sql.unsafe(
-                    `UPDATE ${sch}.messages SET media_thumbnail = $2 WHERE id = $1::uuid`,
-                    [messageId, msg.mediaThumbnailB64]
-                )
-            } catch { /* non-fatal — coluna pode não existir ainda */ }
-        }
+    if (!contactId) {
+        console.error('[uazapi-webhook] Não conseguiu criar/encontrar contato:', normalized)
+        return
+    }
 
-        // Reset follow-up anchor (cliente respondeu)
-        await resetFollowupAnchorForContact(ws, contactId).catch(() => {})
+    // Atualizar nome do contato se temos pushName
+    if (msg.fromName && !isNewContact) {
+        try {
+            await sql.unsafe(
+                `UPDATE ${sch}.contacts SET name = $2 WHERE id = $1::uuid AND (name = phone OR name IS NULL OR name = '')`,
+                [contactId, msg.fromName]
+            )
+        } catch { /* non-fatal */ }
+    }
 
-        // Greeting para contatos novos
-        let skipBuffer = false
-        if (isNewContact) {
-            try {
-                const cfgRows = await sql.unsafe(
-                    `SELECT greeting_message, enabled FROM ${sch}.ai_agent_config LIMIT 1`,
-                    []
-                )
-                const cfg = cfgRows[0] as { greeting_message?: string | null; enabled?: boolean } | undefined
-                const gm = cfg?.greeting_message?.trim()
-                if (gm && cfg?.enabled !== false) {
-                    const { parseMessageForWhatsApp } = await import('@/lib/ai-agent/format-for-whatsapp')
-                    const { getProviderForWorkspace } = await import('@/lib/whatsapp/factory')
-                    const { setFollowupAnchorForContact } = await import('@/lib/ai-agent/followup-anchor')
+    // Salvar foto de perfil
+    const chatObj = data.chat as Record<string, unknown> | undefined
+    const profilePicUrl =
+        (typeof chatObj?.image === 'string' && chatObj.image ? chatObj.image : null) ||
+        (typeof chatObj?.imagePreview === 'string' && chatObj.imagePreview ? chatObj.imagePreview : null) ||
+        (typeof data.profilePicUrl === 'string' && data.profilePicUrl ? data.profilePicUrl : null)
+    if (profilePicUrl) {
+        try {
+            await sql.unsafe(
+                `UPDATE ${sch}.contacts SET avatar_url = $2, updated_at = now()
+                 WHERE id = $1::uuid AND (avatar_url IS NULL OR avatar_url = '' OR avatar_url != $2)`,
+                [contactId, profilePicUrl]
+            )
+        } catch { /* non-fatal */ }
+    }
 
-                    const instRow = await supabase
-                        .from('whatsapp_instances')
-                        .select('instance_token')
-                        .eq('workspace_slug', ws)
-                        .eq('status', 'connected')
-                        .maybeSingle()
+    // Garantir colunas media se houver mídia
+    if (msg.mediaType && ['audio', 'image', 'video', 'document'].includes(msg.mediaType)) {
+        await ensureMediaColumns(ws).catch(() => {})
+    }
 
-                    if (instRow.data?.instance_token) {
-                        const textOut = parseMessageForWhatsApp(gm)
-                        const { provider } = await getProviderForWorkspace(supabase, ws)
-                        await provider.sendText(instRow.data.instance_token, msg.fromPhone, textOut, {
-                            delayMs: 800,
-                            presence: 'composing'
-                        })
-                        await sql.unsafe(
-                            `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status) VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent')`,
-                            [contactId, conversationId, gm]
-                        )
-                        await setFollowupAnchorForContact(ws, contactId).catch(() => {})
-                        skipBuffer = true
-                    }
+    // Buscar conversa ativa
+    const convRows = await sql.unsafe(
+        `SELECT id FROM ${sch}.ai_conversations WHERE contact_id = $1::uuid AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+        [contactId]
+    )
+    const conversationId = (convRows[0] as { id?: string } | undefined)?.id || null
+
+    // Inserir mensagem
+    const insMsg = await sql.unsafe(
+        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, media_type, status, whatsapp_id, media_ref, created_at)
+         VALUES ($1::uuid, $2::uuid, 'contact', $3, $4, 'received', $5, $6, COALESCE(to_timestamp($7 / 1000.0), now()))
+         RETURNING id`,
+        [contactId, conversationId, msg.body || 'Mídia enviada', msg.mediaType, msg.whatsappId, msg.mediaCdnUrl, msg.timestampMs]
+    )
+
+    const messageId = (insMsg[0] as { id?: string } | undefined)?.id
+    if (!messageId) return
+
+    // Salvar thumbnail
+    if (msg.mediaThumbnailB64 && msg.mediaType === 'image') {
+        try {
+            await sql.unsafe(
+                `UPDATE ${sch}.messages SET media_thumbnail = $2 WHERE id = $1::uuid`,
+                [messageId, msg.mediaThumbnailB64]
+            )
+        } catch { /* non-fatal */ }
+    }
+
+    // Reset follow-up anchor
+    await resetFollowupAnchorForContact(ws, contactId).catch(() => {})
+
+    // Greeting para contatos novos
+    let skipBuffer = false
+    if (isNewContact) {
+        try {
+            const cfgRows = await sql.unsafe(
+                `SELECT greeting_message, enabled FROM ${sch}.ai_agent_config LIMIT 1`,
+                []
+            )
+            const cfg = cfgRows[0] as { greeting_message?: string | null; enabled?: boolean } | undefined
+            const gm = cfg?.greeting_message?.trim()
+            if (gm && cfg?.enabled !== false) {
+                const { parseMessageForWhatsApp } = await import('@/lib/ai-agent/format-for-whatsapp')
+                const { getProviderForWorkspace } = await import('@/lib/whatsapp/factory')
+                const { setFollowupAnchorForContact } = await import('@/lib/ai-agent/followup-anchor')
+
+                const instRow = await supabase
+                    .from('whatsapp_instances')
+                    .select('instance_token')
+                    .eq('workspace_slug', ws)
+                    .eq('status', 'connected')
+                    .maybeSingle()
+
+                if (instRow.data?.instance_token) {
+                    const textOut = parseMessageForWhatsApp(gm)
+                    const { provider } = await getProviderForWorkspace(supabase, ws)
+                    await provider.sendText(instRow.data.instance_token, msg.fromPhone, textOut, {
+                        delayMs: 800,
+                        presence: 'composing'
+                    })
+                    await sql.unsafe(
+                        `INSERT INTO ${sch}.messages (contact_id, conversation_id, sender_type, body, status) VALUES ($1::uuid, $2::uuid, 'ai', $3, 'sent')`,
+                        [contactId, conversationId, gm]
+                    )
+                    await setFollowupAnchorForContact(ws, contactId).catch(() => {})
+                    skipBuffer = true
                 }
-            } catch (greetErr) {
-                console.error('[uazapi-webhook] greeting_message error:', greetErr)
             }
+        } catch (greetErr) {
+            console.error('[uazapi-webhook] greeting_message error:', greetErr)
         }
+    }
 
-        // Agendar processamento IA
-        if (!skipBuffer) {
-            await addToBuffer(ws, contactId, messageId)
-        }
-
-        return NextResponse.json({ success: true })
-    } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e)
-        const errStack = e instanceof Error ? e.stack : ''
-        console.error('[uazapi-webhook] CRITICAL error:', errMsg)
-        console.error('[uazapi-webhook] stack:', errStack)
-        // Retorna 200 para o Uazapi não reenviar infinitamente
-        return NextResponse.json({ success: true, _debug_error: errMsg })
+    // Agendar processamento IA
+    if (!skipBuffer) {
+        await addToBuffer(ws, contactId, messageId)
     }
 }
 

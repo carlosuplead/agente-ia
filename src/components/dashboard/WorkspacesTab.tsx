@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { slugColor } from '@/lib/dashboard/slug-color'
 import { useDashboard } from './dashboard-context'
 import { LayoutGrid, Copy, Check, Database, Globe, Settings, MessageCircle } from 'lucide-react'
 
 export function WorkspacesTab() {
     const d = useDashboard()
+    const router = useRouter()
     const [expandedSlug, setExpandedSlug] = useState<string | null>(null)
     const [copied, setCopied] = useState<string | null>(null)
 
@@ -26,7 +28,7 @@ export function WorkspacesTab() {
                         <p>Gerencie clientes e instâncias</p>
                     </div>
                     {d.isPlatformAdmin && (
-                        <button type="button" className="btn btn-primary" onClick={() => d.setShowNewWs(true)}>
+                        <button type="button" className="btn btn-primary" onClick={() => router.push('/admin')}>
                             + Novo Cliente
                         </button>
                     )}
@@ -39,11 +41,10 @@ export function WorkspacesTab() {
                         {d.isPlatformAdmin ? (
                             <>
                                 <p style={{ marginBottom: 12, color: 'var(--text-primary)' }}>
-                                    Ainda não há clientes (workspaces). Cria o primeiro com o botão{' '}
-                                    <strong>+ Novo Cliente</strong> acima (nome + slug do schema PostgreSQL).
+                                    Ainda não há clientes. Crie o primeiro pelo painel administrativo.
                                 </p>
-                                <button type="button" className="btn btn-primary" onClick={() => d.setShowNewWs(true)}>
-                                    Criar primeiro workspace
+                                <button type="button" className="btn btn-primary" onClick={() => router.push('/admin')}>
+                                    Ir para Painel Admin
                                 </button>
                             </>
                         ) : (

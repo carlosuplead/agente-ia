@@ -125,7 +125,7 @@ export async function processBufferDirect(
     if (!acquired) return
 
     try {
-        const result = await runAiProcess(supabase, workspaceSlug, contactId)
+        const result = await runAiProcess(supabase, workspaceSlug, contactId, { runSource: 'buffer' })
         if (!result.ok && result.status >= 500) {
             console.error('[buffer-direct] runAiProcess:', result.error)
         }

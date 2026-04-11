@@ -56,7 +56,7 @@ export function AgentConfigTab() {
                         <button
                             type="button"
                             className="btn btn-primary"
-                            disabled={d.busy || !d.selectedSlug}
+                            disabled={d.busy || !d.selectedSlug || !d.aiConfig}
                             onClick={d.saveAiConfig}
                         >
                             {d.busy ? 'A guardar…' : 'Guardar'}
@@ -396,7 +396,10 @@ export function AgentConfigTab() {
                             value={d.cfgPrompt}
                             onChange={e => d.setCfgPrompt(e.target.value)}
                             placeholder="Defina a personalidade, regras, estilo de resposta e qualquer instrução para o agente..."
+                            aria-invalid={!!err.cfgPrompt}
+                            aria-describedby={err.cfgPrompt ? 'err-cfg-prompt' : undefined}
                         />
+                        <FieldError id="err-cfg-prompt" message={err.cfgPrompt} />
                     </div>
 
                     {/* ── Card 4: Comportamento ── */}

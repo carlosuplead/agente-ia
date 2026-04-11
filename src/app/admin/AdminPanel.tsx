@@ -201,10 +201,8 @@ export function AdminPanel() {
 
     if (loading) {
         return (
-            <div className="login-wrap">
-                <div className="login-card">
-                    <p className="login-sub">Carregando painel admin...</p>
-                </div>
+            <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
+                <p className="login-sub" style={{ margin: 0 }}>Carregando painel admin...</p>
             </div>
         )
     }

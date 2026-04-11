@@ -59,7 +59,7 @@ export async function POST(request: Request) {
         if (!acquired) return
 
         try {
-            const result = await runAiProcess(supabase, workspace_slug, contact_id)
+            const result = await runAiProcess(supabase, workspace_slug, contact_id, { runSource: 'schedule' })
             if (!result.ok && result.status >= 500) {
                 console.error('runAiProcess', result.error)
             }

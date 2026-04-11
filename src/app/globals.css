@@ -2721,6 +2721,71 @@ button.nav-item {
   flex-wrap: wrap;
 }
 
+.activity-view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.activity-runs-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: activity-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+.activity-runs-wrap {
+  overflow-x: auto;
+}
+
+.activity-runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.activity-runs-table th,
+.activity-runs-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.activity-runs-table th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background: var(--surface-secondary);
+}
+
+.activity-runs-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.activity-runs-summary {
+  max-width: 280px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 @media (max-width: 768px) {
   .disparos-stats {
     grid-template-columns: repeat(3, 1fr);

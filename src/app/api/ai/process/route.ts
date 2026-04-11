@@ -20,7 +20,7 @@ export async function POST(request: Request) {
         }
 
         const supabase = await createAdminClient()
-        const result = await runAiProcess(supabase, workspace_slug, contact_id)
+        const result = await runAiProcess(supabase, workspace_slug, contact_id, { runSource: 'http_process' })
 
         if (!result.ok) {
             return NextResponse.json({ error: result.error }, { status: result.status })

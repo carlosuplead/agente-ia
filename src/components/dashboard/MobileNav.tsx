@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import type { DashboardTab } from '@/lib/dashboard/types'
 import { useDashboard } from './dashboard-context'
 import {
@@ -39,6 +40,7 @@ const settingsTab: { id: DashboardTab; label: string; icon: LucideIcon } = {
 
 export function MobileNav() {
     const d = useDashboard()
+    const pathname = usePathname()
     const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
     useEffect(() => {
@@ -127,12 +129,13 @@ export function MobileNav() {
                     <nav className="mobile-drawer-nav" aria-label="Secções">
                         {[...baseTabs, ...(d.showWorkspaceSettingsNav ? [settingsTab] : [])].map(t => {
                             const Icon = t.icon
+                            const tabActive = pathname !== '/admin' && d.activeTab === t.id
                             return (
                                 <button
                                     key={t.id}
                                     type="button"
-                                    className={`nav-item ${d.activeTab === t.id ? 'active' : ''}`}
-                                    aria-current={d.activeTab === t.id ? 'page' : undefined}
+                                    className={`nav-item ${tabActive ? 'active' : ''}`}
+                                    aria-current={tabActive ? 'page' : undefined}
                                     onClick={() => d.requestTab(t.id)}
                                 >
                                     <span className="nav-item-icon" aria-hidden="true">
@@ -145,8 +148,9 @@ export function MobileNav() {
                         {d.isPlatformAdmin && (
                             <a
                                 href="/admin"
-                                className="nav-item"
+                                className={`nav-item ${pathname === '/admin' ? 'active' : ''}`}
                                 style={{ textDecoration: 'none' }}
+                                aria-current={pathname === '/admin' ? 'page' : undefined}
                             >
                                 <span className="nav-item-icon" aria-hidden="true">
                                     <Shield size={18} />

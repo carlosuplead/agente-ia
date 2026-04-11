@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 import {
     followupStepsToUiRows,
@@ -133,14 +133,25 @@ function applyAiConfigToForm(
     setters.setCfgTeamNotifyTemplate(merged.team_notification_template ?? '')
 }
 
+const dashboardTabIds: DashboardTab[] = [
+    'workspaces',
+    'connection',
+    'conversas',
+    'disparos',
+    'relatorios',
+    'atividade',
+    'config',
+    'workspace_settings'
+]
+
 export function useDashboardController() {
     const router = useRouter()
+    const pathname = usePathname()
     const [activeTab, setActiveTabRaw] = useState<DashboardTab>(() => {
         if (typeof window === 'undefined') return 'workspaces'
         const sp = new URLSearchParams(window.location.search)
         const t = sp.get('tab') as DashboardTab | null
-        const validTabs: DashboardTab[] = ['workspaces', 'connection', 'conversas', 'disparos', 'relatorios', 'atividade', 'config', 'workspace_settings']
-        return t && validTabs.includes(t) ? t : 'workspaces'
+        return t && dashboardTabIds.includes(t) ? t : 'workspaces'
     })
     const setActiveTab = useCallback((tab: DashboardTab) => {
         setActiveTabRaw(tab)
@@ -646,6 +657,24 @@ export function useDashboardController() {
 
     const requestTab = useCallback(
         (tab: DashboardTab) => {
+            if (pathname === '/admin') {
+                if (activeTab === 'config' && tab !== 'config' && isConfigDirty) {
+                    if (!confirmLeaveConfig()) return
+                    if (aiConfig) applyAiConfigToForm(aiConfig, setters)
+                    setCfgFieldErrors({})
+                }
+                const params = new URLSearchParams()
+                if (typeof window !== 'undefined') {
+                    const ws = new URLSearchParams(window.location.search).get('ws')
+                    if (ws) params.set('ws', ws)
+                }
+                if (tab !== 'workspaces') params.set('tab', tab)
+                const qs = params.toString()
+                router.push(qs ? `/?${qs}` : '/')
+                closeMobileNav()
+                return
+            }
+
             if (tab === activeTab) {
                 closeMobileNav()
                 return
@@ -658,7 +687,7 @@ export function useDashboardController() {
             setActiveTab(tab)
             closeMobileNav()
         },
-        [activeTab, closeMobileNav, confirmLeaveConfig, isConfigDirty, aiConfig, setters]
+        [pathname, router, activeTab, closeMobileNav, confirmLeaveConfig, isConfigDirty, aiConfig, setters, setActiveTab]
     )
 
     const requestWorkspaceSlug = useCallback(
@@ -678,12 +707,25 @@ export function useDashboardController() {
                 if (aiConfig) applyAiConfigToForm(aiConfig, setters)
                 setCfgFieldErrors({})
             }
+            if (pathname === '/admin') {
+                const params = new URLSearchParams()
+                if (slug) params.set('ws', slug)
+                if (typeof window !== 'undefined') {
+                    const tab = new URLSearchParams(window.location.search).get('tab') as DashboardTab | null
+                    if (tab && dashboardTabIds.includes(tab)) params.set('tab', tab)
+                }
+                const qs = params.toString()
+                router.push(qs ? `/?${qs}` : '/')
+                setLoadError('')
+                closeMobileNav()
+                return true
+            }
             setSelectedSlug(slug)
             setLoadError('')
             closeMobileNav()
             return true
         },
-        [selectedSlug, isConfigDirty, aiConfig, setters, closeMobileNav]
+        [selectedSlug, pathname, router, isConfigDirty, aiConfig, setters, closeMobileNav, setSelectedSlug]
     )
 
     useEffect(() => {
@@ -1152,7 +1194,7 @@ export function useDashboardController() {
     }
 
     async function saveAiConfig() {
-        if (!selectedSlug) return
+        if (!selectedSlug || !aiConfig) return
         setCfgFieldErrors({})
         const v = validateAiConfigForm({
             cfgMax,
@@ -1161,6 +1203,7 @@ export function useDashboardController() {
             cfgBufferDelay,
             cfgInactivity,
             cfgModel,
+            cfgPrompt,
             cfgN8nOn,
             cfgN8nTools,
             cfgFollowup,
@@ -1188,9 +1231,14 @@ export function useDashboardController() {
         })
         setBusy(false)
         if (!res.ok) {
-            const j = await res.json().catch(() => ({}))
-            setLoadError((j as { error?: string }).error || 'Falha ao guardar')
-            setToast({ message: 'Não foi possível guardar.', variant: 'error' })
+            const j = (await res.json().catch(() => ({}))) as { error?: string }
+            const serverMsg =
+                typeof j.error === 'string' && j.error.trim() ? j.error.trim() : ''
+            setLoadError(serverMsg || 'Falha ao guardar')
+            setToast({
+                message: serverMsg || 'Não foi possível guardar.',
+                variant: 'error'
+            })
             return
         }
         await loadAiConfig(selectedSlug)

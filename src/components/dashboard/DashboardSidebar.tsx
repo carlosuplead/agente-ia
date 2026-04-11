@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 
 const baseTabs: { id: DashboardTab; label: string; icon: LucideIcon }[] = [
     { id: 'workspaces', label: 'Workspaces', icon: LayoutGrid },
@@ -38,6 +39,7 @@ const settingsTab: { id: DashboardTab; label: string; icon: LucideIcon } = {
 
 export function DashboardSidebar() {
     const d = useDashboard()
+    const pathname = usePathname()
     const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
     useEffect(() => {
@@ -100,12 +102,13 @@ export function DashboardSidebar() {
             <nav className="sidebar-nav" aria-labelledby="nav-main-label">
                 {[...baseTabs, ...(d.showWorkspaceSettingsNav ? [settingsTab] : [])].map(t => {
                     const Icon = t.icon
+                    const tabActive = pathname !== '/admin' && d.activeTab === t.id
                     return (
                         <button
                             key={t.id}
                             type="button"
-                            className={`nav-item ${d.activeTab === t.id ? 'active' : ''}`}
-                            aria-current={d.activeTab === t.id ? 'page' : undefined}
+                            className={`nav-item ${tabActive ? 'active' : ''}`}
+                            aria-current={tabActive ? 'page' : undefined}
                             onClick={() => d.requestTab(t.id)}
                         >
                             <span className="nav-item-icon" aria-hidden="true">
@@ -118,8 +121,9 @@ export function DashboardSidebar() {
                 {d.isPlatformAdmin && (
                     <a
                         href="/admin"
-                        className="nav-item"
+                        className={`nav-item ${pathname === '/admin' ? 'active' : ''}`}
                         style={{ textDecoration: 'none' }}
+                        aria-current={pathname === '/admin' ? 'page' : undefined}
                     >
                         <span className="nav-item-icon" aria-hidden="true">
                             <Shield size={18} />

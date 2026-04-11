@@ -53,9 +53,14 @@ function pgErrorCode(e: unknown): string {
     return String((e as { code: unknown }).code)
 }
 
-function isMissingTenantRelation(e: unknown): boolean {
+/** Tabela/coluna em falta (migração antiga) ou schema errado: devolve payload vazio em vez de 500. */
+function isSoftTokenStatsSchemaError(e: unknown): boolean {
     const c = pgErrorCode(e)
-    return c === '42P01' || c === '3F000'
+    return (
+        c === '42P01' || // undefined_table
+        c === '3F000' || // invalid_schema_name
+        c === '42703' // undefined_column (ex.: coluna nova em llm_usage ainda não aplicada)
+    )
 }
 
 function isStatementTimeout(e: unknown): boolean {
@@ -210,7 +215,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json(payload)
     } catch (e) {
-        if (isMissingTenantRelation(e) || isStatementTimeout(e)) {
+        if (isSoftTokenStatsSchemaError(e) || isStatementTimeout(e)) {
             return NextResponse.json(emptyTokenPayload(rangeDays))
         }
         console.error('messages token-stats', e)

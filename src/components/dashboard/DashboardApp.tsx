@@ -3,8 +3,7 @@
 import { useCallback } from 'react'
 import { AgentConfigTab } from './AgentConfigTab'
 import { ConversasTab } from './ConversasTab'
-import { DashboardSidebar } from './DashboardSidebar'
-import { MobileNav } from './MobileNav'
+import { DashboardChrome } from './DashboardChrome'
 import { NewWorkspaceModal } from './NewWorkspaceModal'
 import { Toast } from './Toast'
 import { DisparosTab } from './DisparosTab'
@@ -53,47 +52,46 @@ export function DashboardApp() {
     }
 
     return (
-        <div className="app-container">
-            <DashboardSidebar />
-            <MobileNav />
-
-            <main className="main-content">
-                {d.loadError && d.isPlatformAdmin && (
-                    <div className="card alert-card" role="alert">
-                        <p className="alert-card-text">{d.loadError}</p>
-                    </div>
-                )}
-
-                {d.activeTab === 'workspaces' && <WorkspacesTab />}
-                {d.activeTab === 'connection' && <WhatsAppTab />}
-                {d.activeTab === 'conversas' && <ConversasTab />}
-                {d.activeTab === 'disparos' && <DisparosTab />}
-                {d.activeTab === 'relatorios' && <RelatoriosTab />}
-                {d.activeTab === 'atividade' && <AtividadeTab />}
-                {d.activeTab === 'config' && <AgentConfigTab />}
-                {d.activeTab === 'workspace_settings' && <WorkspaceSettingsTab />}
-            </main>
-
-            <NewWorkspaceModal
-                open={d.showNewWs}
-                busy={d.busy}
-                name={d.newWsName}
-                slug={d.newWsSlug}
-                onNameChange={d.setNewWsName}
-                onSlugChange={d.setNewWsSlug}
-                onSubmit={d.createWorkspace}
-                onClose={() => d.setShowNewWs(false)}
-            />
-
-            {d.toast && (
-                <div className="toast-region" aria-live="polite">
-                    <Toast
-                        message={d.toast.message}
-                        variant={d.toast.variant}
-                        onDismiss={dismissToast}
+        <DashboardChrome
+            trailing={
+                <>
+                    <NewWorkspaceModal
+                        open={d.showNewWs}
+                        busy={d.busy}
+                        name={d.newWsName}
+                        slug={d.newWsSlug}
+                        onNameChange={d.setNewWsName}
+                        onSlugChange={d.setNewWsSlug}
+                        onSubmit={d.createWorkspace}
+                        onClose={() => d.setShowNewWs(false)}
                     />
+
+                    {d.toast && (
+                        <div className="toast-region" aria-live="polite">
+                            <Toast
+                                message={d.toast.message}
+                                variant={d.toast.variant}
+                                onDismiss={dismissToast}
+                            />
+                        </div>
+                    )}
+                </>
+            }
+        >
+            {d.loadError && d.isPlatformAdmin && (
+                <div className="card alert-card" role="alert">
+                    <p className="alert-card-text">{d.loadError}</p>
                 </div>
             )}
-        </div>
+
+            {d.activeTab === 'workspaces' && <WorkspacesTab />}
+            {d.activeTab === 'connection' && <WhatsAppTab />}
+            {d.activeTab === 'conversas' && <ConversasTab />}
+            {d.activeTab === 'disparos' && <DisparosTab />}
+            {d.activeTab === 'relatorios' && <RelatoriosTab />}
+            {d.activeTab === 'atividade' && <AtividadeTab />}
+            {d.activeTab === 'config' && <AgentConfigTab />}
+            {d.activeTab === 'workspace_settings' && <WorkspaceSettingsTab />}
+        </DashboardChrome>
     )
 }

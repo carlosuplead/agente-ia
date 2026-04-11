@@ -191,10 +191,18 @@ export type RunAiProcessResult =
     | { ok: true; reason?: string }
     | { ok: false; status: number; error: string }
 
+/** Origem da execução (dashboard Execuções IA). */
+export type AiRunSource = 'buffer' | 'http_process' | 'schedule' | 'unknown'
+
+export type RunAiProcessOptions = {
+    runSource?: AiRunSource
+}
+
 export async function runAiProcess(
     supabase: SupabaseClient,
     workspace_slug: string,
-    contact_id: string
+    contact_id: string,
+    opts?: RunAiProcessOptions
 ): Promise<RunAiProcessResult> {
     const sql = getTenantSql()
     const sch = quotedSchema(workspace_slug)
@@ -376,6 +384,40 @@ export async function runAiProcess(
         return { ok: false, status: 400, error: 'No instance connected' }
     }
 
+    let runId: string | null = null
+    let runFinished = false
+    const runSourceVal = opts?.runSource ?? 'unknown'
+    try {
+        const ins = await sql.unsafe(
+            `INSERT INTO ${sch}.ai_agent_runs (contact_id, conversation_id, status, source)
+             VALUES ($1::uuid, $2::uuid, 'running', $3)
+             RETURNING id`,
+            [contact_id, conversationId, runSourceVal]
+        )
+        runId = (ins[0] as unknown as { id?: string } | undefined)?.id ?? null
+    } catch (e) {
+        console.error('runAiProcess: ai_agent_runs insert', e)
+    }
+
+    const finishAgentRun = async (p: {
+        status: 'success' | 'error' | 'skipped'
+        reason?: string | null
+        errorMessage?: string | null
+    }) => {
+        if (!runId || runFinished) return
+        runFinished = true
+        const id = runId
+        try {
+            await sql.unsafe(
+                `UPDATE ${sch}.ai_agent_runs SET status = $2::text, finished_at = now(), reason = $3, error_message = $4
+                 WHERE id = $1::uuid`,
+                [id, p.status, p.reason ?? null, p.errorMessage ?? null]
+            )
+        } catch (e) {
+            console.error('runAiProcess: ai_agent_runs finish', e)
+        }
+    }
+
     type CalConn = {
         refresh_token: string | null
         calendar_id: string | null
@@ -391,6 +433,7 @@ export async function runAiProcess(
           }
         : undefined
 
+    try {
     const handoffOn = config.human_handoff_enabled !== false
     if (handoffOn && config.handoff_keywords?.trim()) {
         const lastRows = await sql.unsafe(
@@ -406,6 +449,7 @@ export async function runAiProcess(
             const textToSend = parseMessageForWhatsApp(reply)
             // Usa contactPhone já obtido no início — sem query duplicada
             if (!contactPhone) {
+                await finishAgentRun({ status: 'error', errorMessage: 'Contact phone missing' })
                 return { ok: false, status: 500, error: 'Contact phone missing' }
             }
             const savedRows = await sql.unsafe(
@@ -433,6 +477,7 @@ export async function runAiProcess(
                 if (savedMsg) {
                     await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMsg.id])
                 }
+                await finishAgentRun({ status: 'error', errorMessage: 'Failed to send handoff reply' })
                 return { ok: false, status: 502, error: 'Failed to send handoff reply' }
             }
             const { data: kwInc, error: kwIncErr } = await supabase.rpc('increment_ai_conversation_if_under_cap', {
@@ -447,6 +492,7 @@ export async function runAiProcess(
                         `UPDATE ${sch}.ai_conversations SET status = 'handed_off', handoff_reason = $2 WHERE id = $1::uuid`,
                         [conversationId, 'Limite de mensagens atingido']
                     )
+                    await finishAgentRun({ status: 'success', reason: 'Limit reached at keyword handoff' })
                     return { ok: true, reason: 'Limit reached at keyword handoff' }
                 }
             } else {
@@ -459,6 +505,7 @@ export async function runAiProcess(
                 `UPDATE ${sch}.ai_conversations SET status = 'handed_off', handoff_reason = $2 WHERE id = $1::uuid`,
                 [conversationId, 'Palavra-chave de transferência']
             )
+            await finishAgentRun({ status: 'success', reason: 'Keyword handoff' })
             return { ok: true, reason: 'Keyword handoff' }
         }
     }
@@ -488,6 +535,7 @@ export async function runAiProcess(
         priorAiConversationId: priorAiConversationId ?? undefined
     })
     if (!context) {
+        await finishAgentRun({ status: 'error', errorMessage: 'Failed to build context' })
         return { ok: false, status: 500, error: 'Failed to build context' }
     }
 
@@ -617,6 +665,7 @@ export async function runAiProcess(
     }
 
     if (sendFailed) {
+        await finishAgentRun({ status: 'error', errorMessage: 'Failed to send AI reply' })
         return { ok: false, status: 502, error: 'Failed to send AI reply' }
     }
 
@@ -648,5 +697,17 @@ export async function runAiProcess(
         }
     }
 
+    await finishAgentRun({ status: 'success', reason: null })
     return { ok: true }
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!runFinished) {
+            await finishAgentRun({
+                status: 'error',
+                errorMessage: msg.length > 2000 ? `${msg.slice(0, 2000)}…` : msg
+            }).catch(() => {})
+        }
+        console.error('runAiProcess: unexpected', e)
+        return { ok: false, status: 500, error: 'Internal processing error' }
+    }
 }

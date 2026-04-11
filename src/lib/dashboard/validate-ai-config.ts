@@ -10,6 +10,7 @@ export type AiConfigFieldErrors = Partial<
         | 'cfgBufferDelay'
         | 'cfgInactivity'
         | 'cfgModel'
+        | 'cfgPrompt'
         | 'n8nTools'
         | 'followupSteps'
         | 'cfgChunkMax'
@@ -26,6 +27,7 @@ export function validateAiConfigForm(input: {
     cfgBufferDelay: number
     cfgInactivity: number
     cfgModel: string
+    cfgPrompt: string
     cfgN8nOn: boolean
     cfgN8nTools: N8nToolUiRow[]
     cfgFollowup: boolean
@@ -37,6 +39,10 @@ export function validateAiConfigForm(input: {
     cfgTeamNotifyAllowlist: string
 }): { ok: true } | { ok: false; errors: AiConfigFieldErrors } {
     const errors: AiConfigFieldErrors = {}
+
+    if (!input.cfgPrompt.trim()) {
+        errors.cfgPrompt = 'Indica o prompt do sistema (obrigatório).'
+    }
 
     if (!Number.isFinite(input.cfgMax) || input.cfgMax < 1) {
         errors.cfgMax = 'Indica pelo menos 1 mensagem.'
@@ -97,6 +103,11 @@ export function validateAiConfigForm(input: {
     }
 
     if (input.cfgFollowup) {
+        const hasFollowupMessage = input.cfgFollowupSteps.some(s => s.message.trim())
+        if (!hasFollowupMessage) {
+            errors.followupSteps =
+                'Follow-up ativo: adiciona pelo menos um passo com mensagem.'
+        }
         for (let i = 0; i < input.cfgFollowupSteps.length; i++) {
             const s = input.cfgFollowupSteps[i]
             if (!s.message.trim()) continue

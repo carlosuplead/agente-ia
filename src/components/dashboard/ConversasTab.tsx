@@ -380,8 +380,19 @@ export function ConversasTab() {
                 const blob = new Blob(audioChunksRef.current, { type: chosenMime })
                 if (blob.size < 1000) return // too short
 
-                const file = new File([blob], `audio-${Date.now()}.${chosenExt}`, { type: chosenMime })
-                // Audio de gravação envia direto (sem preview)
+                let file: File
+                // Se gravou em webm (Chrome), converte pra MP3 (Meta não aceita webm)
+                if (chosenMime.startsWith('audio/webm')) {
+                    try {
+                        const { convertToMp3 } = await import('@/lib/audio/webm-to-mp3')
+                        file = await convertToMp3(blob)
+                    } catch (err) {
+                        console.error('[audio] conversão mp3 falhou:', err)
+                        file = new File([blob], `audio-${Date.now()}.webm`, { type: chosenMime })
+                    }
+                } else {
+                    file = new File([blob], `audio-${Date.now()}.${chosenExt}`, { type: chosenMime })
+                }
                 await handleSendMedia(file)
             }
 

@@ -333,10 +333,13 @@ export function ConversasTab() {
                 await loadChat(selectedContactId)
                 loadConversations(true).catch(() => {})
             } else {
+                const errBody = await res.json().catch(() => ({})) as { error?: string }
+                const errMsg = errBody.error || `Erro ${res.status}`
+                console.error('[send-media] falhou:', res.status, errMsg)
                 setChatMessages(prev => prev.map(m =>
                     m.id === optimisticId ? { ...m, status: 'failed' } : m
                 ))
-                d.setToast({ message: 'Erro ao enviar midia', variant: 'error' })
+                d.setToast({ message: `Erro: ${errMsg.slice(0, 100)}`, variant: 'error' })
             }
         } catch {
             setChatMessages(prev => prev.map(m =>

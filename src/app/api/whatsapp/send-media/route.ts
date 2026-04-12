@@ -31,26 +31,6 @@ function extForMime(mime: string): string {
 /** Vercel function config — media upload pode demorar */
 export const maxDuration = 30
 
-/** Build multipart/form-data body manually — works reliably in Node.js serverless */
-function buildMultipartBody(fields: Record<string, string>, fileField: { name: string; data: Buffer; filename: string; contentType: string }) {
-    const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2)}`
-    const parts: Buffer[] = []
-
-    for (const [key, value] of Object.entries(fields)) {
-        parts.push(Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
-        ))
-    }
-
-    parts.push(Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="${fileField.name}"; filename="${fileField.filename}"\r\nContent-Type: ${fileField.contentType}\r\n\r\n`
-    ))
-    parts.push(fileField.data)
-    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`))
-
-    return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` }
-}
-
 /**
  * POST — send media (image, video, audio, document) via WhatsApp
  * Body: multipart/form-data with fields:
@@ -162,66 +142,82 @@ export async function POST(request: Request) {
             let messageId: string | null = null
 
             if (instance.provider === 'official') {
-                // Official Meta Cloud API — upload media then send
+                // ═══ Official Meta WhatsApp Cloud API ═══
+                // Step 1: buscar credenciais
+                // Step 2: upload da mídia para a Graph API
+                // Step 3: enviar mensagem com o media_id
 
-                const { data: inst } = await supabase
+                // ── Step 1: Credenciais ──
+                console.log('[send-media] Step 1: buscando credenciais official...')
+                const { data: inst, error: instErr } = await supabase
                     .from('whatsapp_instances')
                     .select('phone_number_id, meta_access_token')
                     .eq('workspace_slug', workspace_slug)
                     .maybeSingle()
 
-                if (!inst?.phone_number_id || !inst?.meta_access_token) {
-                    throw new Error('Official provider credentials missing')
+                if (instErr) {
+                    console.error('[send-media] Step 1 FAILED - DB error:', instErr.message)
+                    throw new Error(`Erro ao buscar credenciais: ${instErr.message}`)
                 }
+                if (!inst?.phone_number_id || !inst?.meta_access_token) {
+                    console.error('[send-media] Step 1 FAILED - credentials missing:', {
+                        hasPhoneNumberId: !!inst?.phone_number_id,
+                        hasAccessToken: !!inst?.meta_access_token
+                    })
+                    throw new Error('Credenciais da API oficial não configuradas (phone_number_id ou meta_access_token)')
+                }
+                console.log('[send-media] Step 1 OK: phoneId=', inst.phone_number_id)
 
-                // 1. Upload media to Meta
-                // Remap MIME type para audio (Meta rejeita audio/webm)
+                // ── Step 2: Upload da mídia ──
                 const safeMime = metaSafeMime(mimetype, media_type)
                 const safeFilename = filename
                     ? filename.replace(/\.webm$/, safeMime === 'audio/ogg' ? '.ogg' : '.webm')
                     : `media-${Date.now()}.${extForMime(safeMime)}`
-
                 const buffer = Buffer.from(base64Data, 'base64')
 
-                console.log(`[send-media] official upload: mime=${safeMime} origMime=${mimetype} file=${safeFilename} size=${buffer.length} phoneId=${inst.phone_number_id}`)
+                console.log(`[send-media] Step 2: upload meta — type=${media_type} mime=${safeMime} origMime=${mimetype} file=${safeFilename} bytes=${buffer.length}`)
 
-                // Manual multipart — FormData+Blob nativos do Node.js falham no Vercel
-                const { body: uploadBody, contentType: uploadCt } = buildMultipartBody(
-                    { messaging_product: 'whatsapp', type: safeMime },
-                    { name: 'file', data: buffer, filename: safeFilename, contentType: safeMime }
-                )
+                const uploadUrl = `${GRAPH_API_BASE}/${inst.phone_number_id}/media`
 
-                const uploadRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/media`, {
+                // Usa FormData nativo — NÃO setar Content-Type manualmente (fetch coloca o boundary)
+                const form = new FormData()
+                form.append('messaging_product', 'whatsapp')
+                form.append('type', safeMime)
+                form.append('file', new Blob([buffer], { type: safeMime }), safeFilename)
+
+                const uploadRes = await fetch(uploadUrl, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${inst.meta_access_token}`,
-                        'Content-Type': uploadCt
-                    },
-                    body: uploadBody
+                    headers: { Authorization: `Bearer ${inst.meta_access_token}` },
+                    body: form
                 })
+
                 const uploadText = await uploadRes.text()
-                console.log(`[send-media] Meta upload response (${uploadRes.status}):`, uploadText.slice(0, 500))
-                let uploadJson: { id?: string; error?: { message?: string; code?: number; error_subcode?: number } } = {}
+                console.log(`[send-media] Step 2 response (${uploadRes.status}):`, uploadText.slice(0, 500))
+
+                let uploadJson: { id?: string; error?: { message?: string; code?: number; error_subcode?: number; fbtrace_id?: string } } = {}
                 try { uploadJson = JSON.parse(uploadText) } catch { /* not JSON */ }
 
                 if (!uploadRes.ok || !uploadJson.id) {
-                    const errDetail = uploadJson.error
-                        ? `code=${uploadJson.error.code} sub=${uploadJson.error.error_subcode} msg=${uploadJson.error.message}`
+                    const detail = uploadJson.error
+                        ? `code=${uploadJson.error.code} sub=${uploadJson.error.error_subcode} msg=${uploadJson.error.message} trace=${uploadJson.error.fbtrace_id}`
                         : uploadText.slice(0, 300)
-                    console.error(`[send-media] Meta upload FAILED (${uploadRes.status}):`, errDetail)
-                    throw new Error(`Meta media upload failed (${uploadRes.status}): ${errDetail}`)
+                    console.error(`[send-media] Step 2 FAILED:`, detail)
+                    throw new Error(`Upload falhou (${uploadRes.status}): ${detail}`)
                 }
-                console.log('[send-media] Meta upload OK, media_id=', uploadJson.id)
+                console.log('[send-media] Step 2 OK: media_id=', uploadJson.id)
 
-                // 2. Send message with uploaded media
+                // ── Step 3: Enviar mensagem com a mídia ──
+                const toPhone = contact.phone.replace(/\D/g, '')
                 const msgBody: Record<string, unknown> = {
                     messaging_product: 'whatsapp',
-                    to: contact.phone.replace(/\D/g, ''),
+                    to: toPhone,
                     type: media_type
                 }
                 const mediaPayload: Record<string, unknown> = { id: uploadJson.id }
                 if (caption) mediaPayload.caption = caption
                 msgBody[media_type] = mediaPayload
+
+                console.log(`[send-media] Step 3: enviando msg type=${media_type} to=${toPhone} media_id=${uploadJson.id}`)
 
                 const sendRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/messages`, {
                     method: 'POST',
@@ -232,11 +228,13 @@ export async function POST(request: Request) {
                     body: JSON.stringify(msgBody)
                 })
                 const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
+
                 if (!sendRes.ok) {
-                    console.error(`[send-media] Meta send FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
-                    throw new Error(`Meta send media failed (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
+                    console.error(`[send-media] Step 3 FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
+                    throw new Error(`Envio falhou (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
                 }
-                console.log('[send-media] Meta send OK:', JSON.stringify(sendJson).slice(0, 200))
+                console.log('[send-media] Step 3 OK:', JSON.stringify(sendJson).slice(0, 200))
+
                 const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
                 messageId = msg?.id ?? null
             } else {
@@ -299,15 +297,18 @@ export async function POST(request: Request) {
 
             return NextResponse.json({ success: true, messageId: savedMessage.id })
         } catch (sendErr) {
-            console.error('[send-media] SEND ERROR:', sendErr instanceof Error ? sendErr.message : sendErr)
+            const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr)
+            const errStack = sendErr instanceof Error ? sendErr.stack : undefined
+            console.error('[send-media] SEND ERROR:', errMsg)
+            if (errStack) console.error('[send-media] STACK:', errStack)
             await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMessage.id]).catch(() => {})
-            return NextResponse.json(
-                { error: sendErr instanceof Error ? sendErr.message : 'Failed to send media' },
-                { status: 502 }
-            )
+            return NextResponse.json({ error: errMsg }, { status: 502 })
         }
     } catch (error) {
-        console.error('whatsapp send-media', error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        const errMsg = error instanceof Error ? error.message : String(error)
+        const errStack = error instanceof Error ? error.stack : undefined
+        console.error('[send-media] OUTER ERROR:', errMsg)
+        if (errStack) console.error('[send-media] OUTER STACK:', errStack)
+        return NextResponse.json({ error: errMsg }, { status: 500 })
     }
 }

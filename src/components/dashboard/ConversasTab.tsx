@@ -352,13 +352,18 @@ export function ConversasTab() {
     async function startRecording() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            // Prefere OGG Opus (aceito pela Meta API); fallback WebM (Chrome)
-            const chosenMime = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
-                ? 'audio/ogg;codecs=opus'
-                : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : 'audio/webm'
-            const chosenExt = chosenMime.startsWith('audio/ogg') ? 'ogg' : 'webm'
+            // Prioridade de formato: mp4 (Chrome 120+) > ogg (Firefox) > webm (fallback)
+            // Meta WhatsApp aceita: audio/aac, audio/mp4, audio/mpeg, audio/ogg (opus), audio/amr
+            // Meta NÃO aceita: audio/webm
+            const chosenMime =
+                MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                : MediaRecorder.isTypeSupported('audio/mp4;codecs=opus') ? 'audio/mp4;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                : 'audio/webm'
+            const chosenExt = chosenMime.startsWith('audio/mp4') ? 'm4a'
+                : chosenMime.startsWith('audio/ogg') ? 'ogg'
+                : 'webm'
             const mediaRecorder = new MediaRecorder(stream, { mimeType: chosenMime })
             mediaRecorderRef.current = mediaRecorder
             audioChunksRef.current = []

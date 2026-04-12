@@ -28,6 +28,29 @@ function extForMime(mime: string): string {
     return 'bin'
 }
 
+/** Vercel function config — media upload pode demorar */
+export const maxDuration = 30
+
+/** Build multipart/form-data body manually — works reliably in Node.js serverless */
+function buildMultipartBody(fields: Record<string, string>, fileField: { name: string; data: Buffer; filename: string; contentType: string }) {
+    const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2)}`
+    const parts: Buffer[] = []
+
+    for (const [key, value] of Object.entries(fields)) {
+        parts.push(Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
+        ))
+    }
+
+    parts.push(Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${fileField.name}"; filename="${fileField.filename}"\r\nContent-Type: ${fileField.contentType}\r\n\r\n`
+    ))
+    parts.push(fileField.data)
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`))
+
+    return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` }
+}
+
 /**
  * POST — send media (image, video, audio, document) via WhatsApp
  * Body: multipart/form-data with fields:
@@ -152,32 +175,41 @@ export async function POST(request: Request) {
                 }
 
                 // 1. Upload media to Meta
-                // Remap MIME type (Meta rejeita audio/webm → usa audio/ogg)
+                // Remap MIME type para audio (Meta rejeita audio/webm)
                 const safeMime = metaSafeMime(mimetype, media_type)
                 const safeFilename = filename
                     ? filename.replace(/\.webm$/, safeMime === 'audio/ogg' ? '.ogg' : '.webm')
                     : `media-${Date.now()}.${extForMime(safeMime)}`
 
                 const buffer = Buffer.from(base64Data, 'base64')
-                const uploadForm = new FormData()
-                uploadForm.append('messaging_product', 'whatsapp')
-                uploadForm.append('type', safeMime)
-                uploadForm.append('file', new Blob([buffer], { type: safeMime }), safeFilename)
 
-                console.log(`[send-media] official upload: mime=${safeMime} file=${safeFilename} size=${buffer.length}`)
+                console.log(`[send-media] official upload: mime=${safeMime} origMime=${mimetype} file=${safeFilename} size=${buffer.length} phoneId=${inst.phone_number_id}`)
+
+                // Manual multipart — FormData+Blob nativos do Node.js falham no Vercel
+                const { body: uploadBody, contentType: uploadCt } = buildMultipartBody(
+                    { messaging_product: 'whatsapp', type: safeMime },
+                    { name: 'file', data: buffer, filename: safeFilename, contentType: safeMime }
+                )
 
                 const uploadRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/media`, {
                     method: 'POST',
-                    headers: { Authorization: `Bearer ${inst.meta_access_token}` },
-                    body: uploadForm
+                    headers: {
+                        Authorization: `Bearer ${inst.meta_access_token}`,
+                        'Content-Type': uploadCt
+                    },
+                    body: uploadBody
                 })
                 const uploadText = await uploadRes.text()
-                let uploadJson: { id?: string; error?: { message?: string } } = {}
+                console.log(`[send-media] Meta upload response (${uploadRes.status}):`, uploadText.slice(0, 500))
+                let uploadJson: { id?: string; error?: { message?: string; code?: number; error_subcode?: number } } = {}
                 try { uploadJson = JSON.parse(uploadText) } catch { /* not JSON */ }
 
                 if (!uploadRes.ok || !uploadJson.id) {
-                    console.error(`[send-media] Meta upload FAILED (${uploadRes.status}):`, uploadText)
-                    throw new Error(`Meta media upload failed (${uploadRes.status}): ${uploadJson.error?.message || uploadText.slice(0, 200)}`)
+                    const errDetail = uploadJson.error
+                        ? `code=${uploadJson.error.code} sub=${uploadJson.error.error_subcode} msg=${uploadJson.error.message}`
+                        : uploadText.slice(0, 300)
+                    console.error(`[send-media] Meta upload FAILED (${uploadRes.status}):`, errDetail)
+                    throw new Error(`Meta media upload failed (${uploadRes.status}): ${errDetail}`)
                 }
                 console.log('[send-media] Meta upload OK, media_id=', uploadJson.id)
 
@@ -201,8 +233,10 @@ export async function POST(request: Request) {
                 })
                 const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
                 if (!sendRes.ok) {
-                    throw new Error(`Meta send media failed (${sendRes.status})`)
+                    console.error(`[send-media] Meta send FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
+                    throw new Error(`Meta send media failed (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
                 }
+                console.log('[send-media] Meta send OK:', JSON.stringify(sendJson).slice(0, 200))
                 const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
                 messageId = msg?.id ?? null
             } else {

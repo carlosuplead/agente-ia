@@ -578,9 +578,25 @@ export function DisparosTab() {
             <div className="page-header">
                 <div className="page-header-row">
                     <div>
-                        <h2>Disparos</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <h2>Disparos</h2>
+                            {isConnected && (
+                                <span className={`status-badge ${isOfficial ? 'connected' : 'connecting'}`} style={{ fontSize: 11, padding: '2px 10px' }}>
+                                    {isOfficial ? '⚡ API Oficial Meta' : '🔌 Número Pessoal'}
+                                </span>
+                            )}
+                            {!isConnected && (
+                                <span className="status-badge disconnected" style={{ fontSize: 11, padding: '2px 10px' }}>
+                                    Desconectado
+                                </span>
+                            )}
+                        </div>
                         <p className="page-subtitle">
-                            Gerir contactos, envios rápidos e campanhas em massa
+                            {isOfficial
+                                ? 'API Oficial: templates aprovados, campanhas em massa e envio rápido'
+                                : isConnected
+                                    ? 'Número pessoal: envio rápido de mensagens (sem templates Meta)'
+                                    : 'Conecte o WhatsApp para enviar mensagens'}
                         </p>
                     </div>
                     <button

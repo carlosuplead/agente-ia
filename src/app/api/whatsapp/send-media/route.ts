@@ -145,8 +145,8 @@ export async function POST(request: Request) {
 
             if (instance.provider === 'official') {
                 // ═══ Official Meta WhatsApp Cloud API ═══
-                // Usa abordagem por LINK (URL) em vez de upload para /media
-                // O endpoint /media requer permissão extra; /messages com link funciona
+                // Áudio: upload direto para /media (FormData) → enviar com media_id
+                // Outros: upload para Supabase Storage → enviar com link público
 
                 // ── Step 1: Credenciais ──
                 const { data: inst, error: instErr } = await supabase
@@ -160,85 +160,138 @@ export async function POST(request: Request) {
                     throw new Error('Credenciais da API oficial não configuradas')
                 }
 
-                // ── Step 2: Upload para Supabase Storage ──
-                const safeMime = metaSafeMime(mimetype, media_type)
-                const safeFilename = filename
-                    ? filename.replace(/\.webm$/, safeMime === 'audio/ogg' ? '.ogg' : '.webm')
-                    : `media-${Date.now()}.${extForMime(safeMime)}`
-                const buffer = Buffer.from(base64Data, 'base64')
-                const storagePath = `${workspace_slug}/${Date.now()}-${safeFilename}`
-
-                console.log(`[send-media] official via link: type=${media_type} mime=${safeMime} file=${safeFilename} bytes=${buffer.length}`)
-
-                const admin = await createAdminClient()
-
-                // Garante que o bucket existe (ignora erro se já existir)
-                await admin.storage.createBucket(MEDIA_BUCKET, {
-                    public: true,
-                    fileSizeLimit: 16 * 1024 * 1024 // 16MB
-                }).catch(() => {})
-
-                const { error: upErr } = await admin.storage
-                    .from(MEDIA_BUCKET)
-                    .upload(storagePath, buffer, {
-                        contentType: safeMime,
-                        upsert: true
-                    })
-
-                if (upErr) {
-                    console.error('[send-media] Storage upload failed:', upErr.message)
-                    throw new Error(`Storage upload falhou: ${upErr.message}`)
-                }
-
-                // URL pública (bucket é público)
-                const { data: urlData } = admin.storage
-                    .from(MEDIA_BUCKET)
-                    .getPublicUrl(storagePath)
-
-                const publicUrl = urlData?.publicUrl
-                if (!publicUrl) {
-                    throw new Error('Não foi possível gerar URL pública')
-                }
-                console.log('[send-media] Storage OK, url=', publicUrl)
-
-                // ── Step 3: Enviar mensagem com link ──
                 const toPhone = contact.phone.replace(/\D/g, '')
-                const mediaPayload: Record<string, unknown> = { link: publicUrl }
-                if (caption) mediaPayload.caption = caption
+                const buffer = Buffer.from(base64Data, 'base64')
 
-                const msgBody = {
-                    messaging_product: 'whatsapp',
-                    recipient_type: 'individual',
-                    to: toPhone,
-                    type: media_type,
-                    [media_type]: mediaPayload
+                // Rejeitar webm — não aceito pela Meta
+                if (mimetype.startsWith('audio/webm')) {
+                    throw new Error('Formato audio/webm não suportado pela Meta. Converta para MP3 ou OGG.')
                 }
 
-                console.log(`[send-media] sending via link: type=${media_type} to=${toPhone}`)
+                if (media_type === 'audio') {
+                    // ═══ ÁUDIO: Upload direto via FormData para /media ═══
+                    // Evita depender de URL pública (Supabase) e é mais confiável
+                    const safeMime = metaSafeMime(mimetype, media_type)
+                    const ext = extForMime(safeMime)
+                    const audioFilename = filename || `audio-${Date.now()}.${ext}`
 
-                const sendRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/messages`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${inst.meta_access_token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(msgBody)
-                })
-                const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
+                    console.log(`[send-media] official AUDIO upload: mime=${safeMime} file=${audioFilename} bytes=${buffer.length}`)
 
-                if (!sendRes.ok) {
-                    console.error(`[send-media] Meta send FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
-                    throw new Error(`Envio falhou (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
+                    // Upload para Meta /media via FormData (sem Content-Type manual — fetch seta boundary)
+                    const form = new FormData()
+                    form.append('messaging_product', 'whatsapp')
+                    form.append('type', safeMime)
+                    form.append('file', new Blob([buffer], { type: safeMime }), audioFilename)
+
+                    const uploadRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/media`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${inst.meta_access_token}`
+                            // NÃO setar Content-Type — fetch auto-seta multipart/form-data com boundary
+                        },
+                        body: form
+                    })
+                    const uploadJson = (await uploadRes.json().catch(() => ({}))) as { id?: string; error?: { message?: string } }
+
+                    if (!uploadRes.ok || !uploadJson.id) {
+                        const errDetail = uploadJson.error?.message || JSON.stringify(uploadJson).slice(0, 300)
+                        console.error(`[send-media] Meta AUDIO upload FAILED (${uploadRes.status}):`, errDetail)
+                        throw new Error(`Upload áudio falhou (${uploadRes.status}): ${errDetail}`)
+                    }
+                    console.log(`[send-media] Meta AUDIO upload OK: media_id=${uploadJson.id}`)
+
+                    // Enviar mensagem com media_id
+                    const sendRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/messages`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${inst.meta_access_token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            messaging_product: 'whatsapp',
+                            to: toPhone,
+                            type: 'audio',
+                            audio: { id: uploadJson.id }
+                        })
+                    })
+                    const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
+
+                    if (!sendRes.ok) {
+                        console.error(`[send-media] Meta AUDIO send FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
+                        throw new Error(`Envio áudio falhou (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
+                    }
+                    console.log('[send-media] Meta AUDIO send OK:', JSON.stringify(sendJson).slice(0, 200))
+
+                    const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
+                    messageId = msg?.id ?? null
+                } else {
+                    // ═══ IMAGEM/VIDEO/DOCUMENTO: Upload Supabase Storage + enviar via link ═══
+                    const safeMime = metaSafeMime(mimetype, media_type)
+                    const safeFilename = filename || `media-${Date.now()}.${extForMime(safeMime)}`
+                    const storagePath = `${workspace_slug}/${Date.now()}-${safeFilename}`
+
+                    console.log(`[send-media] official via link: type=${media_type} mime=${safeMime} file=${safeFilename} bytes=${buffer.length}`)
+
+                    const admin = await createAdminClient()
+
+                    await admin.storage.createBucket(MEDIA_BUCKET, {
+                        public: true,
+                        fileSizeLimit: 16 * 1024 * 1024
+                    }).catch(() => {})
+
+                    const { error: upErr } = await admin.storage
+                        .from(MEDIA_BUCKET)
+                        .upload(storagePath, buffer, {
+                            contentType: safeMime,
+                            upsert: true
+                        })
+
+                    if (upErr) {
+                        console.error('[send-media] Storage upload failed:', upErr.message)
+                        throw new Error(`Storage upload falhou: ${upErr.message}`)
+                    }
+
+                    const { data: urlData } = admin.storage
+                        .from(MEDIA_BUCKET)
+                        .getPublicUrl(storagePath)
+
+                    const publicUrl = urlData?.publicUrl
+                    if (!publicUrl) throw new Error('Não foi possível gerar URL pública')
+                    console.log('[send-media] Storage OK, url=', publicUrl)
+
+                    const mediaPayload: Record<string, unknown> = { link: publicUrl }
+                    if (caption) mediaPayload.caption = caption
+
+                    const sendRes = await fetch(`${GRAPH_API_BASE}/${inst.phone_number_id}/messages`, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${inst.meta_access_token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            messaging_product: 'whatsapp',
+                            recipient_type: 'individual',
+                            to: toPhone,
+                            type: media_type,
+                            [media_type]: mediaPayload
+                        })
+                    })
+                    const sendJson = (await sendRes.json().catch(() => ({}))) as Record<string, unknown>
+
+                    if (!sendRes.ok) {
+                        console.error(`[send-media] Meta send FAILED (${sendRes.status}):`, JSON.stringify(sendJson).slice(0, 500))
+                        throw new Error(`Envio falhou (${sendRes.status}): ${JSON.stringify(sendJson).slice(0, 300)}`)
+                    }
+                    console.log('[send-media] Meta send OK:', JSON.stringify(sendJson).slice(0, 200))
+
+                    const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
+                    messageId = msg?.id ?? null
+
+                    // Limpar arquivo do storage depois de 2 min
+                    setTimeout(() => {
+                        admin.storage.from(MEDIA_BUCKET).remove([storagePath]).catch(() => {})
+                    }, 120_000)
                 }
-                console.log('[send-media] Meta send OK:', JSON.stringify(sendJson).slice(0, 200))
-
-                const msg = Array.isArray(sendJson.messages) ? (sendJson.messages[0] as { id?: string } | undefined) : undefined
-                messageId = msg?.id ?? null
-
-                // Limpar arquivo do storage depois de 2 min (Meta já baixou)
-                setTimeout(() => {
-                    admin.storage.from(MEDIA_BUCKET).remove([storagePath]).catch(() => {})
-                }, 120_000)
             } else {
                 // Uazapi — send via /send/media
                 const base = getUazapiBaseUrl()

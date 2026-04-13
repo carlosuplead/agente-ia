@@ -26,11 +26,18 @@ export class OfficialApiProvider implements WhatsAppProvider {
     }
 
     private async graph(path: string, init?: RequestInit): Promise<Response> {
+        // Se body é FormData, NÃO setar Content-Type (fetch auto-seta multipart/form-data com boundary)
+        const isFormData = init?.body instanceof FormData
+        const defaultHeaders: Record<string, string> = {
+            Authorization: `Bearer ${this.creds.accessToken}`,
+        }
+        if (!isFormData) {
+            defaultHeaders['Content-Type'] = 'application/json'
+        }
         return fetch(`${GRAPH_API_BASE}${path}`, {
             ...init,
             headers: {
-                Authorization: `Bearer ${this.creds.accessToken}`,
-                'Content-Type': 'application/json',
+                ...defaultHeaders,
                 ...(init?.headers || {})
             }
         })

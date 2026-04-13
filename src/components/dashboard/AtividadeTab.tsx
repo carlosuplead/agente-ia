@@ -12,7 +12,8 @@ import {
     ArrowDownCircle,
     ArrowUpCircle,
     ListTree,
-    PlayCircle
+    PlayCircle,
+    X
 } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 
@@ -27,6 +28,16 @@ type LogEntry = {
     contact_name?: string
 }
 
+type RunStep = {
+    step: string
+    ts: number
+    detail?: unknown
+}
+
+type RunMeta = {
+    steps?: RunStep[]
+}
+
 type RunRow = {
     id: string
     contact_id: string
@@ -37,7 +48,7 @@ type RunRow = {
     finished_at: string | null
     reason: string | null
     error_message: string | null
-    meta: unknown
+    meta: RunMeta | null
     contact_phone?: string
     contact_name?: string
 }
@@ -104,6 +115,38 @@ function truncate(s: string | null | undefined, max: number): string {
     return `${t.slice(0, max - 1)}…`
 }
 
+const STEP_LABELS: Record<string, string> = {
+    start: 'Execução iniciada',
+    handoff_keywords_check: 'Verificação de palavras-chave de transferência',
+    handoff_keyword_matched: 'Palavra-chave de transferência detectada',
+    media_processed: 'Mídias processadas',
+    media_processing_error: 'Erro ao processar mídias',
+    context_built: 'Contexto da conversa montado',
+    llm_calling: 'Chamando modelo de IA',
+    llm_responded: 'Resposta da IA recebida',
+    llm_error: 'Erro na chamada do modelo',
+    response_chunked: 'Resposta dividida em mensagens',
+    message_sent: 'Mensagem enviada',
+    message_send_failed: 'Falha ao enviar mensagem',
+    finish: 'Execução finalizada'
+}
+
+function stepLabel(step: string): string {
+    return STEP_LABELS[step] || step
+}
+
+function formatStepDetail(detail: unknown): string | null {
+    if (!detail || typeof detail !== 'object') return null
+    const d = detail as Record<string, unknown>
+    const parts: string[] = []
+    for (const [k, v] of Object.entries(d)) {
+        if (v === undefined || v === null) continue
+        const val = typeof v === 'object' ? JSON.stringify(v) : String(v)
+        parts.push(`${k}: ${val}`)
+    }
+    return parts.length > 0 ? parts.join('\n') : null
+}
+
 export function AtividadeTab() {
     const d = useDashboard()
     const slug = d.selectedSlug
@@ -115,6 +158,7 @@ export function AtividadeTab() {
     const [runFilter, setRunFilter] = useState<RunFilterType>('all')
     const [autoRefresh, setAutoRefresh] = useState(true)
     const [view, setView] = useState<ActivityView>('messages')
+    const [selectedRun, setSelectedRun] = useState<RunRow | null>(null)
 
     const loadActivity = useCallback(async () => {
         if (!slug) {
@@ -479,7 +523,7 @@ export function AtividadeTab() {
                                 </thead>
                                 <tbody>
                                     {filteredRuns.map(r => (
-                                        <tr key={r.id}>
+                                        <tr key={r.id} onClick={() => setSelectedRun(r)} style={{ cursor: 'pointer' }}>
                                             <td>
                                                 <span className={runStatusBadgeClass(r.status)}>
                                                     {runStatusLabel(r.status)}
@@ -518,6 +562,107 @@ export function AtividadeTab() {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* ── Run Detail Side Panel ── */}
+            {selectedRun && (
+                <div className="run-detail-overlay" onClick={e => { if (e.target === e.currentTarget) setSelectedRun(null) }}>
+                    <div className="run-detail-panel">
+                        <div className="run-detail-header">
+                            <h3>Execução #{selectedRun.id.slice(0, 8)}</h3>
+                            <button
+                                className="btn btn-secondary btn-compact"
+                                onClick={() => setSelectedRun(null)}
+                                style={{ padding: '4px 8px' }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="run-detail-body">
+                            {/* Meta info */}
+                            <div className="run-detail-meta">
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Estado</div>
+                                    <div className="value">
+                                        <span className={runStatusBadgeClass(selectedRun.status)}>
+                                            {runStatusLabel(selectedRun.status)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Duração</div>
+                                    <div className="value">{formatRunDuration(selectedRun.started_at, selectedRun.finished_at, selectedRun.status)}</div>
+                                </div>
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Contato</div>
+                                    <div className="value">{selectedRun.contact_name || selectedRun.contact_phone || '—'}</div>
+                                </div>
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Origem</div>
+                                    <div className="value">{runSourceLabel(selectedRun.source)}</div>
+                                </div>
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Início</div>
+                                    <div className="value" style={{ fontSize: 12 }}>
+                                        {new Date(selectedRun.started_at).toLocaleString('pt-BR')}
+                                    </div>
+                                </div>
+                                <div className="run-detail-meta-item">
+                                    <div className="label">Fim</div>
+                                    <div className="value" style={{ fontSize: 12 }}>
+                                        {selectedRun.finished_at
+                                            ? new Date(selectedRun.finished_at).toLocaleString('pt-BR')
+                                            : 'Em andamento...'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {selectedRun.reason && (
+                                <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--surface-secondary)', borderRadius: 8, fontSize: 13 }}>
+                                    <strong>Resultado:</strong> {selectedRun.reason}
+                                </div>
+                            )}
+
+                            {selectedRun.error_message && (
+                                <div style={{ marginBottom: 16, padding: '8px 12px', background: 'color-mix(in srgb, var(--red, #ef4444) 8%, transparent)', borderRadius: 8, fontSize: 13, color: 'var(--red, #ef4444)' }}>
+                                    <strong>Erro:</strong> {selectedRun.error_message}
+                                </div>
+                            )}
+
+                            {/* Steps timeline */}
+                            {selectedRun.meta?.steps && selectedRun.meta.steps.length > 0 ? (
+                                <>
+                                    <div className="run-steps-title">Pipeline de execução</div>
+                                    <div className="run-steps-timeline">
+                                        {selectedRun.meta.steps.map((s, i) => {
+                                            const isError = s.step.includes('error') || s.step.includes('failed')
+                                            const isFinish = s.step === 'finish'
+                                            const detailStr = formatStepDetail(s.detail)
+                                            return (
+                                                <div key={i} className={`run-step ${isError ? 'run-step--error' : ''} ${isFinish ? 'run-step--finish' : ''}`}>
+                                                    <div className="run-step-dot" />
+                                                    <div className="run-step-header">
+                                                        <span className="run-step-name">{stepLabel(s.step)}</span>
+                                                        <span className="run-step-time">+{formatMsDuration(s.ts)}</span>
+                                                    </div>
+                                                    {detailStr && (
+                                                        <div className="run-step-detail">{detailStr}</div>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0', fontSize: 13 }}>
+                                    <ListTree size={24} style={{ marginBottom: 8, opacity: 0.5 }} />
+                                    <p>Detalhes não disponíveis para esta execução.</p>
+                                    <p style={{ fontSize: 12 }}>Execuções mais recentes incluem o pipeline completo.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     )

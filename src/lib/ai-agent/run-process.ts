@@ -387,6 +387,13 @@ export async function runAiProcess(
     let runId: string | null = null
     let runFinished = false
     const runSourceVal = opts?.runSource ?? 'unknown'
+    const runStartMs = Date.now()
+    const runSteps: Array<{ step: string; ts: number; detail?: unknown }> = []
+    function addRunStep(step: string, detail?: unknown) {
+        runSteps.push({ step, ts: Date.now() - runStartMs, detail })
+    }
+    addRunStep('start', { contact_id, conversation_id: conversationId, source: runSourceVal })
+
     try {
         const ins = await sql.unsafe(
             `INSERT INTO ${sch}.ai_agent_runs (contact_id, conversation_id, status, source)
@@ -407,11 +414,12 @@ export async function runAiProcess(
         if (!runId || runFinished) return
         runFinished = true
         const id = runId
+        addRunStep('finish', { status: p.status, reason: p.reason })
         try {
             await sql.unsafe(
-                `UPDATE ${sch}.ai_agent_runs SET status = $2::text, finished_at = now(), reason = $3, error_message = $4
+                `UPDATE ${sch}.ai_agent_runs SET status = $2::text, finished_at = now(), reason = $3, error_message = $4, meta = $5::jsonb
                  WHERE id = $1::uuid`,
-                [id, p.status, p.reason ?? null, p.errorMessage ?? null]
+                [id, p.status, p.reason ?? null, p.errorMessage ?? null, JSON.stringify({ steps: runSteps })]
             )
         } catch (e) {
             console.error('runAiProcess: ai_agent_runs finish', e)
@@ -441,7 +449,9 @@ export async function runAiProcess(
             [contact_id]
         )
         const lastBody = (lastRows[0] as unknown as { body: string | null } | undefined)?.body ?? ''
+        addRunStep('handoff_keywords_check', { lastBody: lastBody.slice(0, 80), keywords: config.handoff_keywords?.slice(0, 80) })
         if (matchesHandoffKeywords(lastBody, config.handoff_keywords)) {
+            addRunStep('handoff_keyword_matched')
             const reply =
                 config.handoff_default_reply?.trim() ||
                 'Vou direcionar você para um atendente humano. Um momento.'
@@ -521,9 +531,11 @@ export async function runAiProcess(
                 : undefined
         }
         await processUnprocessedMedia(workspace_slug, contact_id, config, mediaProvider)
+        addRunStep('media_processed')
     } catch (e) {
         // Falha no processamento de mídia não deve bloquear a resposta da IA
         console.error('runAiProcess: media processing error (non-fatal):', e)
+        addRunStep('media_processing_error', { error: (e as Error).message?.slice(0, 200) })
     }
 
     const context = await buildContext(workspace_slug, contact_id, {
@@ -534,12 +546,17 @@ export async function runAiProcess(
         conversationCreatedAt,
         priorAiConversationId: priorAiConversationId ?? undefined
     })
+    addRunStep('context_built', {
+        transcriptLength: context?.transcript?.length ?? 0,
+        contactPhone: context?.contactPhone?.slice(-4)
+    })
     if (!context) {
         await finishAgentRun({ status: 'error', errorMessage: 'Failed to build context' })
         return { ok: false, status: 500, error: 'Failed to build context' }
     }
 
     let response: LLMResponse
+    addRunStep('llm_calling', { provider: config.provider, model: config.model })
     try {
         response = await callLLM(config, context, {
             conversationId,
@@ -549,8 +566,17 @@ export async function runAiProcess(
         })
     } catch (llmErr) {
         console.error('runAiProcess: callLLM threw', llmErr)
+        addRunStep('llm_error', { error: (llmErr as Error).message?.slice(0, 200) })
         response = { text: EMPTY_LLM_FALLBACK, shouldHandoff: false }
     }
+
+    addRunStep('llm_responded', {
+        textLength: (response.text ?? '').length,
+        textPreview: (response.text ?? '').slice(0, 120),
+        shouldHandoff: response.shouldHandoff,
+        voiceCount: response.voiceDeliveries?.length ?? 0,
+        tokens: response.usage?.total_tokens ?? 0
+    })
 
     if (response.usage && response.usage.total_tokens > 0) {
         try {
@@ -613,6 +639,7 @@ export async function runAiProcess(
     }
 
     const chunks = aiReplyChunks(textToSave, config)
+    addRunStep('response_chunked', { totalChunks: chunks.length, chunkSizes: chunks.map(c => c.length) })
     let sendFailed = false
     const gapMs = config.send_delay_ms ?? 1200
     const sendOpts = sendOptionsFromConfig(config)
@@ -637,6 +664,7 @@ export async function runAiProcess(
                     textToSend,
                     sendOpts
                 )
+                addRunStep('message_sent', { chunk: i + 1, total: chunks.length, textPreview: chunk.slice(0, 60) })
                 if (savedMsg) {
                     await sql.unsafe(
                         `UPDATE ${sch}.messages SET status = 'sent', whatsapp_id = $2 WHERE id = $1::uuid`,
@@ -645,6 +673,7 @@ export async function runAiProcess(
                 }
             } catch (sendErr) {
                 const errDetail = sendErr instanceof Error ? sendErr.message : String(sendErr)
+                addRunStep('message_send_failed', { chunk: i + 1, error: errDetail.slice(0, 200) })
                 console.error(`[runAiProcess] SEND FAILED chunk ${i + 1}/${chunks.length}:`, errDetail, {
                     workspace: workspace_slug,
                     contact: contact_id,

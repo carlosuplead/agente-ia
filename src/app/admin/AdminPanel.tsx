@@ -22,7 +22,7 @@ type UserAdmin = {
     last_sign_in_at: string | null
     full_name: string | null
     is_platform_admin: boolean
-    workspaces: Array<{ workspace_slug: string; role: string }>
+    workspaces: Array<{ workspace_slug: string; workspace_name: string; role: string }>
 }
 
 type Tab = 'workspaces' | 'users'
@@ -144,6 +144,41 @@ export function AdminPanel() {
         } else {
             const j = await res.json().catch(() => ({}))
             setError((j as { error?: string }).error || 'Falha ao aprovar usuário')
+        }
+    }
+
+    // ── Estado do modal Atribuir Workspace ──
+    const [assignTarget, setAssignTarget] = useState<{ userId: string; userName: string } | null>(null)
+    const [assignSlug, setAssignSlug] = useState('')
+    const [assignRole, setAssignRole] = useState('member')
+    const [assignLoading, setAssignLoading] = useState(false)
+
+    async function handleAssignWorkspace(e: React.FormEvent) {
+        e.preventDefault()
+        if (!assignTarget || !assignSlug || !assignRole) return
+        setAssignLoading(true)
+        setError('')
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: assignTarget.userId,
+                    workspace_slug: assignSlug,
+                    role: assignRole
+                })
+            })
+            if (res.ok) {
+                setAssignTarget(null)
+                await Promise.all([loadWorkspaces(), loadUsers()])
+            } else {
+                const data = await res.json().catch(() => ({})) as { error?: string }
+                setError(data.error || 'Falha ao atribuir workspace')
+            }
+        } catch {
+            setError('Erro de conexão')
+        } finally {
+            setAssignLoading(false)
         }
     }
 
@@ -400,6 +435,67 @@ export function AdminPanel() {
                 </div>
             )}
 
+            {/* ── Modal Atribuir Workspace ── */}
+            {assignTarget && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                    onClick={e => { if (e.target === e.currentTarget) setAssignTarget(null) }}
+                >
+                    <div style={{
+                        backgroundColor: 'var(--bg-primary, #fff)', borderRadius: 12,
+                        padding: '2rem', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                    }}>
+                        <h2 style={{ fontSize: '1.2rem', marginBottom: 16 }}>Atribuir Workspace</h2>
+                        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                            Atribuindo para: <strong>{assignTarget.userName}</strong>
+                        </p>
+                        <form onSubmit={handleAssignWorkspace} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <label className="input-group">
+                                <span className="input-label">Workspace</span>
+                                <select
+                                    className="input"
+                                    value={assignSlug}
+                                    onChange={e => setAssignSlug(e.target.value)}
+                                    required
+                                >
+                                    <option value="">Selecione...</option>
+                                    {workspaces.map(ws => (
+                                        <option key={ws.slug} value={ws.slug}>
+                                            {ws.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="input-group">
+                                <span className="input-label">Papel</span>
+                                <select
+                                    className="input"
+                                    value={assignRole}
+                                    onChange={e => setAssignRole(e.target.value)}
+                                    required
+                                >
+                                    <option value="owner">Owner</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="member">Membro</option>
+                                    <option value="client">Cliente</option>
+                                </select>
+                            </label>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                <button type="submit" className="btn btn-primary" disabled={assignLoading || !assignSlug}>
+                                    {assignLoading ? 'Atribuindo...' : 'Atribuir'}
+                                </button>
+                                <button type="button" className="btn btn-secondary" onClick={() => setAssignTarget(null)}>
+                                    Cancelar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {tab === 'users' && (
                 <div className="card" style={{ padding: '1rem' }}>
                     <div style={{ overflowX: 'auto' }}>
@@ -437,9 +533,13 @@ export function AdminPanel() {
                                             )}
                                         </td>
                                         <td style={{ fontSize: 13 }}>
-                                            {u.workspaces.length === 0 ? '—' : u.workspaces.map(w =>
-                                                `${w.workspace_slug} (${w.role})`
-                                            ).join(', ')}
+                                            {u.workspaces.length === 0 ? '—' : u.workspaces.map((w, i) => (
+                                                <span key={w.workspace_slug}>
+                                                    {i > 0 && ', '}
+                                                    <strong>{w.workspace_name}</strong>
+                                                    <span style={{ color: 'var(--text-secondary)' }}> ({w.role})</span>
+                                                </span>
+                                            ))}
                                         </td>
                                         <td style={{ fontSize: 13 }}>{fmtDate(u.created_at)}</td>
                                         <td style={{ fontSize: 13 }}>
@@ -458,6 +558,17 @@ export function AdminPanel() {
                                                 )}
                                                 {!u.is_platform_admin && (
                                                     <>
+                                                        <button
+                                                            className="btn btn-primary"
+                                                            style={{ fontSize: 12, padding: '4px 8px' }}
+                                                            onClick={() => {
+                                                                setAssignTarget({ userId: u.id, userName: u.full_name || u.email })
+                                                                setAssignSlug(workspaces[0]?.slug || '')
+                                                                setAssignRole('member')
+                                                            }}
+                                                        >
+                                                            + Workspace
+                                                        </button>
                                                         <button
                                                             className="btn btn-secondary"
                                                             style={{ fontSize: 12, padding: '4px 8px' }}

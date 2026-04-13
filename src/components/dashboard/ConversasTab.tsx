@@ -388,7 +388,8 @@ export function ConversasTab() {
                         file = await convertToMp3(blob)
                     } catch (err) {
                         console.error('[audio] conversão mp3 falhou:', err)
-                        file = new File([blob], `audio-${Date.now()}.webm`, { type: chosenMime })
+                        d.setToast({ message: 'Erro ao converter áudio. Tente gravar novamente.', variant: 'error' })
+                        return // NÃO enviar webm — Meta rejeita
                     }
                 } else {
                     file = new File([blob], `audio-${Date.now()}.${chosenExt}`, { type: chosenMime })

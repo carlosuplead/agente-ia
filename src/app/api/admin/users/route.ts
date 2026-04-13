@@ -34,15 +34,25 @@ export async function GET() {
             if (data.users.length < 200) break
         }
 
-        // Buscar memberships para cada user
-        const { data: memberships } = await supabase
-            .from('workspace_members')
-            .select('user_id, workspace_slug, role')
+        // Buscar memberships + nomes dos workspaces
+        const [{ data: memberships }, { data: allWorkspaces }] = await Promise.all([
+            supabase.from('workspace_members').select('user_id, workspace_slug, role'),
+            supabase.from('workspaces').select('slug, name')
+        ])
 
-        const memberMap = new Map<string, Array<{ workspace_slug: string; role: string }>>()
+        const wsNameMap = new Map<string, string>()
+        for (const ws of allWorkspaces || []) {
+            wsNameMap.set(ws.slug, ws.name)
+        }
+
+        const memberMap = new Map<string, Array<{ workspace_slug: string; workspace_name: string; role: string }>>()
         for (const m of memberships || []) {
             const arr = memberMap.get(m.user_id) ?? []
-            arr.push({ workspace_slug: m.workspace_slug, role: m.role })
+            arr.push({
+                workspace_slug: m.workspace_slug,
+                workspace_name: wsNameMap.get(m.workspace_slug) || m.workspace_slug,
+                role: m.role
+            })
             memberMap.set(m.user_id, arr)
         }
 
@@ -184,6 +194,57 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ success: true })
     } catch (err) {
         console.error('admin delete user:', err)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
+/** PUT /api/admin/users — atribuir usuário a um workspace */
+export async function PUT(request: Request) {
+    try {
+        const supabase = await createClient()
+        const admin = await requirePlatformAdmin(supabase)
+        if (!admin.ok) return admin.response
+
+        const body = await request.json().catch(() => null)
+        const userId = typeof body?.user_id === 'string' ? body.user_id.trim() : ''
+        const workspaceSlug = typeof body?.workspace_slug === 'string' ? body.workspace_slug.trim() : ''
+        const role = typeof body?.role === 'string' ? body.role.trim() : ''
+
+        if (!userId || !workspaceSlug || !role) {
+            return NextResponse.json({ error: 'user_id, workspace_slug e role são obrigatórios' }, { status: 400 })
+        }
+
+        const validRoles = ['owner', 'admin', 'member', 'client']
+        if (!validRoles.includes(role)) {
+            return NextResponse.json({ error: `role deve ser: ${validRoles.join(', ')}` }, { status: 400 })
+        }
+
+        // Verificar se workspace existe
+        const { data: ws } = await supabase
+            .from('workspaces')
+            .select('slug')
+            .eq('slug', workspaceSlug)
+            .maybeSingle()
+        if (!ws) {
+            return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 })
+        }
+
+        // Upsert membership (atualiza role se já existir)
+        const adminSb = await createAdminClient()
+        const { error: memErr } = await adminSb
+            .from('workspace_members')
+            .upsert(
+                { user_id: userId, workspace_slug: workspaceSlug, role },
+                { onConflict: 'user_id,workspace_slug' }
+            )
+        if (memErr) {
+            console.error('admin assign workspace:', memErr)
+            return NextResponse.json({ error: 'Falha ao atribuir: ' + memErr.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch (err) {
+        console.error('admin assign workspace:', err)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
     }
 }

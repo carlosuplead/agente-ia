@@ -96,9 +96,11 @@ export async function POST(request: Request) {
             }
 
             return NextResponse.json({ success: true, messageId: savedMessage.id })
-        } catch {
+        } catch (sendErr) {
+            const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr)
+            console.error('[whatsapp/send] SEND FAILED:', errMsg, sendErr instanceof Error ? sendErr.stack : '')
             await sql.unsafe(`UPDATE ${sch}.messages SET status = 'failed' WHERE id = $1::uuid`, [savedMessage.id])
-            return NextResponse.json({ error: 'Failed to send WhatsApp message' }, { status: 502 })
+            return NextResponse.json({ error: errMsg }, { status: 502 })
         }
     } catch (error) {
         console.error('whatsapp send', error)

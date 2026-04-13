@@ -26,20 +26,24 @@ export class OfficialApiProvider implements WhatsAppProvider {
     }
 
     private async graph(path: string, init?: RequestInit): Promise<Response> {
-        // Se body é FormData, NÃO setar Content-Type (fetch auto-seta multipart/form-data com boundary)
-        const isFormData = init?.body instanceof FormData
-        const defaultHeaders: Record<string, string> = {
-            Authorization: `Bearer ${this.creds.accessToken}`,
-        }
-        if (!isFormData) {
-            defaultHeaders['Content-Type'] = 'application/json'
-        }
         return fetch(`${GRAPH_API_BASE}${path}`, {
             ...init,
             headers: {
-                ...defaultHeaders,
+                Authorization: `Bearer ${this.creds.accessToken}`,
+                'Content-Type': 'application/json',
                 ...(init?.headers || {})
             }
+        })
+    }
+
+    /** graph() sem Content-Type — para uploads FormData onde o browser seta o boundary */
+    private async graphFormData(path: string, body: FormData): Promise<Response> {
+        return fetch(`${GRAPH_API_BASE}${path}`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${this.creds.accessToken}`
+            },
+            body
         })
     }
 
@@ -70,19 +74,11 @@ export class OfficialApiProvider implements WhatsAppProvider {
         audioBytes: ArrayBuffer,
         _opts?: { delayMs?: number }
     ): Promise<WhatsAppSendResult> {
-        const mediaUpload = await this.graph(`/${this.creds.phoneNumberId}/media`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${this.creds.accessToken}`
-            },
-            body: (() => {
-                const form = new FormData()
-                form.append('messaging_product', 'whatsapp')
-                form.append('type', 'audio/mpeg')
-                form.append('file', new Blob([audioBytes], { type: 'audio/mpeg' }), 'voice.mp3')
-                return form
-            })()
-        })
+        const form = new FormData()
+        form.append('messaging_product', 'whatsapp')
+        form.append('type', 'audio/mpeg')
+        form.append('file', new Blob([audioBytes], { type: 'audio/mpeg' }), 'voice.mp3')
+        const mediaUpload = await this.graphFormData(`/${this.creds.phoneNumberId}/media`, form)
         const uploadJson = (await mediaUpload.json().catch(() => ({}))) as { id?: string }
         if (!mediaUpload.ok || !uploadJson.id) throw new Error('Meta Cloud API media upload failed')
 

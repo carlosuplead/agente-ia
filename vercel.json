@@ -1,2 +1,8 @@
 {
+  "crons": [
+    {
+      "path": "/api/ai/followup-cron",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

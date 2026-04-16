@@ -8,12 +8,14 @@ import { GRAPH_API_BASE } from '@/lib/meta/graph-version'
 
 const MEDIA_BUCKET = 'whatsapp-media'
 
-/** MIME types suportados pela Meta para audio — audio/webm NÃO é aceito */
+/** MIME types suportados pela Meta — sempre sem codec suffix e com remapeamento de webm */
 function metaSafeMime(mime: string, mediaType: string): string {
-    if (mediaType !== 'audio') return mime
-    // Meta rejeita audio/webm; remap para audio/ogg (mesmo codec Opus)
-    if (mime.startsWith('audio/webm')) return 'audio/ogg'
-    return mime
+    // Remove parâmetros codec (ex: ';codecs=opus') — Meta não aceita no upload
+    const base = mime.split(';')[0].trim().toLowerCase()
+    if (mediaType !== 'audio') return base
+    // Meta rejeita audio/webm; remap para audio/ogg (mesmo codec Opus por baixo)
+    if (base === 'audio/webm') return 'audio/ogg'
+    return base
 }
 
 /** Extensão padrão para o MIME */

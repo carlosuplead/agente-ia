@@ -171,19 +171,58 @@ export async function downloadMediaUazapi(
 // ─── Download — URL direta (CDN do WhatsApp) ───────────────────
 
 /**
+ * Whitelist de hosts permitidos para download direto — defesa contra SSRF.
+ * Apenas CDNs oficiais do WhatsApp/Meta e do Uazapi devem ser aceitos.
+ */
+const ALLOWED_MEDIA_HOST_SUFFIXES = [
+    '.whatsapp.net',
+    '.whatsapp.com',
+    '.cdninstagram.com',
+    '.fbcdn.net',
+    '.facebook.com',
+    '.fna.whatsapp.net',
+    '.uazapi.com',
+    '.uazapi.dev'
+]
+
+function isAllowedMediaUrl(url: string): boolean {
+    try {
+        const u = new URL(url)
+        // Apenas HTTPS (rejeita http, ftp, file, data, javascript, etc.)
+        if (u.protocol !== 'https:') return false
+        // Rejeita hostnames internos/privados
+        const host = u.hostname.toLowerCase()
+        if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false
+        if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false
+        if (/^169\.254\./.test(host)) return false // link-local
+        if (/^fc00:|^fe80:|^::1$/.test(host)) return false // IPv6 privado
+        // Aceita hosts na whitelist
+        return ALLOWED_MEDIA_HOST_SUFFIXES.some(suffix => host === suffix.slice(1) || host.endsWith(suffix))
+    } catch {
+        return false
+    }
+}
+
+/**
  * Tenta baixar mídia diretamente de uma URL (CDN do WhatsApp ou qualquer URL pública).
  * Fallback quando /message/download do Uazapi falha.
+ * DEFESA SSRF: apenas hosts na whitelist são aceitos.
  */
 export async function downloadFromDirectUrl(
     url: string
 ): Promise<{ buffer: Buffer; mimetype: string } | null> {
     try {
+        if (!isAllowedMediaUrl(url)) {
+            console.warn(`[downloadFromDirectUrl] URL bloqueada por whitelist SSRF: ${url.slice(0, 100)}`)
+            return null
+        }
         console.log(`[downloadFromDirectUrl] GET ${url.slice(0, 100)}...`)
         const res = await fetch(url, {
             signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
             headers: {
                 'User-Agent': 'Mozilla/5.0'
-            }
+            },
+            redirect: 'error' // Rejeita redirects pra evitar bypass da whitelist
         })
         if (!res.ok) {
             console.error(`[downloadFromDirectUrl] HTTP ${res.status}`)

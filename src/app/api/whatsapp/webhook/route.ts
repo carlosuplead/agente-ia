@@ -511,6 +511,21 @@ function parseUazapiStatusEvent(data: Record<string, unknown>): ParsedUazapiStat
 // ─── Route handler ────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+    // ── Validação de secret (opcional) ──
+    // Se UAZAPI_WEBHOOK_SECRET estiver definido, exige header x-uazapi-secret ou query ?secret=
+    // Proteção contra webhook spoofing quando o instance_token for conhecido por atacantes.
+    const uazapiSecret = process.env.UAZAPI_WEBHOOK_SECRET?.trim()
+    if (uazapiSecret) {
+        const { searchParams: sp0 } = new URL(request.url)
+        const headerSecret = request.headers.get('x-uazapi-secret')?.trim() || ''
+        const querySecret = sp0.get('secret')?.trim() || ''
+        const received = headerSecret || querySecret
+        if (!received || received !== uazapiSecret) {
+            console.warn('[uazapi-webhook] Secret inválido ou ausente')
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+    }
+
     // ── Parse rápido e responder 200 imediatamente ──
     const { searchParams } = new URL(request.url)
     let instanceToken = searchParams.get('token')?.trim() || ''

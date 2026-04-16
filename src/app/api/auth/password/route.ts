@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 /**
  * PUT /api/auth/password — altera a password do utilizador autenticado.
@@ -7,6 +8,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
  * Body: { current_password: string, new_password: string }
  *
  * Valida a password atual re-autenticando e depois atualiza.
+ * Rate limit: 5 tentativas / 10 min por IP+user.
  */
 export async function PUT(request: Request) {
     try {
@@ -17,6 +19,16 @@ export async function PUT(request: Request) {
         } = await supabase.auth.getUser()
         if (authErr || !user) {
             return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+        }
+
+        // Rate limit por user+IP: 5 tentativas em 10 minutos
+        const ip = getClientIp(request)
+        const rl = checkRateLimit(`password:${user.id}:${ip}`, { max: 5, windowMs: 10 * 60 * 1000 })
+        if (!rl.ok) {
+            return NextResponse.json(
+                { error: `Muitas tentativas. Tente novamente em ${Math.ceil(rl.retryAfterMs / 1000)}s.` },
+                { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+            )
         }
 
         const body = await request.json().catch(() => null)

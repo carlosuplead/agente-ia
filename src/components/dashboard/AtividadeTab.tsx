@@ -13,7 +13,14 @@ import {
     ArrowUpCircle,
     ListTree,
     PlayCircle,
-    X
+    X,
+    FileText,
+    MessageSquare,
+    Wrench,
+    Cpu,
+    User,
+    ChevronDown,
+    ChevronRight
 } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 
@@ -34,8 +41,24 @@ type RunStep = {
     detail?: unknown
 }
 
+type RunExtras = {
+    system_prompt?: string
+    context_transcript?: string
+    last_user_message?: string
+    llm_response_full?: string
+    llm_usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+    model?: string
+    provider?: string
+    temperature?: number
+    tools_called?: string[]
+    handoff?: { triggered: boolean; reason?: string | null }
+    chunks_sent?: string[]
+}
+
 type RunMeta = {
     steps?: RunStep[]
+    extras?: RunExtras
+    duration_ms?: number
 }
 
 type RunRow = {
@@ -135,6 +158,39 @@ function stepLabel(step: string): string {
     return STEP_LABELS[step] || step
 }
 
+function CollapsibleSection({
+    title,
+    icon,
+    defaultOpen = false,
+    badge,
+    children
+}: {
+    title: string
+    icon: React.ReactNode
+    defaultOpen?: boolean
+    badge?: string | number
+    children: React.ReactNode
+}) {
+    const [open, setOpen] = useState(defaultOpen)
+    return (
+        <div className="run-detail-section">
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                className="run-detail-section-header"
+            >
+                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {icon}
+                <span className="run-detail-section-title">{title}</span>
+                {badge !== undefined && (
+                    <span className="run-detail-section-badge">{badge}</span>
+                )}
+            </button>
+            {open && <div className="run-detail-section-body">{children}</div>}
+        </div>
+    )
+}
+
 function formatStepDetail(detail: unknown): string | null {
     if (!detail || typeof detail !== 'object') return null
     const d = detail as Record<string, unknown>
@@ -206,16 +262,36 @@ export function AtividadeTab() {
     }, [loadActivity, loadRuns])
 
     const hasRunningRuns = runs.some(r => r.status === 'running')
-    const refreshMs = view === 'runs' && hasRunningRuns ? 2500 : 10000
+    // Tempo-real agressivo quando há execução em curso (1s), moderado quando selecionado run aberto (2s), padrão 5s
+    const refreshMs = hasRunningRuns
+        ? 1000
+        : selectedRun
+          ? 2000
+          : 5000
 
     useEffect(() => {
         if (!autoRefresh || !slug) return
         const id = setInterval(() => {
+            // Sempre recarrega runs (para detectar novos em curso) e recarrega msgs se está nessa view
+            void loadRuns()
             if (view === 'messages') void loadActivity()
-            else void loadRuns()
         }, refreshMs)
         return () => clearInterval(id)
-    }, [autoRefresh, slug, view, refreshMs, loadActivity, loadRuns])
+    }, [autoRefresh, slug, view, refreshMs, loadActivity, loadRuns, selectedRun])
+
+    // Se um run está aberto no painel e ele ainda está rodando, atualiza os dados do próprio run
+    useEffect(() => {
+        if (!selectedRun) return
+        // Encontrar o run atualizado na lista (pode ter mudado de running → success/error)
+        const updated = runs.find(r => r.id === selectedRun.id)
+        if (updated && (
+            updated.status !== selectedRun.status ||
+            updated.finished_at !== selectedRun.finished_at ||
+            JSON.stringify(updated.meta) !== JSON.stringify(selectedRun.meta)
+        )) {
+            setSelectedRun(updated)
+        }
+    }, [runs, selectedRun])
 
     const filtered = filter === 'all'
         ? entries
@@ -505,7 +581,16 @@ export function AtividadeTab() {
                             </div>
                             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                                 {filteredRuns.length} linha(s)
-                                {autoRefresh && ` · ${hasRunningRuns ? 'atualização rápida' : 'cada 10s'}`}
+                                {autoRefresh && (
+                                    <>
+                                        {' · '}
+                                        {hasRunningRuns
+                                            ? <span style={{ color: 'var(--orange)' }}>ao vivo 1s</span>
+                                            : selectedRun
+                                              ? 'cada 2s'
+                                              : 'cada 5s'}
+                                    </>
+                                )}
                             </span>
                         </div>
 
@@ -627,6 +712,148 @@ export function AtividadeTab() {
                                 <div style={{ marginBottom: 16, padding: '8px 12px', background: 'color-mix(in srgb, var(--red, #ef4444) 8%, transparent)', borderRadius: 8, fontSize: 13, color: 'var(--red, #ef4444)' }}>
                                     <strong>Erro:</strong> {selectedRun.error_message}
                                 </div>
+                            )}
+
+                            {/* ── Dados ricos (Onda 1) ── */}
+                            {selectedRun.meta?.extras && (
+                                <>
+                                    {/* Modelo & Tokens */}
+                                    {(selectedRun.meta.extras.model || selectedRun.meta.extras.llm_usage) && (
+                                        <div className="run-detail-tokens-grid">
+                                            {selectedRun.meta.extras.provider && (
+                                                <div className="run-detail-token-item">
+                                                    <div className="label">Provedor</div>
+                                                    <div className="value">{selectedRun.meta.extras.provider}</div>
+                                                </div>
+                                            )}
+                                            {selectedRun.meta.extras.model && (
+                                                <div className="run-detail-token-item">
+                                                    <div className="label">Modelo</div>
+                                                    <div className="value" style={{ fontSize: 12 }}>{selectedRun.meta.extras.model}</div>
+                                                </div>
+                                            )}
+                                            {typeof selectedRun.meta.extras.temperature === 'number' && (
+                                                <div className="run-detail-token-item">
+                                                    <div className="label">Temp.</div>
+                                                    <div className="value">{selectedRun.meta.extras.temperature}</div>
+                                                </div>
+                                            )}
+                                            {selectedRun.meta.extras.llm_usage && (
+                                                <>
+                                                    <div className="run-detail-token-item">
+                                                        <div className="label">Tokens entrada</div>
+                                                        <div className="value">{selectedRun.meta.extras.llm_usage.prompt_tokens}</div>
+                                                    </div>
+                                                    <div className="run-detail-token-item">
+                                                        <div className="label">Tokens saída</div>
+                                                        <div className="value">{selectedRun.meta.extras.llm_usage.completion_tokens}</div>
+                                                    </div>
+                                                    <div className="run-detail-token-item run-detail-token-item--total">
+                                                        <div className="label">Total</div>
+                                                        <div className="value">{selectedRun.meta.extras.llm_usage.total_tokens}</div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Tools chamadas */}
+                                    {selectedRun.meta.extras.tools_called && selectedRun.meta.extras.tools_called.length > 0 && (
+                                        <CollapsibleSection
+                                            title="Ferramentas utilizadas"
+                                            icon={<Wrench size={14} />}
+                                            badge={selectedRun.meta.extras.tools_called.length}
+                                            defaultOpen={true}
+                                        >
+                                            <div className="run-detail-tools-list">
+                                                {selectedRun.meta.extras.tools_called.map((tool, i) => (
+                                                    <span key={i} className="run-detail-tool-badge">{tool}</span>
+                                                ))}
+                                            </div>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Última mensagem do usuário */}
+                                    {selectedRun.meta.extras.last_user_message && (
+                                        <CollapsibleSection
+                                            title="Mensagem do contato"
+                                            icon={<User size={14} />}
+                                            defaultOpen={true}
+                                        >
+                                            <div className="run-detail-message-block run-detail-message-block--user">
+                                                {selectedRun.meta.extras.last_user_message}
+                                            </div>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Resposta da IA */}
+                                    {selectedRun.meta.extras.llm_response_full && (
+                                        <CollapsibleSection
+                                            title="Resposta da IA"
+                                            icon={<Bot size={14} />}
+                                            badge={`${selectedRun.meta.extras.llm_response_full.length} chars`}
+                                            defaultOpen={true}
+                                        >
+                                            <div className="run-detail-message-block run-detail-message-block--ai">
+                                                {selectedRun.meta.extras.llm_response_full}
+                                            </div>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Chunks enviados */}
+                                    {selectedRun.meta.extras.chunks_sent && selectedRun.meta.extras.chunks_sent.length > 0 && (
+                                        <CollapsibleSection
+                                            title="Mensagens enviadas"
+                                            icon={<Send size={14} />}
+                                            badge={selectedRun.meta.extras.chunks_sent.length}
+                                        >
+                                            {selectedRun.meta.extras.chunks_sent.map((chunk, i) => (
+                                                <div key={i} className="run-detail-chunk">
+                                                    <div className="run-detail-chunk-label">#{i + 1}</div>
+                                                    <div className="run-detail-chunk-body">{chunk}</div>
+                                                </div>
+                                            ))}
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Contexto da conversa (transcript) */}
+                                    {selectedRun.meta.extras.context_transcript && (
+                                        <CollapsibleSection
+                                            title="Contexto enviado ao modelo"
+                                            icon={<MessageSquare size={14} />}
+                                            badge={`${selectedRun.meta.extras.context_transcript.length} chars`}
+                                        >
+                                            <pre className="run-detail-message-block run-detail-message-block--transcript">
+                                                {selectedRun.meta.extras.context_transcript}
+                                            </pre>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* System Prompt */}
+                                    {selectedRun.meta.extras.system_prompt && (
+                                        <CollapsibleSection
+                                            title="System Prompt configurado"
+                                            icon={<Cpu size={14} />}
+                                            badge={`${selectedRun.meta.extras.system_prompt.length} chars`}
+                                        >
+                                            <pre className="run-detail-message-block run-detail-message-block--system">
+                                                {selectedRun.meta.extras.system_prompt}
+                                            </pre>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Handoff */}
+                                    {selectedRun.meta.extras.handoff?.triggered && (
+                                        <div style={{ marginBottom: 16, padding: '10px 12px', background: 'color-mix(in srgb, var(--orange, #f59e0b) 10%, transparent)', borderRadius: 8, fontSize: 13, color: 'var(--orange, #f59e0b)' }}>
+                                            <strong>🔄 Handoff acionado</strong>
+                                            {selectedRun.meta.extras.handoff.reason && (
+                                                <div style={{ marginTop: 4, fontSize: 12 }}>
+                                                    Motivo: {selectedRun.meta.extras.handoff.reason}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             {/* Steps timeline */}

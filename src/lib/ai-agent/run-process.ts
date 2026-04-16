@@ -10,6 +10,7 @@ import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from './types'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
 import { processUnprocessedMedia, type MediaProviderInfo } from '@/lib/ai-agent/media-processing'
+import { createLogger, newCorrelationId } from '@/lib/logger'
 
 // ─── Cache de configuração do agente IA ───────────────────────────
 // A config raramente muda, mas é buscada a cada mensagem recebida.
@@ -388,10 +389,34 @@ export async function runAiProcess(
     let runFinished = false
     const runSourceVal = opts?.runSource ?? 'unknown'
     const runStartMs = Date.now()
+    const correlationId = newCorrelationId()
+    const log = createLogger({
+        tag: 'ai_process',
+        workspace: workspace_slug,
+        contact: contact_id.slice(0, 8),
+        conversation: conversationId?.slice(0, 8) ?? '',
+        correlation_id: correlationId,
+        source: runSourceVal
+    })
     const runSteps: Array<{ step: string; ts: number; detail?: unknown }> = []
     function addRunStep(step: string, detail?: unknown) {
         runSteps.push({ step, ts: Date.now() - runStartMs, detail })
+        log.debug(step, detail)
     }
+    // Dados ricos para o painel de Atividade — capturados ao longo da execução
+    const runExtras: {
+        system_prompt?: string
+        context_transcript?: string
+        last_user_message?: string
+        llm_response_full?: string
+        llm_usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+        model?: string
+        provider?: string
+        temperature?: number
+        tools_called?: string[]
+        handoff?: { triggered: boolean; reason?: string | null }
+        chunks_sent?: string[]
+    } = {}
     addRunStep('start', { contact_id, conversation_id: conversationId, source: runSourceVal })
 
     try {
@@ -416,10 +441,15 @@ export async function runAiProcess(
         const id = runId
         addRunStep('finish', { status: p.status, reason: p.reason })
         try {
+            const metaJson = {
+                steps: runSteps,
+                extras: runExtras,
+                duration_ms: Date.now() - runStartMs
+            }
             await sql.unsafe(
                 `UPDATE ${sch}.ai_agent_runs SET status = $2::text, finished_at = now(), reason = $3, error_message = $4, meta = $5::jsonb
                  WHERE id = $1::uuid`,
-                [id, p.status, p.reason ?? null, p.errorMessage ?? null, JSON.stringify({ steps: runSteps })]
+                [id, p.status, p.reason ?? null, p.errorMessage ?? null, JSON.stringify(metaJson)]
             )
         } catch (e) {
             console.error('runAiProcess: ai_agent_runs finish', e)
@@ -550,6 +580,18 @@ export async function runAiProcess(
         transcriptLength: context?.transcript?.length ?? 0,
         contactPhone: context?.contactPhone?.slice(-4)
     })
+    if (context) {
+        // Captura dados ricos para o painel de Atividade
+        runExtras.system_prompt = (config.system_prompt || '').trim() || '(sem prompt customizado)'
+        runExtras.context_transcript = context.transcript
+        // Extrair última mensagem do contato (a mais relevante)
+        const lines = (context.transcript || '').split('\n').filter(l => l.trim())
+        const lastContactLine = [...lines].reverse().find(l => /^(Cliente|Contato|Usuário|User):/i.test(l))
+        runExtras.last_user_message = lastContactLine ?? (lines[lines.length - 1] ?? '')
+        runExtras.model = config.model
+        runExtras.provider = config.provider
+        runExtras.temperature = typeof config.temperature === 'number' ? config.temperature : undefined
+    }
     if (!context) {
         await finishAgentRun({ status: 'error', errorMessage: 'Failed to build context' })
         return { ok: false, status: 500, error: 'Failed to build context' }
@@ -577,6 +619,24 @@ export async function runAiProcess(
         voiceCount: response.voiceDeliveries?.length ?? 0,
         tokens: response.usage?.total_tokens ?? 0
     })
+    // Captura resposta completa e tokens detalhados
+    runExtras.llm_response_full = response.text ?? ''
+    if (response.usage) {
+        runExtras.llm_usage = {
+            prompt_tokens: response.usage.prompt_tokens,
+            completion_tokens: response.usage.completion_tokens,
+            total_tokens: response.usage.total_tokens
+        }
+    }
+    // Detecta tools chamadas (derivado do response)
+    const toolsDetected: string[] = []
+    if ((response.voiceDeliveries?.length ?? 0) > 0) toolsDetected.push('send_voice_message')
+    if (response.shouldHandoff) toolsDetected.push('transfer_to_human')
+    runExtras.tools_called = toolsDetected
+    runExtras.handoff = {
+        triggered: response.shouldHandoff === true,
+        reason: response.handoffReason ?? null
+    }
 
     if (response.usage && response.usage.total_tokens > 0) {
         try {
@@ -640,6 +700,7 @@ export async function runAiProcess(
 
     const chunks = aiReplyChunks(textToSave, config)
     addRunStep('response_chunked', { totalChunks: chunks.length, chunkSizes: chunks.map(c => c.length) })
+    runExtras.chunks_sent = chunks
     let sendFailed = false
     const gapMs = config.send_delay_ms ?? 1200
     const sendOpts = sendOptionsFromConfig(config)

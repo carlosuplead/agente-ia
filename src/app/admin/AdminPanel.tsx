@@ -3,6 +3,102 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
+// ── Modal helpers (replacing window.confirm/prompt) ──
+type ConfirmState = {
+    title: string
+    message: string
+    confirmLabel: string
+    danger?: boolean
+    onConfirm: () => void | Promise<void>
+} | null
+
+type InputState = {
+    title: string
+    message: string
+    placeholder?: string
+    defaultValue?: string
+    inputType?: 'text' | 'password'
+    confirmLabel: string
+    minLength?: number
+    onConfirm: (value: string) => void | Promise<void>
+} | null
+
+function ConfirmModal({ state, onCancel }: { state: ConfirmState; onCancel: () => void }) {
+    if (!state) return null
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+            <div className="modal-card" role="dialog" aria-modal="true">
+                <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600 }}>{state.title}</h3>
+                <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.5 }}>
+                    {state.message}
+                </p>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+                    <button
+                        className={`btn ${state.danger ? 'btn-danger' : 'btn-primary'}`}
+                        onClick={async () => {
+                            await state.onConfirm()
+                            onCancel()
+                        }}
+                    >
+                        {state.confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function InputModal({ state, onCancel }: { state: InputState; onCancel: () => void }) {
+    const [value, setValue] = useState(state?.defaultValue ?? '')
+    useEffect(() => { setValue(state?.defaultValue ?? '') }, [state])
+    if (!state) return null
+    const invalid = state.minLength !== undefined && value.length < state.minLength
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
+            <div className="modal-card" role="dialog" aria-modal="true">
+                <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600 }}>{state.title}</h3>
+                <p style={{ margin: '0 0 12px', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
+                    {state.message}
+                </p>
+                <input
+                    type={state.inputType ?? 'text'}
+                    className="input"
+                    value={value}
+                    placeholder={state.placeholder}
+                    onChange={e => setValue(e.target.value)}
+                    autoFocus
+                    style={{ marginBottom: 12 }}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter' && !invalid && value) {
+                            void state.onConfirm(value)
+                            onCancel()
+                        }
+                    }}
+                />
+                {state.minLength !== undefined && (
+                    <p style={{ fontSize: 12, color: invalid ? 'var(--red, #ef4444)' : 'var(--text-muted)', margin: '0 0 12px' }}>
+                        Mínimo de {state.minLength} caracteres ({value.length})
+                    </p>
+                )}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+                    <button
+                        className="btn btn-primary"
+                        disabled={!value || invalid}
+                        onClick={async () => {
+                            await state.onConfirm(value)
+                            onCancel()
+                        }}
+                    >
+                        {state.confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 type WorkspaceAdmin = {
     id: string
     name: string
@@ -34,6 +130,14 @@ export function AdminPanel() {
     const [users, setUsers] = useState<UserAdmin[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+    const [confirmState, setConfirmState] = useState<ConfirmState>(null)
+    const [inputState, setInputState] = useState<InputState>(null)
+    const [successMessage, setSuccessMessage] = useState('')
+    const [workspacePage, setWorkspacePage] = useState(1)
+    const [userPage, setUserPage] = useState(1)
+    const [workspaceSearch, setWorkspaceSearch] = useState('')
+    const [userSearch, setUserSearch] = useState('')
+    const PAGE_SIZE = 25
 
     const loadWorkspaces = useCallback(async () => {
         try {
@@ -69,62 +173,93 @@ export function AdminPanel() {
     }, [loadWorkspaces, loadUsers])
 
     async function handleDeleteWorkspace(slug: string) {
-        if (!window.confirm(`Tem certeza que deseja remover o workspace "${slug}"?\n\nTODOS os dados (contatos, mensagens, configurações) serão removidos permanentemente.`)) return
-        setError('')
-        const res = await fetch('/api/admin/workspaces', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slug })
+        setConfirmState({
+            title: 'Remover workspace',
+            message: `Tem certeza que deseja remover o workspace "${slug}"?\n\nTODOS os dados (contatos, mensagens, configurações) serão removidos permanentemente.`,
+            confirmLabel: 'Remover definitivamente',
+            danger: true,
+            onConfirm: async () => {
+                setError('')
+                const res = await fetch('/api/admin/workspaces', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ slug })
+                })
+                if (res.ok) {
+                    setWorkspaces(prev => prev.filter(w => w.slug !== slug))
+                } else {
+                    const data = await res.json().catch(() => ({})) as { error?: string }
+                    setError(data.error || `Falha ao remover workspace "${slug}"`)
+                }
+            }
         })
-        if (res.ok) {
-            setWorkspaces(prev => prev.filter(w => w.slug !== slug))
-        } else {
-            const data = await res.json().catch(() => ({})) as { error?: string }
-            setError(data.error || `Falha ao remover workspace "${slug}"`)
-        }
     }
 
     async function handleDeleteUser(userId: string, userEmail: string) {
-        if (!window.confirm(`Tem certeza que deseja REMOVER o usuário "${userEmail}"?\n\nEsta ação é irreversível. O usuário perderá acesso à plataforma.`)) return
-        setError('')
-        const res = await fetch('/api/admin/users', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId })
+        setConfirmState({
+            title: 'Remover usuário',
+            message: `Tem certeza que deseja REMOVER o usuário "${userEmail}"?\n\nEsta ação é irreversível. O usuário perderá acesso à plataforma.`,
+            confirmLabel: 'Remover usuário',
+            danger: true,
+            onConfirm: async () => {
+                setError('')
+                const res = await fetch('/api/admin/users', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                })
+                if (res.ok) {
+                    setUsers(prev => prev.filter(u => u.id !== userId))
+                } else {
+                    const data = await res.json().catch(() => ({})) as { error?: string }
+                    setError(data.error || `Falha ao remover usuário "${userEmail}"`)
+                }
+            }
         })
-        if (res.ok) {
-            setUsers(prev => prev.filter(u => u.id !== userId))
-        } else {
-            const data = await res.json().catch(() => ({})) as { error?: string }
-            setError(data.error || `Falha ao remover usuário "${userEmail}"`)
-        }
     }
 
     async function handleResetPassword(userId: string, userEmail: string) {
-        const newPassword = window.prompt(`Nova senha para ${userEmail}:\n(mínimo 6 caracteres)`)
-        if (!newPassword) return
-        if (newPassword.length < 6) {
-            setError('A senha deve ter pelo menos 6 caracteres')
-            return
-        }
-        setError('')
-        const res = await fetch('/api/admin/users', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: userId, new_password: newPassword })
+        setInputState({
+            title: 'Redefinir senha',
+            message: `Nova senha para ${userEmail}:`,
+            placeholder: 'Mínimo 6 caracteres',
+            inputType: 'password',
+            confirmLabel: 'Atualizar senha',
+            minLength: 6,
+            onConfirm: async (newPassword) => {
+                setError('')
+                setSuccessMessage('')
+                const res = await fetch('/api/admin/users', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, new_password: newPassword })
+                })
+                if (res.ok) {
+                    setSuccessMessage(`Senha de ${userEmail} foi atualizada com sucesso.`)
+                    setTimeout(() => setSuccessMessage(''), 5000)
+                } else {
+                    const data = await res.json().catch(() => ({})) as { error?: string }
+                    setError(data.error || `Falha ao resetar senha de "${userEmail}"`)
+                }
+            }
         })
-        if (res.ok) {
-            alert(`Senha de ${userEmail} foi atualizada com sucesso.`)
-        } else {
-            const data = await res.json().catch(() => ({})) as { error?: string }
-            setError(data.error || `Falha ao resetar senha de "${userEmail}"`)
-        }
     }
 
     async function handleApproveUser(userId: string, userEmail: string, fullName: string | null) {
         const defaultName = fullName || userEmail.split('@')[0]
-        const name = window.prompt(`Nome do workspace para ${userEmail}:`, defaultName)
-        if (!name) return
+        setInputState({
+            title: 'Aprovar novo workspace',
+            message: `Nome do workspace para ${userEmail}:`,
+            defaultValue: defaultName,
+            placeholder: 'Nome do workspace',
+            confirmLabel: 'Criar workspace',
+            onConfirm: async (name) => {
+                await doApproveUser(userId, name)
+            }
+        })
+    }
+
+    async function doApproveUser(userId: string, name: string) {
         const slug = name
             .toLowerCase()
             .normalize('NFD')
@@ -257,6 +392,24 @@ export function AdminPanel() {
             </div>
 
             {error && <div className="login-error" role="alert">{error}</div>}
+            {successMessage && (
+                <div
+                    role="status"
+                    style={{
+                        padding: '10px 14px',
+                        background: 'color-mix(in srgb, var(--green, #22c55e) 12%, transparent)',
+                        color: 'var(--green, #22c55e)',
+                        borderRadius: 8,
+                        marginBottom: 12,
+                        fontSize: 14
+                    }}
+                >
+                    {successMessage}
+                </div>
+            )}
+
+            <ConfirmModal state={confirmState} onCancel={() => setConfirmState(null)} />
+            <InputModal state={inputState} onCancel={() => setInputState(null)} />
 
             <div style={{ display: 'flex', gap: 4, marginBottom: '1rem' }}>
                 <button
@@ -275,6 +428,19 @@ export function AdminPanel() {
 
             {tab === 'workspaces' && (
                 <div className="card" style={{ padding: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+                        <input
+                            type="search"
+                            className="input"
+                            placeholder="Pesquisar workspace (nome, slug)..."
+                            value={workspaceSearch}
+                            onChange={e => { setWorkspaceSearch(e.target.value); setWorkspacePage(1) }}
+                            style={{ maxWidth: 320 }}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {workspaces.length} workspace(s) no total
+                        </span>
+                    </div>
                     <div style={{ overflowX: 'auto' }}>
                         <table className="token-usage-table" style={{ width: '100%' }}>
                             <thead>
@@ -291,14 +457,25 @@ export function AdminPanel() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {workspaces.length === 0 && (
-                                    <tr>
-                                        <td colSpan={9} style={{ color: 'var(--text-secondary)' }}>
-                                            Nenhum workspace encontrado.
-                                        </td>
-                                    </tr>
-                                )}
-                                {workspaces.map(ws => (
+                                {(() => {
+                                    const q = workspaceSearch.trim().toLowerCase()
+                                    const filtered = q
+                                        ? workspaces.filter(w => w.name.toLowerCase().includes(q) || w.slug.toLowerCase().includes(q))
+                                        : workspaces
+                                    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+                                    const page = Math.min(workspacePage, totalPages)
+                                    const start = (page - 1) * PAGE_SIZE
+                                    const slice = filtered.slice(start, start + PAGE_SIZE)
+                                    if (filtered.length === 0) {
+                                        return (
+                                            <tr>
+                                                <td colSpan={9} style={{ color: 'var(--text-secondary)' }}>
+                                                    {q ? 'Nenhum workspace corresponde à pesquisa.' : 'Nenhum workspace encontrado.'}
+                                                </td>
+                                            </tr>
+                                        )
+                                    }
+                                    return slice.map(ws => (
                                     <tr key={ws.slug}>
                                         <td><strong>{ws.name}</strong></td>
                                         <td><code style={{ fontSize: 13 }}>{ws.slug}</code></td>
@@ -325,10 +502,43 @@ export function AdminPanel() {
                                             </button>
                                         </td>
                                     </tr>
-                                ))}
+                                    ))
+                                })()}
                             </tbody>
                         </table>
                     </div>
+                    {(() => {
+                        const q = workspaceSearch.trim().toLowerCase()
+                        const filtered = q
+                            ? workspaces.filter(w => w.name.toLowerCase().includes(q) || w.slug.toLowerCase().includes(q))
+                            : workspaces
+                        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+                        if (totalPages <= 1) return null
+                        const page = Math.min(workspacePage, totalPages)
+                        return (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    disabled={page <= 1}
+                                    onClick={() => setWorkspacePage(p => Math.max(1, p - 1))}
+                                    style={{ padding: '4px 10px', fontSize: 13 }}
+                                >
+                                    ← Anterior
+                                </button>
+                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                    Página {page} de {totalPages}
+                                </span>
+                                <button
+                                    className="btn btn-secondary"
+                                    disabled={page >= totalPages}
+                                    onClick={() => setWorkspacePage(p => p + 1)}
+                                    style={{ padding: '4px 10px', fontSize: 13 }}
+                                >
+                                    Próxima →
+                                </button>
+                            </div>
+                        )
+                    })()}
                 </div>
             )}
 

@@ -83,6 +83,8 @@ export function ConversasTab() {
 
     const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
     const [chatMessages, setChatMessages] = useState<ChatMsg[]>([])
+    // Progresso de upload por ID de mensagem otimista (0-100)
+    const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
     const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null)
     const [convInfo, setConvInfo] = useState<ConvInfo | null>(null)
     const [chatLoading, setChatLoading] = useState(false)
@@ -324,24 +326,60 @@ export function ConversasTab() {
             formData.append('filename', file.name)
             if (caption) formData.append('caption', caption)
 
-            const res = await fetch('/api/whatsapp/send-media', {
-                method: 'POST',
-                credentials: 'include',
-                body: formData
+            // Usa XHR para obter eventos de progresso de upload
+            setUploadProgress(prev => ({ ...prev, [optimisticId]: 0 }))
+            const result = await new Promise<{ ok: boolean; status: number; error?: string }>((resolve) => {
+                const xhr = new XMLHttpRequest()
+                xhr.open('POST', '/api/whatsapp/send-media')
+                xhr.withCredentials = true
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100)
+                        setUploadProgress(prev => ({ ...prev, [optimisticId]: pct }))
+                    }
+                }
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve({ ok: true, status: xhr.status })
+                    } else {
+                        let errMsg = `Erro ${xhr.status}`
+                        try {
+                            const parsed = JSON.parse(xhr.responseText) as { error?: string }
+                            if (parsed.error) errMsg = parsed.error
+                        } catch {
+                            /* ignore parse error */
+                        }
+                        resolve({ ok: false, status: xhr.status, error: errMsg })
+                    }
+                }
+                xhr.onerror = () => resolve({ ok: false, status: 0, error: 'Erro de rede' })
+                xhr.ontimeout = () => resolve({ ok: false, status: 0, error: 'Timeout no upload' })
+                xhr.send(formData)
             })
-            if (res.ok) {
+
+            // Limpa progresso
+            setUploadProgress(prev => {
+                const next = { ...prev }
+                delete next[optimisticId]
+                return next
+            })
+
+            if (result.ok) {
                 await loadChat(selectedContactId)
                 loadConversations(true).catch(() => {})
             } else {
-                const errBody = await res.json().catch(() => ({})) as { error?: string }
-                const errMsg = errBody.error || `Erro ${res.status}`
-                console.error('[send-media] falhou:', res.status, errMsg)
+                console.error('[send-media] falhou:', result.status, result.error)
                 setChatMessages(prev => prev.map(m =>
                     m.id === optimisticId ? { ...m, status: 'failed' } : m
                 ))
-                d.setToast({ message: `Erro: ${errMsg.slice(0, 100)}`, variant: 'error' })
+                d.setToast({ message: `Erro: ${(result.error || '').slice(0, 100)}`, variant: 'error' })
             }
         } catch {
+            setUploadProgress(prev => {
+                const next = { ...prev }
+                delete next[optimisticId]
+                return next
+            })
             setChatMessages(prev => prev.map(m =>
                 m.id === optimisticId ? { ...m, status: 'failed' } : m
             ))
@@ -352,18 +390,20 @@ export function ConversasTab() {
     async function startRecording() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            // Prioridade de formato: mp4 (Chrome 120+) > ogg (Firefox) > webm (fallback)
-            // Meta WhatsApp aceita: audio/aac, audio/mp4, audio/mpeg, audio/ogg (opus), audio/amr
-            // Meta NÃO aceita: audio/webm
+            // Prioridade: OGG Opus (aparece como voice note no WhatsApp) > mp4 > webm (fallback)
+            // Meta aceita: audio/aac, audio/mp4, audio/mpeg, audio/ogg (opus), audio/amr
+            // Voice note (bolinha de áudio) só funciona com audio/ogg;codecs=opus
             const chosenMime =
-                MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
                 : MediaRecorder.isTypeSupported('audio/mp4;codecs=opus') ? 'audio/mp4;codecs=opus'
-                : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
                 : MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
                 : 'audio/webm'
-            const chosenExt = chosenMime.startsWith('audio/mp4') ? 'm4a'
-                : chosenMime.startsWith('audio/ogg') ? 'ogg'
+            const chosenExt = chosenMime.startsWith('audio/ogg') ? 'ogg'
+                : chosenMime.startsWith('audio/mp4') ? 'm4a'
                 : 'webm'
+            console.log('[audio] formato escolhido:', chosenMime)
             const mediaRecorder = new MediaRecorder(stream, { mimeType: chosenMime })
             mediaRecorderRef.current = mediaRecorder
             audioChunksRef.current = []
@@ -381,18 +421,22 @@ export function ConversasTab() {
                 if (blob.size < 1000) return // too short
 
                 let file: File
-                // Se gravou em webm (Chrome), converte pra MP3 (Meta não aceita webm)
+                // Se gravou em webm (browsers antigos), converte pra MP3 como último recurso
                 if (chosenMime.startsWith('audio/webm')) {
+                    console.warn('[audio] browser só suporta webm — convertendo para MP3 (não será voice note)')
+                    d.setToast({ message: 'Áudio será enviado como música — seu browser não suporta voice note', variant: 'error' })
                     try {
                         const { convertToMp3 } = await import('@/lib/audio/webm-to-mp3')
                         file = await convertToMp3(blob)
                     } catch (err) {
                         console.error('[audio] conversão mp3 falhou:', err)
                         d.setToast({ message: 'Erro ao converter áudio. Tente gravar novamente.', variant: 'error' })
-                        return // NÃO enviar webm — Meta rejeita
+                        return
                     }
                 } else {
+                    // Formato nativo aceito pela Meta (ogg/mp4) — envia direto
                     file = new File([blob], `audio-${Date.now()}.${chosenExt}`, { type: chosenMime })
+                    console.log(`[audio] enviando como ${chosenMime}, ${blob.size} bytes`)
                 }
                 await handleSendMedia(file)
             }
@@ -754,6 +798,20 @@ export function ConversasTab() {
                                             <div className="chat-bubble-text">{msg.body}</div>
                                         )}
 
+                                        {/* Upload progress bar (apenas para mensagens otimistas em curso) */}
+                                        {uploadProgress[msg.id] !== undefined && msg.status === 'sending' && (
+                                            <div className="chat-bubble-progress">
+                                                <div
+                                                    className="chat-bubble-progress-bar"
+                                                    style={{ width: `${uploadProgress[msg.id]}%` }}
+                                                />
+                                                <span className="chat-bubble-progress-text">
+                                                    {uploadProgress[msg.id] < 100
+                                                        ? `Enviando ${uploadProgress[msg.id]}%`
+                                                        : 'Processando...'}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="chat-bubble-time">
                                             {new Date(msg.created_at).toLocaleString('pt-BR', {
                                                 hour: '2-digit', minute: '2-digit',

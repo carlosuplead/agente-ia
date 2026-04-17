@@ -2827,21 +2827,41 @@ button.nav-item {
   position: fixed;
   inset: 0;
   z-index: 900;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(10, 12, 20, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   justify-content: flex-end;
+  animation: uiFadeIn 0.18s ease-out both;
 }
 
 .run-detail-panel {
   width: 640px;
   max-width: 95vw;
   height: 100%;
-  background: var(--surface);
+  /* Fundo sólido garantido (sem depender de alpha/blend). */
+  background: var(--surface-card);
+  background-color: var(--surface-card);
   color: var(--text-primary);
-  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.15);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  isolation: isolate;
+  animation: runPanelSlideIn 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-theme="dark"] .run-detail-panel {
+  /* Em dark mode, forçar um tom mais claro que --bg para contraste. */
+  background: #1f1f27;
+  background-color: #1f1f27;
+  box-shadow: -12px 0 50px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes runPanelSlideIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
 }
 
 .run-detail-header {

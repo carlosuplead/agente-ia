@@ -2822,46 +2822,53 @@ button.nav-item {
   cursor: pointer;
 }
 
-/* ── Run Detail Panel ── */
+/* ── Run Detail Panel ──
+   IMPORTANTE: fundo 100% sólido, sem alpha, sem animações de opacity.
+   Alguns browsers/GPUs deixavam o painel translúcido em certos estados. */
 .run-detail-overlay {
   position: fixed;
   inset: 0;
   z-index: 900;
-  background: rgba(10, 12, 20, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background-color: rgba(15, 18, 28, 0.55);
   display: flex;
   justify-content: flex-end;
-  animation: uiFadeIn 0.18s ease-out both;
+  animation: none;
+  opacity: 1 !important;
 }
 
 .run-detail-panel {
   width: 640px;
   max-width: 95vw;
   height: 100%;
-  /* Fundo sólido garantido (sem depender de alpha/blend). */
-  background: var(--surface-card);
-  background-color: var(--surface-card);
+  background-color: #ffffff !important;
   color: var(--text-primary);
   border-left: 1px solid var(--border);
   box-shadow: -12px 0 40px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  isolation: isolate;
-  animation: runPanelSlideIn 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: runPanelSlideIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  opacity: 1 !important;
 }
 
 [data-theme="dark"] .run-detail-panel {
-  /* Em dark mode, forçar um tom mais claro que --bg para contraste. */
-  background: #1f1f27;
-  background-color: #1f1f27;
+  background-color: #1f1f27 !important;
   box-shadow: -12px 0 50px rgba(0, 0, 0, 0.6);
 }
 
+/* Slide-in só com transform — sem opacity, para garantir que nunca fica transparente */
 @keyframes runPanelSlideIn {
-  from { transform: translateX(24px); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from { transform: translateX(24px); }
+  to   { transform: translateX(0); }
+}
+
+/* Garantir que os cards DENTRO do painel não herdam a animação de fade-in
+   que aplicámos globalmente (.card { animation: uiFadeIn }). Se o painel já
+   está a fazer slide-in, o conteúdo deve aparecer imediatamente sólido. */
+.run-detail-panel .card,
+.run-detail-panel .page-header {
+  animation: none !important;
+  opacity: 1 !important;
 }
 
 .run-detail-header {

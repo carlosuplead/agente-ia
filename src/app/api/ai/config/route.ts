@@ -4,7 +4,7 @@ import { requireWorkspaceInternal } from '@/lib/auth/workspace-access'
 import { getTenantSql, quotedSchema, isMissingTenantSchema } from '@/lib/db/tenant-sql'
 import { defaultN8nToolDescription, normalizeToolNameFromUi } from '@/lib/ai-agent/n8n-tools'
 import { parseFollowupStepsFromBody } from '@/lib/ai-agent/followup-steps'
-import { sanitizeAiConfigForClient } from '@/lib/dashboard/ai-config'
+import { sanitizeAiConfigForClient, missingKeysForProvider } from '@/lib/dashboard/ai-config'
 import { hasValidAllowlistEntry } from '@/lib/ai-agent/test-mode-allowlist'
 import { encryptWorkspaceLlmKeyIfConfigured } from '@/lib/crypto/workspace-llm-keys'
 import { invalidateAgentConfigCache } from '@/lib/ai-agent/run-process'
@@ -459,6 +459,41 @@ export async function POST(request: Request) {
 
         const finalRows = await sql.unsafe(`SELECT * FROM ${sch}.ai_agent_config LIMIT 1`, [])
         const finalRaw = finalRows[0] as Record<string, unknown> | undefined
+
+        // ── Enforce BYOK: sem chaves, IA não pode estar ativa ──
+        if (finalRaw && finalRaw.enabled === true) {
+            const presence = {
+                openai: typeof finalRaw.openai_api_key === 'string' && (finalRaw.openai_api_key as string).length > 0,
+                google: typeof finalRaw.google_api_key === 'string' && (finalRaw.google_api_key as string).length > 0,
+                anthropic:
+                    typeof finalRaw.anthropic_api_key === 'string' && (finalRaw.anthropic_api_key as string).length > 0,
+                googleServiceAccount:
+                    typeof finalRaw.google_service_account_json === 'string' &&
+                    (finalRaw.google_service_account_json as string).length > 0,
+                vertexProject:
+                    typeof finalRaw.google_vertex_project === 'string' &&
+                    (finalRaw.google_vertex_project as string).trim().length > 0,
+                vertexLocation:
+                    typeof finalRaw.google_vertex_location === 'string' &&
+                    (finalRaw.google_vertex_location as string).trim().length > 0
+            }
+            const missing = missingKeysForProvider(String(finalRaw.provider || ''), presence)
+            if (missing.length > 0) {
+                // Reverte enabled para false para manter estado consistente.
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET enabled = false, updated_at = now() WHERE singleton_key = true`,
+                    []
+                )
+                invalidateAgentConfigCache(workspace_slug as string)
+                return NextResponse.json(
+                    {
+                        error: `Para ativar a IA configure antes: ${missing.join(', ')}.`
+                    },
+                    { status: 400 }
+                )
+            }
+        }
+
         const config = finalRaw ? sanitizeAiConfigForClient(finalRaw) : sanitizeAiConfigForClient(updated)
 
         // Invalidar cache em memória para que a próxima mensagem use a config atualizada

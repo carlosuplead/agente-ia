@@ -6,6 +6,7 @@ import {
     modelSelectValue,
     presetsForProvider
 } from '@/lib/dashboard/model-presets'
+import { missingKeysForProvider } from '@/lib/dashboard/ai-config'
 import { useDashboard } from './dashboard-context'
 import {
     Cpu,
@@ -15,7 +16,8 @@ import {
     Clock,
     Calendar,
     Bell,
-    Webhook
+    Webhook,
+    AlertTriangle
 } from 'lucide-react'
 
 function FieldError({ id, message }: { id?: string; message?: string | undefined }) {
@@ -76,6 +78,25 @@ export function AgentConfigTab() {
     const presets = presetsForProvider(d.cfgProvider) as readonly string[]
     const modelSel = modelSelectValue(d.cfgProvider, d.cfgModel)
 
+    // Estado das chaves (só considera o que está guardado na BD; o utilizador
+    // precisa de guardar depois de colar uma chave nova para desbloquear).
+    const keyPresence = {
+        openai: !!d.aiConfig?.openai_api_key_set,
+        google: !!d.aiConfig?.google_api_key_set,
+        anthropic: !!d.aiConfig?.anthropic_api_key_set,
+        googleServiceAccount: !!d.aiConfig?.google_service_account_json_set,
+        vertexProject: !!(d.aiConfig?.google_vertex_project && String(d.aiConfig.google_vertex_project).trim()),
+        vertexLocation: !!(d.aiConfig?.google_vertex_location && String(d.aiConfig.google_vertex_location).trim())
+    }
+    const missingKeys = missingKeysForProvider(d.cfgProvider, keyPresence)
+    const missingFallback =
+        d.cfgFallbackProvider ? missingKeysForProvider(d.cfgFallbackProvider, keyPresence) : []
+    const canEnableAi = missingKeys.length === 0
+    // Força desmarcar "IA ativa" enquanto faltam chaves
+    useEffect(() => {
+        if (!canEnableAi && d.cfgEnabled) d.setCfgEnabled(false)
+    }, [canEnableAi, d.cfgEnabled, d.setCfgEnabled])
+
     return (
         <>
             <div className="page-header">
@@ -111,6 +132,34 @@ export function AgentConfigTab() {
                 </p>
             ) : (
                 <>
+                    {(missingKeys.length > 0 || missingFallback.length > 0) && (
+                        <div className="alert-card alert-card--warn" role="alert" style={{ marginBottom: 16 }}>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                <AlertTriangle size={20} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+                                <div style={{ flex: 1 }}>
+                                    <p style={{ margin: 0, fontWeight: 600 }}>
+                                        {missingKeys.length > 0
+                                            ? 'Faltam chaves de API para ativar a IA'
+                                            : 'Fallback incompleto'}
+                                    </p>
+                                    {missingKeys.length > 0 && (
+                                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                                            Para usar o provedor <strong>{d.cfgProvider}</strong>, configure em
+                                            «Chaves de API» abaixo: <strong>{missingKeys.join(', ')}</strong>. Depois
+                                            carrega em «Guardar». A opção <em>IA ativa</em> fica bloqueada até lá.
+                                        </p>
+                                    )}
+                                    {missingKeys.length === 0 && missingFallback.length > 0 && (
+                                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5 }}>
+                                            O fallback <strong>{d.cfgFallbackProvider}</strong> não tem chave configurada
+                                            ({missingFallback.join(', ')}). Se o provedor principal falhar, não haverá
+                                            recurso.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* ── Card 1: Provedor e Modelo ── */}
                     <div className="card">
                         <div className="card-header-with-icon" style={{ marginBottom: 20 }}>
@@ -122,9 +171,16 @@ export function AgentConfigTab() {
                                 id="cfg-ia-ativa"
                                 type="checkbox"
                                 checked={d.cfgEnabled}
+                                disabled={!canEnableAi}
                                 onChange={e => d.setCfgEnabled(e.target.checked)}
                             />
-                            <label htmlFor="cfg-ia-ativa">IA ativa</label>
+                            <label
+                                htmlFor="cfg-ia-ativa"
+                                title={!canEnableAi ? `Configure: ${missingKeys.join(', ')}` : undefined}
+                                style={{ opacity: canEnableAi ? 1 : 0.6 }}
+                            >
+                                IA ativa{!canEnableAi && ' (bloqueado — faltam chaves)'}
+                            </label>
                         </div>
                         <div className="checkbox-row" style={{ marginTop: 12 }}>
                             <input

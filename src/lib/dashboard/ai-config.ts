@@ -55,6 +55,41 @@ export function normalizeAiConfig(c: Partial<AiConfigRow> | null | undefined): A
     return { ...AI_CONFIG_FALLBACK, ...c }
 }
 
+export type LlmKeyPresence = {
+    openai: boolean
+    google: boolean
+    anthropic: boolean
+    googleServiceAccount: boolean
+    vertexProject: boolean
+    vertexLocation: boolean
+}
+
+/**
+ * Lista os itens que faltam configurar para o provedor escolhido.
+ * Vazio = OK para ativar.
+ */
+export function missingKeysForProvider(
+    provider: string | null | undefined,
+    presence: LlmKeyPresence
+): string[] {
+    const p = (provider || '').trim().toLowerCase()
+    const missing: string[] = []
+    if (p === 'openai') {
+        if (!presence.openai) missing.push('OpenAI API key')
+    } else if (p === 'anthropic') {
+        if (!presence.anthropic) missing.push('Anthropic (Claude) API key')
+    } else {
+        // 'gemini' (ou default)
+        const viaStudio = presence.google
+        const viaVertex =
+            presence.googleServiceAccount && presence.vertexProject && presence.vertexLocation
+        if (!viaStudio && !viaVertex) {
+            missing.push('Google Gemini API key (ou credenciais Vertex AI)')
+        }
+    }
+    return missing
+}
+
 /** Remove chaves secretas da linha da BD; expõe só flags para o browser. */
 export function sanitizeAiConfigForClient(row: Record<string, unknown>): Record<string, unknown> {
     const openaiSet = typeof row.openai_api_key === 'string' && row.openai_api_key.length > 0

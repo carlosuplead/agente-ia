@@ -989,6 +989,22 @@ button.nav-item {
   font-size: 14px;
 }
 
+.alert-card--warn {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-primary);
+}
+
+.alert-card--warn svg {
+  color: var(--orange, #f59e0b);
+}
+
+[data-theme="dark"] .alert-card--warn {
+  background: rgba(245, 158, 11, 0.12);
+}
+
 .config-loading {
   display: flex;
   align-items: center;

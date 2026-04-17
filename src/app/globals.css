@@ -1482,32 +1482,40 @@ button.nav-item {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 4px;
-  height: 168px;
-  padding: 0 4px;
+  gap: 3px;
+  height: 192px;
+  padding: 0 4px 22px;
+  position: relative;
 }
 
 .client-portal-chart-col {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 6px;
   min-width: 0;
   height: 100%;
+  position: relative;
 }
 
 .client-portal-chart-bar {
   width: 100%;
   max-width: 40px;
-  min-height: 4px;
-  border-radius: 8px;
+  min-height: 6px;
+  border-radius: 6px 6px 2px 2px;
   overflow: hidden;
   background: var(--surface-secondary);
-  align-self: flex-end;
+  align-self: center;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.client-portal-chart-col:hover .client-portal-chart-bar {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .client-portal-chart-stack {
@@ -1537,9 +1545,16 @@ button.nav-item {
 
 .client-portal-chart-x {
   font-size: 10px;
+  line-height: 1;
   color: var(--text-muted);
   text-transform: capitalize;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  text-align: center;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .client-portal-chart-legend {

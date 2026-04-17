@@ -2,8 +2,19 @@
 
 import type { TokenUsagePayload } from '@/lib/dashboard/token-usage'
 
-function shortDayLabel(isoDate: string): string {
+function shortDayLabel(isoDate: string, totalDays: number, index: number): string {
     const d = new Date(`${isoDate}T12:00:00Z`)
+    // Muitos dias → compactamos para caber sem sobrepor.
+    if (totalDays > 31) {
+        // 90d: mostra só a cada 7 dias (marcador semanal) em formato curto "d/m"
+        if (index % 7 !== 0 && index !== totalDays - 1) return ''
+        return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'numeric' })
+    }
+    if (totalDays > 14) {
+        // 30d: apenas o número do dia
+        return String(d.getUTCDate())
+    }
+    // 7 / 14d: "seg, 16"
     return d.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric' })
 }
 
@@ -138,7 +149,7 @@ export function TokenUsageSection({
                     <div className="client-portal-chart-wrap" style={{ marginTop: 16 }}>
                         <p className="client-portal-chart-title">Tokens por dia (todos os modelos)</p>
                         <div className="client-portal-chart" role="img" aria-label="Gráfico de tokens por dia">
-                            {tokenUsage.by_day.map(day => {
+                            {tokenUsage.by_day.map((day, idx) => {
                                 const total = day.total_tokens
                                 const hPct = Math.round((total / maxDay) * 100)
                                 return (
@@ -157,7 +168,9 @@ export function TokenUsageSection({
                                                 </div>
                                             )}
                                         </div>
-                                        <span className="client-portal-chart-x">{shortDayLabel(day.date)}</span>
+                                        <span className="client-portal-chart-x">
+                                            {shortDayLabel(day.date, tokenUsage.by_day.length, idx)}
+                                        </span>
                                     </div>
                                 )
                             })}

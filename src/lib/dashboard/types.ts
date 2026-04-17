@@ -7,6 +7,8 @@ export type InstanceRow = {
     phone_number_id?: string | null
     waba_id?: string | null
     meta_token_obtained_at?: string | null
+    meta_webhook_verify_token?: string | null
+    uazapi_webhook_secret?: string | null
     last_connected_at: string | null
     updated_at?: string
 } | null

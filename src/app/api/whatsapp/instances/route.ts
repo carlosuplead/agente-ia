@@ -94,9 +94,9 @@ export async function POST(request: Request) {
 
 /** Literais separados: o client Supabase não infere tipos com `.select(\`\${base}, x\`)`. */
 const INSTANCE_SELECT_PUBLIC =
-    'id, status, phone_number, last_connected_at, updated_at, provider, phone_number_id, waba_id, meta_token_obtained_at' as const
+    'id, status, phone_number, last_connected_at, updated_at, provider, phone_number_id, waba_id, meta_token_obtained_at, meta_webhook_verify_token, uazapi_webhook_secret' as const
 const INSTANCE_SELECT_WITH_TOKEN =
-    'id, status, phone_number, last_connected_at, updated_at, provider, phone_number_id, waba_id, meta_token_obtained_at, instance_token' as const
+    'id, status, phone_number, last_connected_at, updated_at, provider, phone_number_id, waba_id, meta_token_obtained_at, meta_webhook_verify_token, uazapi_webhook_secret, instance_token' as const
 
 type WhatsappInstanceDbRow = {
     id: string
@@ -108,6 +108,8 @@ type WhatsappInstanceDbRow = {
     phone_number_id: string | null
     waba_id: string | null
     meta_token_obtained_at: string | null
+    meta_webhook_verify_token: string | null
+    uazapi_webhook_secret: string | null
     instance_token?: string
 }
 
@@ -127,6 +129,8 @@ export async function GET(request: Request) {
             'client'
         ])
         if (!access.ok) return access.response
+        const canSeeSecrets =
+            access.role === 'owner' || access.role === 'admin' || access.role === 'platform_admin'
 
         const syncUazapi =
             searchParams.get('sync_uazapi') === '1' || searchParams.get('sync_uazapi') === 'true'
@@ -212,6 +216,11 @@ export async function GET(request: Request) {
         }
 
         const { instance_token: _omit, ...instance } = r
+        if (!canSeeSecrets) {
+            // Esconder segredos de webhook de quem não é owner/admin
+            delete (instance as Record<string, unknown>).meta_webhook_verify_token
+            delete (instance as Record<string, unknown>).uazapi_webhook_secret
+        }
         return NextResponse.json({ instance, uazapi_live: uazapiLive })
     } catch {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

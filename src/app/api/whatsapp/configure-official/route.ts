@@ -12,12 +12,17 @@ export async function POST(request: Request) {
             waba_id?: string
             meta_access_token?: string
             phone_number?: string
+            meta_webhook_verify_token?: string
         }
 
         const workspace_slug = body.workspace_slug?.trim()
         const phone_number_id = body.phone_number_id?.trim()
         const waba_id = body.waba_id?.trim()
         const meta_access_token = body.meta_access_token?.trim()
+        const meta_webhook_verify_token =
+            typeof body.meta_webhook_verify_token === 'string'
+                ? body.meta_webhook_verify_token.trim()
+                : undefined
 
         if (!workspace_slug || !phone_number_id || !waba_id || !meta_access_token) {
             return NextResponse.json({ error: 'Faltam campos obrigatórios.' }, { status: 400 })
@@ -39,23 +44,25 @@ export async function POST(request: Request) {
             body.phone_number?.trim() || verified.displayPhoneNumber || null
 
         const token = `official:${workspace_slug}:${phone_number_id}`
+        const upsertPayload: Record<string, unknown> = {
+            workspace_slug,
+            provider: 'official',
+            instance_token: token,
+            phone_number,
+            status: 'connected',
+            phone_number_id,
+            waba_id,
+            meta_access_token,
+            meta_token_obtained_at: new Date().toISOString(),
+            last_connected_at: new Date().toISOString()
+        }
+        // Só actualiza o verify_token se veio explicitamente (string vazia limpa)
+        if (meta_webhook_verify_token !== undefined) {
+            upsertPayload.meta_webhook_verify_token = meta_webhook_verify_token || null
+        }
         const { error } = await supabase
             .from('whatsapp_instances')
-            .upsert(
-                {
-                    workspace_slug,
-                    provider: 'official',
-                    instance_token: token,
-                    phone_number,
-                    status: 'connected',
-                    phone_number_id,
-                    waba_id,
-                    meta_access_token,
-                    meta_token_obtained_at: new Date().toISOString(),
-                    last_connected_at: new Date().toISOString()
-                },
-                { onConflict: 'workspace_slug' }
-            )
+            .upsert(upsertPayload, { onConflict: 'workspace_slug' })
         if (error) {
             if (error.code === '23505') {
                 return NextResponse.json(

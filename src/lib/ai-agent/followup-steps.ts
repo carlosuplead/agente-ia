@@ -35,6 +35,10 @@ export function parseFollowupStepsFromConfig(config: Record<string, unknown>): F
         }
     }
 
+    // Quando há prompt de follow-up, a mensagem fixa passa a ser opcional (IA gera)
+    const hasAiPrompt = typeof config.ai_followup_prompt === 'string'
+        && (config.ai_followup_prompt as string).trim().length > 0
+
     const out: FollowupStep[] = []
     for (let i = 0; i < arr.length && out.length < MAX_STEPS; i++) {
         const item = arr[i]
@@ -47,7 +51,7 @@ export function parseFollowupStepsFromConfig(config: Record<string, unknown>): F
         }
         delay = clampDelayMinutes(delay)
         const msg = String(o.message || '').trim()
-        if (!msg) continue
+        if (!msg && !hasAiPrompt) continue
         out.push({ delay_minutes: delay, message: msg })
     }
 
@@ -73,6 +77,9 @@ export function parseFollowupStepsFromBody(rawBody: unknown, enabled: boolean): 
     const body = rawBody as Record<string, unknown>
     const raw = body.ai_followup_steps
     if (!Array.isArray(raw)) return []
+    // Se há prompt de follow-up definido, a mensagem fixa de cada passo é opcional.
+    const promptRaw = body.ai_followup_prompt
+    const hasAiPrompt = typeof promptRaw === 'string' && promptRaw.trim().length > 0
     const out: FollowupStep[] = []
     for (let i = 0; i < raw.length && out.length < MAX_STEPS; i++) {
         const item = raw[i]
@@ -85,7 +92,7 @@ export function parseFollowupStepsFromBody(rawBody: unknown, enabled: boolean): 
         }
         delay = clampDelayMinutes(delay)
         const msg = String(o.message || '').trim()
-        if (!msg) continue
+        if (!msg && !hasAiPrompt) continue
         out.push({ delay_minutes: delay, message: msg })
     }
     out.sort((a, b) => a.delay_minutes - b.delay_minutes)

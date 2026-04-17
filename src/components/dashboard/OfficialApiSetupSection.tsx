@@ -14,6 +14,7 @@ export function OfficialApiSetupSection() {
     const [phoneId, setPhoneId] = useState('')
     const [wabaId, setWabaId] = useState('')
     const [token, setToken] = useState('')
+    const [verifyToken, setVerifyToken] = useState('')
     const [showToken, setShowToken] = useState(false)
     const [officialBusy, setOfficialBusy] = useState(false)
 
@@ -26,6 +27,7 @@ export function OfficialApiSetupSection() {
         setPhoneId('')
         setWabaId('')
         setToken('')
+        setVerifyToken('')
         setShowToken(false)
     }, [slug])
 
@@ -34,9 +36,11 @@ export function OfficialApiSetupSection() {
         if (instance?.provider === 'official') {
             setPhoneId(instance.phone_number_id || '')
             setWabaId(instance.waba_id || '')
+            setVerifyToken(instance.meta_webhook_verify_token || '')
         } else {
             setPhoneId('')
             setWabaId('')
+            setVerifyToken('')
         }
         setToken('')
     }
@@ -53,7 +57,8 @@ export function OfficialApiSetupSection() {
                 workspace_slug: slug,
                 phone_number_id: phoneId,
                 waba_id: wabaId,
-                meta_access_token: token
+                meta_access_token: token,
+                meta_webhook_verify_token: verifyToken.trim()
             })
         })
         const j = (await res.json().catch(() => ({}))) as { error?: string }
@@ -214,6 +219,25 @@ export function OfficialApiSetupSection() {
                             autoComplete="off"
                             required
                         />
+                    </div>
+
+                    <div className="input-group" style={{ marginBottom: 12 }}>
+                        <label className="input-label" htmlFor="official-verify-token">
+                            Verify token do webhook (opcional)
+                        </label>
+                        <input
+                            id="official-verify-token"
+                            className="input"
+                            value={verifyToken}
+                            onChange={e => setVerifyToken(e.target.value)}
+                            placeholder="Ex.: um segredo único só para este workspace"
+                            autoComplete="off"
+                        />
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                            Se preenchido, o Meta tem de usar este valor ao verificar o webhook
+                            (passo GET em <code>/api/whatsapp/webhook/official</code>). Deixa vazio
+                            para usar o valor global do servidor.
+                        </p>
                     </div>
 
                     <p style={{ marginBottom: 12 }}>

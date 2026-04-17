@@ -32,6 +32,7 @@ export function validateAiConfigForm(input: {
     cfgN8nTools: N8nToolUiRow[]
     cfgFollowup: boolean
     cfgFollowupSteps: FollowupStepUi[]
+    cfgFollowupPrompt?: string
     cfgChunkMaxParts: number
     cfgTestMode: boolean
     cfgTestAllowlist: string
@@ -103,14 +104,22 @@ export function validateAiConfigForm(input: {
     }
 
     if (input.cfgFollowup) {
-        const hasFollowupMessage = input.cfgFollowupSteps.some(s => s.message.trim())
-        if (!hasFollowupMessage) {
+        const hasAiPrompt = !!input.cfgFollowupPrompt && input.cfgFollowupPrompt.trim().length > 0
+        // Se não há prompt IA, pelo menos um passo precisa ter mensagem fixa
+        if (!hasAiPrompt) {
+            const hasFollowupMessage = input.cfgFollowupSteps.some(s => s.message.trim())
+            if (!hasFollowupMessage) {
+                errors.followupSteps =
+                    'Follow-up ativo: adiciona pelo menos um passo com mensagem — ou preenche o "Prompt de follow-up" para a IA gerar.'
+            }
+        } else if (input.cfgFollowupSteps.length === 0) {
             errors.followupSteps =
-                'Follow-up ativo: adiciona pelo menos um passo com mensagem.'
+                'Follow-up ativo: adiciona pelo menos um passo com o tempo de espera.'
         }
         for (let i = 0; i < input.cfgFollowupSteps.length; i++) {
             const s = input.cfgFollowupSteps[i]
-            if (!s.message.trim()) continue
+            // Com prompt IA, a mensagem é opcional — mas o tempo continua obrigatório
+            if (!s.message.trim() && !hasAiPrompt) continue
             if (!Number.isFinite(s.amount) || s.amount < 1 || s.amount > 9999) {
                 errors.followupSteps = `Passo ${i + 1}: quantidade entre 1 e 9999.`
                 break

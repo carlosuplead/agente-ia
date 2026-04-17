@@ -3211,3 +3211,299 @@ button.nav-item {
     align-items: flex-start;
   }
 }
+
+/* ========================================================================
+   UI Polish v2 — refinamentos visuais (sem alterar layout/estrutura).
+   Adiciona: tipografia mais limpa, sombras em camadas, hover com lift
+   subtil, focus ring moderno, animação de entrada, scrollbar fino e
+   numerais tabulares nos valores de stats. Respeita prefers-reduced-motion.
+   ======================================================================== */
+
+body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  text-rendering: optimizeLegibility;
+}
+
+/* Números alinhados (KPIs, métricas, relatórios) */
+.disparos-stat-value,
+.stat-value,
+.metric-value,
+[class*="stat-value"],
+[class*="metric-value"],
+.token-usage-total,
+.progress-bar {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Cards — sombra em camadas + hover lift subtil (só onde faz sentido) */
+.card {
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 1px 3px rgba(16, 24, 40, 0.06);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+[data-theme="dark"] .card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.workspace-card {
+  transition:
+    box-shadow 0.22s ease,
+    transform 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.workspace-card:hover {
+  box-shadow:
+    0 4px 12px rgba(16, 24, 40, 0.06),
+    0 10px 30px rgba(16, 24, 40, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+[data-theme="dark"] .workspace-card:hover {
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.4),
+    0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+/* Botão primário — gradiente subtil + glow no hover (feel "tech") */
+.btn-primary {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 100%, white 6%),
+    var(--accent)
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 6px 18px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
+.btn,
+.btn-secondary,
+.btn-primary {
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+
+/* Focus ring moderno (glow suave em vez de outline duro) */
+.btn:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+textarea.input:focus-visible,
+.nav-item:focus-visible,
+.mobile-menu-btn:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Inputs — feedback hover/focus mais polido */
+.input,
+.select,
+textarea.input {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.input:hover:not(:disabled),
+.select:hover:not(:disabled),
+textarea.input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.input:focus,
+.select:focus,
+textarea.input:focus {
+  border-color: var(--accent);
+}
+
+/* Status badge — pill com brilho interior sutil */
+.status-badge {
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent) inset;
+  backdrop-filter: saturate(140%);
+  -webkit-backdrop-filter: saturate(140%);
+}
+
+.status-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.status-badge.connected .status-dot {
+  animation: statusPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--green) 10%, transparent); }
+}
+
+/* Entrada de página — fade/slide-up leve para dar sensação de app moderna */
+.page-header,
+.card,
+.workspace-card {
+  animation: uiFadeIn 0.28s ease-out both;
+}
+
+.card:nth-child(n+2) { animation-delay: 0.04s; }
+.card:nth-child(n+3) { animation-delay: 0.08s; }
+.card:nth-child(n+4) { animation-delay: 0.12s; }
+
+@keyframes uiFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar / navegação — item activo com micro-indicador */
+.nav-item {
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.nav-item:hover:not(.active) {
+  transform: translateX(1px);
+}
+
+/* Page header — título mais moderno */
+.page-header h2 {
+  background: linear-gradient(
+    180deg,
+    var(--text-primary),
+    color-mix(in srgb, var(--text-primary) 82%, transparent)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Tabelas / listas — linhas com leve destaque no hover */
+tr:hover > td,
+.message-item:hover,
+.conversation-item:hover,
+.contact-row:hover {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+/* Scrollbar fino e moderno (Chromium + Firefox) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-bright) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* Skeleton / loading shimmer (usável adicionando class="skeleton") */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-secondary);
+  border-radius: var(--radius);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-muted) 10%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeletonShimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* Spinner genérico — usar class="ui-spinner" */
+.ui-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  display: inline-block;
+  animation: uiSpin 0.7s linear infinite;
+}
+
+@keyframes uiSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Código inline — look "tech" discreto */
+code, kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+/* Selecção de texto — tom do acento */
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+}
+
+/* Respeita preferências de acessibilidade — desliga animações */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .status-badge.connected .status-dot {
+    animation: none;
+  }
+}

@@ -512,22 +512,15 @@ function parseUazapiStatusEvent(data: Record<string, unknown>): ParsedUazapiStat
 
 export async function POST(request: Request) {
     // ── Validação de secret (opcional) ──
-    // Se UAZAPI_WEBHOOK_SECRET estiver definido, exige header x-uazapi-secret ou query ?secret=
+    // Cada workspace pode ter o seu uazapi_webhook_secret. Se não houver
+    // por workspace, aceita também o UAZAPI_WEBHOOK_SECRET global.
     // Proteção contra webhook spoofing quando o instance_token for conhecido por atacantes.
-    const uazapiSecret = process.env.UAZAPI_WEBHOOK_SECRET?.trim()
-    if (uazapiSecret) {
-        const { searchParams: sp0 } = new URL(request.url)
-        const headerSecret = request.headers.get('x-uazapi-secret')?.trim() || ''
-        const querySecret = sp0.get('secret')?.trim() || ''
-        const received = headerSecret || querySecret
-        if (!received || received !== uazapiSecret) {
-            console.warn('[uazapi-webhook] Secret inválido ou ausente')
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-    }
-
-    // ── Parse rápido e responder 200 imediatamente ──
     const { searchParams } = new URL(request.url)
+    const globalSecret = process.env.UAZAPI_WEBHOOK_SECRET?.trim()
+    const headerSecret = request.headers.get('x-uazapi-secret')?.trim() || ''
+    const querySecret = searchParams.get('secret')?.trim() || ''
+    const receivedSecret = headerSecret || querySecret
+
     let instanceToken = searchParams.get('token')?.trim() || ''
 
     let data: Record<string, unknown>
@@ -543,6 +536,31 @@ export async function POST(request: Request) {
 
     if (!instanceToken) {
         return NextResponse.json({ error: 'Missing token param' }, { status: 400 })
+    }
+
+    // ── Validação do secret (workspace-first, fallback global) ──
+    // Procura o workspace pelo instance_token para decidir qual secret exigir.
+    try {
+        const supabase = await createAdminClient()
+        const { data: inst } = await supabase
+            .from('whatsapp_instances')
+            .select('uazapi_webhook_secret')
+            .eq('instance_token', instanceToken)
+            .eq('provider', 'uazapi')
+            .maybeSingle()
+        const wsSecret = inst?.uazapi_webhook_secret?.trim?.() || ''
+        const expected = wsSecret || globalSecret || ''
+        if (expected) {
+            if (!receivedSecret || receivedSecret !== expected) {
+                console.warn('[uazapi-webhook] Secret inválido ou ausente')
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+            }
+        }
+    } catch {
+        // Se falhar a leitura, usa o global como rede de segurança
+        if (globalSecret && receivedSecret !== globalSecret) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
     }
 
     const eventType = getEventType(data)

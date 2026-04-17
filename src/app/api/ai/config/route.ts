@@ -204,8 +204,15 @@ export async function POST(request: Request) {
             : 8
         const followSteps = parseFollowupStepsFromBody(body, followOn)
         if (followOn && followSteps.length === 0) {
+            const hasAiFollowupPrompt =
+                typeof body.ai_followup_prompt === 'string' &&
+                (body.ai_followup_prompt as string).trim().length > 0
             return NextResponse.json(
-                { error: 'Follow-up ativo: adiciona pelo menos um passo com mensagem.' },
+                {
+                    error: hasAiFollowupPrompt
+                        ? 'Follow-up ativo: adiciona pelo menos um passo com tempo de espera.'
+                        : 'Follow-up ativo: adiciona pelo menos um passo com mensagem — ou preenche o prompt de follow-up para a IA gerar.'
+                },
                 { status: 400 }
             )
         }

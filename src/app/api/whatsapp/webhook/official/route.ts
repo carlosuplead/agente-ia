@@ -25,7 +25,30 @@ export async function GET(request: Request) {
     const mode = url.searchParams.get('hub.mode')
     const token = url.searchParams.get('hub.verify_token') ?? ''
     const challenge = url.searchParams.get('hub.challenge')
-    if (mode === 'subscribe' && VERIFY_TOKEN && timingSafeEqualUtf8(token, VERIFY_TOKEN) && challenge) {
+    if (mode !== 'subscribe' || !challenge) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 1) Tenta verify_token por workspace (cada cliente pode ter o seu)
+    if (token) {
+        try {
+            const supabase = await createAdminClient()
+            const { data: match } = await supabase
+                .from('whatsapp_instances')
+                .select('workspace_slug')
+                .eq('provider', 'official')
+                .eq('meta_webhook_verify_token', token)
+                .maybeSingle()
+            if (match?.workspace_slug) {
+                return new Response(challenge, { status: 200 })
+            }
+        } catch {
+            // fallback para token global abaixo
+        }
+    }
+
+    // 2) Fallback: verify_token global (configuração partilhada)
+    if (VERIFY_TOKEN && timingSafeEqualUtf8(token, VERIFY_TOKEN)) {
         return new Response(challenge, { status: 200 })
     }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

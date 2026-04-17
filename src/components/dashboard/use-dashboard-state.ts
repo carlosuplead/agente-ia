@@ -1208,6 +1208,7 @@ export function useDashboardController() {
             cfgN8nTools,
             cfgFollowup,
             cfgFollowupSteps,
+            cfgFollowupPrompt,
             cfgChunkMaxParts,
             cfgTestMode,
             cfgTestAllowlist,

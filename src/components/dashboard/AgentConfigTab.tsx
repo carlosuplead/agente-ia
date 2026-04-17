@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
     MODEL_CUSTOM,
     modelSelectValue,
@@ -30,6 +30,43 @@ function FieldError({ id, message }: { id?: string; message?: string | undefined
 export function AgentConfigTab() {
     const d = useDashboard()
     const err = d.cfgFieldErrors
+    const [testingN8nId, setTestingN8nId] = useState<string | null>(null)
+
+    async function testN8nWorkflow(row: { id: string; slug: string; url: string; timeout_seconds: number }) {
+        if (!d.selectedSlug) return
+        const url = row.url.trim()
+        if (!url) {
+            d.setToast({ message: 'Preenche a URL do webhook antes de testar.', variant: 'error' })
+            return
+        }
+        setTestingN8nId(row.id)
+        try {
+            const res = await fetch('/api/ai/n8n-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    workspace_slug: d.selectedSlug,
+                    url,
+                    timeout_seconds: row.timeout_seconds,
+                    tool_slug: row.slug
+                })
+            })
+            const json = (await res.json().catch(() => null)) as
+                | { ok?: boolean; elapsed_ms?: number; error?: string }
+                | null
+            if (res.ok && json?.ok) {
+                d.setToast({ message: `Webhook OK (${json.elapsed_ms ?? 0} ms).`, variant: 'success' })
+            } else {
+                const msg = json?.error || `Falhou (HTTP ${res.status}).`
+                d.setToast({ message: `Webhook falhou: ${msg}`, variant: 'error' })
+            }
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Erro ao contactar o servidor.'
+            d.setToast({ message: msg, variant: 'error' })
+        } finally {
+            setTestingN8nId(null)
+        }
+    }
 
     const { selectedSlug, googleCalendar, loadGoogleCalendarCalendars } = d
     useEffect(() => {
@@ -664,7 +701,9 @@ export function AgentConfigTab() {
                                             </div>
                                         </div>
                                         <div className="input-group">
-                                            <label className="input-label">Mensagem</label>
+                                            <label className="input-label">
+                                                Mensagem{(d.cfgFollowupPrompt ?? '').trim() ? ' (opcional)' : ''}
+                                            </label>
                                             <textarea
                                                 className="input textarea"
                                                 rows={3}
@@ -676,7 +715,11 @@ export function AgentConfigTab() {
                                                         )
                                                     )
                                                 }
-                                                placeholder="Texto deste passo…"
+                                                placeholder={
+                                                    (d.cfgFollowupPrompt ?? '').trim()
+                                                        ? 'Deixa em branco para a IA gerar — ou escreve texto fixo para forçar'
+                                                        : 'Texto deste passo…'
+                                                }
                                             />
                                         </div>
                                     </div>
@@ -901,13 +944,24 @@ export function AgentConfigTab() {
                                     <div key={row.id} className="subcard">
                                         <div className="subcard-header">
                                             <span style={{ fontSize: 13, fontWeight: 600 }}>Workflow {idx + 1}</span>
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary btn-compact"
-                                                onClick={() => d.setCfgN8nTools(prev => prev.filter(r => r.id !== row.id))}
-                                            >
-                                                Remover
-                                            </button>
+                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-compact"
+                                                    disabled={!row.url.trim() || testingN8nId === row.id || !d.selectedSlug}
+                                                    onClick={() => void testN8nWorkflow(row)}
+                                                    title="Envia um payload de diagnóstico ao webhook"
+                                                >
+                                                    {testingN8nId === row.id ? 'A testar…' : 'Testar'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-compact"
+                                                    onClick={() => d.setCfgN8nTools(prev => prev.filter(r => r.id !== row.id))}
+                                                >
+                                                    Remover
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="two-cols" style={{ marginBottom: 12 }}>
                                             <div className="input-group">

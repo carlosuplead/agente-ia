@@ -1,12 +1,80 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Smartphone } from 'lucide-react'
 import { ClientPortalStats } from '@/components/client-portal/ClientPortalStats'
 import { TokenUsageSection } from '@/components/dashboard/TokenUsageSection'
 import { formatRelativeTime } from '@/lib/dashboard/format-relative-time'
 import { useDashboard } from './dashboard-context'
 import { OfficialApiSetupSection } from './OfficialApiSetupSection'
+
+function UazapiWebhookSecretCard() {
+    const d = useDashboard()
+    const slug = d.selectedSlug
+    const currentSecret = d.instance?.uazapi_webhook_secret || ''
+    const [secret, setSecret] = useState(currentSecret)
+    const [saving, setSaving] = useState(false)
+    useEffect(() => {
+        setSecret(d.instance?.uazapi_webhook_secret || '')
+    }, [slug, d.instance?.uazapi_webhook_secret])
+
+    async function onSave() {
+        if (!slug) return
+        setSaving(true)
+        try {
+            const res = await fetch('/api/whatsapp/webhook-secret', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    workspace_slug: slug,
+                    uazapi_webhook_secret: secret.trim()
+                })
+            })
+            const j = (await res.json().catch(() => ({}))) as { error?: string }
+            if (!res.ok) {
+                d.setToast({ message: j.error || 'Falha ao guardar o segredo.', variant: 'error' })
+                return
+            }
+            d.setToast({ message: 'Segredo do webhook Uazapi atualizado.', variant: 'success' })
+            await d.loadInstance(slug, { syncUazapi: false })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+                <span className="card-title">Segredo do webhook Uazapi</span>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                Opcional: define um segredo partilhado para este workspace. O webhook da Uazapi tem
+                de o enviar no header <code>x-uazapi-secret</code> ou na query <code>?secret=</code>.
+                Deixa vazio para usar o valor global do servidor.
+            </p>
+            <div className="input-group" style={{ marginBottom: 12 }}>
+                <label className="input-label" htmlFor="uazapi-webhook-secret">Segredo</label>
+                <input
+                    id="uazapi-webhook-secret"
+                    className="input"
+                    value={secret}
+                    onChange={e => setSecret(e.target.value)}
+                    placeholder="Ex.: um segredo único só para este workspace"
+                    autoComplete="off"
+                />
+            </div>
+            <button
+                type="button"
+                className="btn btn-primary"
+                disabled={saving || !slug || secret === currentSecret}
+                onClick={onSave}
+            >
+                {saving ? 'A guardar…' : 'Guardar'}
+            </button>
+        </div>
+    )
+}
 
 function MetaTokenAgeNotice({ obtainedAt }: { obtainedAt: string }) {
     const days = useMemo(() => {
@@ -186,6 +254,9 @@ export function WhatsAppTab() {
 
                     {/* ── API Oficial WABA (separado, limpo) ── */}
                     <OfficialApiSetupSection />
+
+                    {/* ── Segredo de webhook (Uazapi, opcional) ── */}
+                    {d.instance && d.instance.provider !== 'official' && <UazapiWebhookSecretCard />}
 
                     {/* ── Estatísticas ── */}
                     <ClientPortalStats

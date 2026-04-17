@@ -181,6 +181,7 @@ export function DisparosTab() {
     const [loading, setLoading] = useState(false)
     const [tplLoading, setTplLoading] = useState(false)
     const [importing, setImporting] = useState(false)
+    const [importProgress, setImportProgress] = useState<number | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Campaign form
@@ -349,22 +350,41 @@ export function DisparosTab() {
         e.target.value = ''
         if (!file || !slug || !canManage) return
         setImporting(true)
+        setImportProgress(0)
         try {
             const fd = new FormData()
             fd.set('workspace_slug', slug)
             fd.set('file', file)
-            const res = await fetch('/api/workspace/contacts/import', {
-                method: 'POST',
-                credentials: 'include',
-                body: fd
+
+            // XHR for upload progress events
+            const result = await new Promise<{ ok: boolean; status: number; body: string }>(resolve => {
+                const xhr = new XMLHttpRequest()
+                xhr.open('POST', '/api/workspace/contacts/import')
+                xhr.withCredentials = true
+                xhr.upload.onprogress = ev => {
+                    if (ev.lengthComputable) {
+                        const pct = Math.round((ev.loaded / ev.total) * 100)
+                        // cap at 99 while waiting for server response
+                        setImportProgress(Math.min(pct, 99))
+                    }
+                }
+                xhr.upload.onload = () => setImportProgress(99)
+                xhr.onload = () =>
+                    resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: xhr.responseText })
+                xhr.onerror = () => resolve({ ok: false, status: 0, body: '' })
+                xhr.ontimeout = () => resolve({ ok: false, status: 0, body: '' })
+                xhr.send(fd)
             })
-            const j = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                d.setToast({ message: (j as { error?: string }).error || 'Falha no import', variant: 'error' })
+
+            let j: { upserted?: number; errors?: string[]; error?: string } = {}
+            try { j = JSON.parse(result.body) } catch { /* ignore */ }
+            if (!result.ok) {
+                d.setToast({ message: j.error || 'Falha no import', variant: 'error' })
                 return
             }
-            const up = (j as { upserted?: number }).upserted ?? 0
-            const errN = ((j as { errors?: string[] }).errors || []).length
+            setImportProgress(100)
+            const up = j.upserted ?? 0
+            const errN = (j.errors || []).length
             d.setToast({
                 message: `Importação concluída: ${up} contacto(s) guardados.${errN ? ` ${errN} avisos.` : ''}`,
                 variant: errN ? 'error' : 'success'
@@ -372,6 +392,8 @@ export function DisparosTab() {
             await loadContacts()
         } finally {
             setImporting(false)
+            // small delay so users see the 100% flash before it disappears
+            setTimeout(() => setImportProgress(null), 500)
         }
     }
 
@@ -707,6 +729,49 @@ export function DisparosTab() {
                             <Upload size={15} />
                             {importing ? 'A importar…' : 'Importar CSV/Excel'}
                         </button>
+                        {importProgress !== null && (
+                            <div
+                                role="progressbar"
+                                aria-valuenow={importProgress}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                style={{
+                                    position: 'relative',
+                                    width: 180,
+                                    height: 22,
+                                    background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+                                    borderRadius: 11,
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        inset: '0 auto 0 0',
+                                        width: `${importProgress}%`,
+                                        background: 'var(--accent)',
+                                        transition: 'width 0.2s ease',
+                                        opacity: 0.7
+                                    }}
+                                />
+                                <span
+                                    style={{
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: 'white',
+                                        textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                        fontVariantNumeric: 'tabular-nums'
+                                    }}
+                                >
+                                    {importProgress < 100 ? `A enviar ${importProgress}%` : 'A processar…'}
+                                </span>
+                            </div>
+                        )}
                         <a
                             href="/examples/contacts-import-sample.csv"
                             download="contacts-import-sample.csv"

@@ -127,37 +127,39 @@ function configRecord(config: AiAgentConfig): Record<string, unknown> {
     return config as unknown as Record<string, unknown>
 }
 
+// Isolação por workspace: chaves LLM SÃO por workspace.
+// Não usa env vars como fallback para evitar que um workspace sem chave
+// queime quota da conta principal ou vaze entre tenants.
+
 function resolveOpenAiApiKey(config: AiAgentConfig): string {
     const w = typeof config.openai_api_key === 'string' ? config.openai_api_key.trim() : ''
     if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
-    return process.env.OPENAI_API_KEY?.trim() || ''
+    return ''
 }
 
 function resolveGoogleApiKey(config: AiAgentConfig): string {
     const w = typeof config.google_api_key === 'string' ? config.google_api_key.trim() : ''
     if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
-    return process.env.GOOGLE_API_KEY?.trim() || ''
+    return ''
 }
 
 // ─── Vertex AI support ──────────────────────────────────────────────
-// Prioridade: workspace config → env vars → fallback para Google AI Studio.
+// Tudo por workspace: sem fallback para env vars.
 
 function resolveVertexProject(config: AiAgentConfig): string {
     const ws = typeof config.google_vertex_project === 'string' ? config.google_vertex_project.trim() : ''
-    if (ws) return ws
-    return process.env.GOOGLE_VERTEX_PROJECT?.trim() || ''
+    return ws
 }
 
 function resolveVertexLocation(config: AiAgentConfig): string {
     const ws = typeof config.google_vertex_location === 'string' ? config.google_vertex_location.trim() : ''
-    if (ws) return ws
-    return process.env.GOOGLE_VERTEX_LOCATION?.trim() || 'us-central1'
+    return ws || 'us-central1'
 }
 
 function resolveVertexSaJson(config: AiAgentConfig): string {
     const ws = typeof config.google_service_account_json === 'string' ? config.google_service_account_json.trim() : ''
     if (ws) return decryptWorkspaceLlmKeyIfNeeded(ws)
-    return process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || ''
+    return ''
 }
 
 /**
@@ -209,7 +211,7 @@ function getGeminiModel(config: AiAgentConfig, modelConfig: Record<string, any>)
 function resolveAnthropicApiKey(config: AiAgentConfig): string {
     const w = typeof config.anthropic_api_key === 'string' ? config.anthropic_api_key.trim() : ''
     if (w) return decryptWorkspaceLlmKeyIfNeeded(w)
-    return process.env.ANTHROPIC_API_KEY?.trim() || ''
+    return ''
 }
 
 function anthropicUsageFromResponse(response: Anthropic.Message): LlmUsageSnapshot | undefined {
@@ -372,7 +374,7 @@ export async function callLLM(
 async function plainCompletion(config: AiAgentConfig, systemPrompt: string, userMessage: string): Promise<LLMResponse> {
     if (config.provider === 'anthropic') {
         const apiKey = resolveAnthropicApiKey(config)
-        if (!apiKey) throw new Error('Chave Anthropic em falta (workspace ou ANTHROPIC_API_KEY no servidor)')
+        if (!apiKey) throw new Error('Chave Anthropic em falta — configure a chave no painel do workspace.')
         const anthropic = new Anthropic({ apiKey })
         const modelName = config.model || 'claude-sonnet-4-6'
         const response = await withTimeout(
@@ -400,7 +402,7 @@ async function plainCompletion(config: AiAgentConfig, systemPrompt: string, user
 
     if (config.provider === 'openai') {
         const apiKey = resolveOpenAiApiKey(config)
-        if (!apiKey) throw new Error('Chave OpenAI em falta (workspace ou OPENAI_API_KEY no servidor)')
+        if (!apiKey) throw new Error('Chave OpenAI em falta — configure a chave no painel do workspace.')
         const openai = new OpenAI({ apiKey })
         const modelName = config.model || 'gpt-4o-mini'
         const completion = await withTimeout(
@@ -455,7 +457,7 @@ async function callAnthropicWithTools(
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveAnthropicApiKey(config)
-    if (!apiKey) throw new Error('Chave Anthropic em falta (workspace ou ANTHROPIC_API_KEY no servidor)')
+    if (!apiKey) throw new Error('Chave Anthropic em falta — configure a chave no painel do workspace.')
 
     const tools: Anthropic.Tool[] = []
     if (handoffOn) {
@@ -984,7 +986,7 @@ async function callOpenAIWithTools(
     meta?: LlmContactMeta
 ): Promise<LLMResponse> {
     const apiKey = resolveOpenAiApiKey(config)
-    if (!apiKey) throw new Error('Chave OpenAI em falta (workspace ou OPENAI_API_KEY no servidor)')
+    if (!apiKey) throw new Error('Chave OpenAI em falta — configure a chave no painel do workspace.')
 
     const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = []
     if (handoffOn) {

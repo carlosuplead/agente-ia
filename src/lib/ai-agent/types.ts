@@ -84,6 +84,18 @@ export type AiAgentConfig = {
     team_notification_append_transcript?: boolean
     /** Template de formato para a notificação — a IA preenche os campos. */
     team_notification_template?: string | null
+    /** Notificação automática ao vendedor via UAZAPI dedicada (separada da instância principal). */
+    seller_notification_enabled?: boolean
+    /** URL base da UAZAPI (ex. https://atendsoft.uazapi.com). */
+    seller_notification_uazapi_url?: string | null
+    /** Token UAZAPI guardado em texto cifrado (AES-256-GCM via WORKSPACE_LLM_KEYS_SECRET). */
+    seller_notification_uazapi_token?: string | null
+    /** Telefones a notificar (um por linha ou vírgula). */
+    seller_notification_phones?: string | null
+    /** Disparar ao criar agendamento Google Calendar (default true). */
+    seller_notification_on_appointment?: boolean
+    /** Template de mensagem. Placeholders: {nome}, {telefone}, {email}, {agendamento}, {resumo}, {vendedor}. */
+    seller_notification_message_template?: string | null
 }
 
 export type VoiceDeliveryRecord = {

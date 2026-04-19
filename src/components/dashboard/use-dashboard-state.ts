@@ -69,6 +69,13 @@ function applyAiConfigToForm(
         setCfgTeamNotifyDesc: (v: string) => void
         setCfgTeamNotifyAppendTranscript: (v: boolean) => void
         setCfgTeamNotifyTemplate: (v: string) => void
+        setCfgSellerNotify: (v: boolean) => void
+        setCfgSellerNotifyUrl: (v: string) => void
+        setCfgSellerNotifyTokenInput: (v: string) => void
+        setCfgClearSellerNotifyToken: (v: boolean) => void
+        setCfgSellerNotifyPhones: (v: string) => void
+        setCfgSellerNotifyOnAppt: (v: boolean) => void
+        setCfgSellerNotifyTemplate: (v: string) => void
         setCfgAnthropicKeyInput: (v: string) => void
         setCfgClearAnthropicKey: (v: boolean) => void
         setCfgVertexProject: (v: string) => void
@@ -131,6 +138,13 @@ function applyAiConfigToForm(
     setters.setCfgTeamNotifyDesc(merged.team_notification_tool_description ?? '')
     setters.setCfgTeamNotifyAppendTranscript(merged.team_notification_append_transcript !== false)
     setters.setCfgTeamNotifyTemplate(merged.team_notification_template ?? '')
+    setters.setCfgSellerNotify(merged.seller_notification_enabled === true)
+    setters.setCfgSellerNotifyUrl(merged.seller_notification_uazapi_url ?? '')
+    setters.setCfgSellerNotifyTokenInput('')
+    setters.setCfgClearSellerNotifyToken(false)
+    setters.setCfgSellerNotifyPhones(merged.seller_notification_phones ?? '')
+    setters.setCfgSellerNotifyOnAppt(merged.seller_notification_on_appointment !== false)
+    setters.setCfgSellerNotifyTemplate(merged.seller_notification_message_template ?? '')
 }
 
 const dashboardTabIds: DashboardTab[] = [
@@ -270,6 +284,13 @@ export function useDashboardController() {
     const [cfgTeamNotifyDesc, setCfgTeamNotifyDesc] = useState('')
     const [cfgTeamNotifyAppendTranscript, setCfgTeamNotifyAppendTranscript] = useState(true)
     const [cfgTeamNotifyTemplate, setCfgTeamNotifyTemplate] = useState('')
+    const [cfgSellerNotify, setCfgSellerNotify] = useState(false)
+    const [cfgSellerNotifyUrl, setCfgSellerNotifyUrl] = useState('')
+    const [cfgSellerNotifyTokenInput, setCfgSellerNotifyTokenInput] = useState('')
+    const [cfgClearSellerNotifyToken, setCfgClearSellerNotifyToken] = useState(false)
+    const [cfgSellerNotifyPhones, setCfgSellerNotifyPhones] = useState('')
+    const [cfgSellerNotifyOnAppt, setCfgSellerNotifyOnAppt] = useState(true)
+    const [cfgSellerNotifyTemplate, setCfgSellerNotifyTemplate] = useState('')
 
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
 
@@ -363,6 +384,13 @@ export function useDashboardController() {
             cfgTeamNotifyDesc,
             cfgTeamNotifyAppendTranscript,
             cfgTeamNotifyTemplate,
+            cfgSellerNotify,
+            cfgSellerNotifyUrl,
+            cfgSellerNotifyTokenInput,
+            cfgClearSellerNotifyToken,
+            cfgSellerNotifyPhones,
+            cfgSellerNotifyOnAppt,
+            cfgSellerNotifyTemplate,
             cfgVertexProject,
             cfgVertexLocation,
             cfgVertexSaJson
@@ -413,6 +441,13 @@ export function useDashboardController() {
             cfgTeamNotifyDesc,
             cfgTeamNotifyAppendTranscript,
             cfgTeamNotifyTemplate,
+            cfgSellerNotify,
+            cfgSellerNotifyUrl,
+            cfgSellerNotifyTokenInput,
+            cfgClearSellerNotifyToken,
+            cfgSellerNotifyPhones,
+            cfgSellerNotifyOnAppt,
+            cfgSellerNotifyTemplate,
             cfgVertexProject,
             cfgVertexLocation,
             cfgVertexSaJson
@@ -643,6 +678,13 @@ export function useDashboardController() {
             setCfgTeamNotifyDesc,
             setCfgTeamNotifyAppendTranscript,
             setCfgTeamNotifyTemplate,
+            setCfgSellerNotify,
+            setCfgSellerNotifyUrl,
+            setCfgSellerNotifyTokenInput,
+            setCfgClearSellerNotifyToken,
+            setCfgSellerNotifyPhones,
+            setCfgSellerNotifyOnAppt,
+            setCfgSellerNotifyTemplate,
             setCfgAnthropicKeyInput,
             setCfgClearAnthropicKey,
             setCfgElevenApiKeyInput,
@@ -1213,7 +1255,12 @@ export function useDashboardController() {
             cfgTestMode,
             cfgTestAllowlist,
             cfgTeamNotify,
-            cfgTeamNotifyAllowlist
+            cfgTeamNotifyAllowlist,
+            cfgSellerNotify,
+            cfgSellerNotifyUrl,
+            cfgSellerNotifyTokenSet:
+                !!aiConfig?.seller_notification_uazapi_token_set || !!cfgSellerNotifyTokenInput.trim(),
+            cfgSellerNotifyPhones
         })
         if (!v.ok) {
             setCfgFieldErrors(v.errors)
@@ -1413,6 +1460,20 @@ export function useDashboardController() {
         setCfgTeamNotifyAppendTranscript,
         cfgTeamNotifyTemplate,
         setCfgTeamNotifyTemplate,
+        cfgSellerNotify,
+        setCfgSellerNotify,
+        cfgSellerNotifyUrl,
+        setCfgSellerNotifyUrl,
+        cfgSellerNotifyTokenInput,
+        setCfgSellerNotifyTokenInput,
+        cfgClearSellerNotifyToken,
+        setCfgClearSellerNotifyToken,
+        cfgSellerNotifyPhones,
+        setCfgSellerNotifyPhones,
+        cfgSellerNotifyOnAppt,
+        setCfgSellerNotifyOnAppt,
+        cfgSellerNotifyTemplate,
+        setCfgSellerNotifyTemplate,
         newN8nToolRow,
         newFollowupStepRow
     }

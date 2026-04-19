@@ -64,6 +64,14 @@ export type AiConfigRow = {
     team_notification_tool_description?: string | null
     team_notification_append_transcript?: boolean
     team_notification_template?: string | null
+    /** Notificação ao vendedor via UAZAPI separada (disparo automático após agendamento). */
+    seller_notification_enabled?: boolean
+    seller_notification_uazapi_url?: string | null
+    /** API: token não é devolvido; só indica se existe valor na BD. */
+    seller_notification_uazapi_token_set?: boolean
+    seller_notification_phones?: string | null
+    seller_notification_on_appointment?: boolean
+    seller_notification_message_template?: string | null
 }
 
 export type MessageRow = {

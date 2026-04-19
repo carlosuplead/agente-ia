@@ -969,6 +969,121 @@ export function AgentConfigTab() {
                         )}
                     </div>
 
+                    {/* ── Card 8: Notificação ao Vendedor (UAZAPI dedicada) ── */}
+                    <div className="card">
+                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
+                            <span className="card-header-icon card-header-icon--green" aria-hidden="true"><Bell size={18} /></span>
+                            <span className="card-title">Notificação ao Vendedor (UAZAPI dedicada)</span>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                            Usa uma instância UAZAPI separada (outro número) para avisar automaticamente o vendedor assim que um
+                            agendamento é criado na Google Agenda. Não interfere com o WhatsApp que atende o cliente.
+                        </p>
+                        <div className="checkbox-row" style={{ marginBottom: 16 }}>
+                            <input
+                                id="cfg-seller-notify"
+                                type="checkbox"
+                                checked={d.cfgSellerNotify}
+                                onChange={e => d.setCfgSellerNotify(e.target.checked)}
+                            />
+                            <label htmlFor="cfg-seller-notify">Ativar notificação ao vendedor</label>
+                        </div>
+                        {d.cfgSellerNotify && (
+                            <>
+                                <div className="input-group" style={{ marginBottom: 12 }}>
+                                    <label className="input-label" htmlFor="cfg-seller-notify-url">URL da UAZAPI</label>
+                                    <input
+                                        id="cfg-seller-notify-url"
+                                        className="input"
+                                        type="text"
+                                        placeholder="https://atendsoft.uazapi.com"
+                                        value={d.cfgSellerNotifyUrl}
+                                        onChange={e => d.setCfgSellerNotifyUrl(e.target.value)}
+                                        aria-invalid={!!err.cfgSellerNotifyUrl}
+                                        aria-describedby={err.cfgSellerNotifyUrl ? 'err-cfg-seller-notify-url' : undefined}
+                                    />
+                                    <FieldError id="err-cfg-seller-notify-url" message={err.cfgSellerNotifyUrl} />
+                                </div>
+                                <div className="input-group" style={{ marginBottom: 12 }}>
+                                    <label className="input-label" htmlFor="cfg-seller-notify-token">
+                                        Token UAZAPI {d.aiConfig?.seller_notification_uazapi_token_set
+                                            ? <span style={{ fontSize: 12, color: 'var(--success)' }}>(guardado ✓)</span>
+                                            : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>(não guardado)</span>}
+                                    </label>
+                                    <input
+                                        id="cfg-seller-notify-token"
+                                        className="input"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        placeholder={d.aiConfig?.seller_notification_uazapi_token_set
+                                            ? 'Cola um novo token para substituir'
+                                            : 'Cola o token da instância UAZAPI dedicada'}
+                                        value={d.cfgSellerNotifyTokenInput}
+                                        onChange={e => {
+                                            d.setCfgSellerNotifyTokenInput(e.target.value)
+                                            if (e.target.value) d.setCfgClearSellerNotifyToken(false)
+                                        }}
+                                        aria-invalid={!!err.cfgSellerNotifyToken}
+                                        aria-describedby={err.cfgSellerNotifyToken ? 'err-cfg-seller-notify-token' : undefined}
+                                    />
+                                    <FieldError id="err-cfg-seller-notify-token" message={err.cfgSellerNotifyToken} />
+                                    {d.aiConfig?.seller_notification_uazapi_token_set && (
+                                        <div className="checkbox-row" style={{ marginTop: 8 }}>
+                                            <input
+                                                id="cfg-seller-notify-token-clear"
+                                                type="checkbox"
+                                                checked={d.cfgClearSellerNotifyToken}
+                                                onChange={e => d.setCfgClearSellerNotifyToken(e.target.checked)}
+                                            />
+                                            <label htmlFor="cfg-seller-notify-token-clear">Apagar token guardado ao gravar</label>
+                                        </div>
+                                    )}
+                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                        O token é cifrado com <code>WORKSPACE_LLM_KEYS_SECRET</code> antes de ir para a base de dados.
+                                    </p>
+                                </div>
+                                <div className="input-group" style={{ marginBottom: 12 }}>
+                                    <label className="input-label" htmlFor="cfg-seller-notify-phones">Telefones a notificar</label>
+                                    <textarea
+                                        id="cfg-seller-notify-phones"
+                                        className="input"
+                                        rows={3}
+                                        value={d.cfgSellerNotifyPhones}
+                                        onChange={e => d.setCfgSellerNotifyPhones(e.target.value)}
+                                        placeholder="Um por linha (ex. +5531993665469)"
+                                        aria-invalid={!!err.cfgSellerNotifyPhones}
+                                        aria-describedby={err.cfgSellerNotifyPhones ? 'err-cfg-seller-notify-phones' : undefined}
+                                    />
+                                    <FieldError id="err-cfg-seller-notify-phones" message={err.cfgSellerNotifyPhones} />
+                                </div>
+                                <div className="checkbox-row" style={{ marginBottom: 12 }}>
+                                    <input
+                                        id="cfg-seller-notify-on-appt"
+                                        type="checkbox"
+                                        checked={d.cfgSellerNotifyOnAppt}
+                                        onChange={e => d.setCfgSellerNotifyOnAppt(e.target.checked)}
+                                    />
+                                    <label htmlFor="cfg-seller-notify-on-appt">Notificar quando a IA criar um agendamento</label>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label" htmlFor="cfg-seller-notify-template">Template da mensagem</label>
+                                    <textarea
+                                        id="cfg-seller-notify-template"
+                                        className="input textarea"
+                                        rows={8}
+                                        value={d.cfgSellerNotifyTemplate}
+                                        onChange={e => d.setCfgSellerNotifyTemplate(e.target.value)}
+                                        placeholder={'🟢 Agenda criada com sucesso.\n\n👤 Lead: {nome}\n📱 Telefone: {telefone}\n🗓️ Agendamento: {agendamento}\n\n📝 Resumo:\n{resumo}'}
+                                    />
+                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                        Placeholders disponíveis: {'{nome}'}, {'{telefone}'}, {'{email}'}, {'{agendamento}'}, {'{titulo}'}, {'{resumo}'}, {'{vendedor}'}, {'{link}'}, {'{etapa}'}.
+                                        Se deixar em branco, é usado um modelo padrão.
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
                     {/* ── Card 9: Integração N8N ── */}
                     <div className="card">
                         <div className="card-header-with-icon" style={{ marginBottom: 16 }}>

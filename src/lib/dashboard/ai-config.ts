@@ -48,7 +48,13 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     team_notification_allowlist_phones: null,
     team_notification_tool_description: null,
     team_notification_append_transcript: true,
-    team_notification_template: null
+    team_notification_template: null,
+    seller_notification_enabled: false,
+    seller_notification_uazapi_url: null,
+    seller_notification_uazapi_token_set: false,
+    seller_notification_phones: null,
+    seller_notification_on_appointment: true,
+    seller_notification_message_template: null
 }
 
 export function normalizeAiConfig(c: Partial<AiConfigRow> | null | undefined): AiConfigRow {
@@ -97,13 +103,25 @@ export function sanitizeAiConfigForClient(row: Record<string, unknown>): Record<
     const anthropicSet = typeof row.anthropic_api_key === 'string' && row.anthropic_api_key.length > 0
     const elevenlabsSet = typeof row.elevenlabs_api_key === 'string' && row.elevenlabs_api_key.length > 0
     const saJsonSet = typeof row.google_service_account_json === 'string' && row.google_service_account_json.length > 0
-    const { openai_api_key: _o, google_api_key: _g, anthropic_api_key: _a, elevenlabs_api_key: _e, google_service_account_json: _sa, ...rest } = row
+    const sellerTokenSet =
+        typeof row.seller_notification_uazapi_token === 'string' &&
+        row.seller_notification_uazapi_token.length > 0
+    const {
+        openai_api_key: _o,
+        google_api_key: _g,
+        anthropic_api_key: _a,
+        elevenlabs_api_key: _e,
+        google_service_account_json: _sa,
+        seller_notification_uazapi_token: _sellerTok,
+        ...rest
+    } = row
     return {
         ...rest,
         openai_api_key_set: openaiSet,
         google_api_key_set: googleSet,
         anthropic_api_key_set: anthropicSet,
         elevenlabs_api_key_set: elevenlabsSet,
-        google_service_account_json_set: saJsonSet
+        google_service_account_json_set: saJsonSet,
+        seller_notification_uazapi_token_set: sellerTokenSet
     }
 }

@@ -1,7 +1,8 @@
 import { SchemaType } from '@google/generative-ai'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
-import type { BuiltContext } from '@/lib/ai-agent/types'
+import type { AiAgentConfig, BuiltContext } from '@/lib/ai-agent/types'
 import { createCalendarEvent, suggestAvailableSlots } from '@/lib/google/calendar-client'
+import { sendSellerNotification } from '@/lib/ai-agent/external-notification'
 
 export const CALENDAR_SUGGEST_SLOTS_TOOL = 'google_calendar_suggest_slots'
 export const CALENDAR_CREATE_EVENT_TOOL = 'google_calendar_create_event'
@@ -24,7 +25,8 @@ export async function executeCalendarToolCall(
     name: string,
     args: Record<string, unknown>,
     calendar: GoogleCalendarMeta,
-    context: BuiltContext
+    context: BuiltContext,
+    config?: AiAgentConfig
 ): Promise<string> {
     if (name === CALENDAR_SUGGEST_SLOTS_TOOL) {
         const rangeStart = String(args.range_start_date || args.rangeStartDate || '').trim()
@@ -53,15 +55,67 @@ export async function executeCalendarToolCall(
         const contactLine = `Contacto WhatsApp: ${context.contactName} (${context.contactPhone})`
         const description = [extra, contactLine].filter(Boolean).join('\n\n')
         if (!title) return 'Erro: titulo é obrigatório.'
-        return createCalendarEvent(calendar.refreshToken, calendar.calendarId, {
+        const result = await createCalendarEvent(calendar.refreshToken, calendar.calendarId, {
             title,
             startDatetime: start,
             endDatetime: end,
             timezone: tz,
             description
         })
+
+        // Fire-and-forget: notifica o vendedor via UAZAPI dedicada quando o
+        // evento foi de facto criado (sucesso — mensagem começa por "Evento criado").
+        const createdOk = typeof result === 'string' && result.startsWith('Evento criado')
+        if (createdOk && config) {
+            const appointmentAt = formatAppointmentHuman(start, tz) || `${start} (${tz})`
+            const summary = extra || title
+            void sendSellerNotification({
+                config,
+                context,
+                event: 'appointment_created',
+                payload: {
+                    stageLabel: 'Agendamento confirmado',
+                    appointmentAt,
+                    eventTitle: title,
+                    summary,
+                    eventLink: extractEventLink(result)
+                }
+            }).catch(e => {
+                console.error('[calendar-tools] sendSellerNotification failed', e)
+            })
+        }
+
+        return result
     }
     return 'Função de calendário desconhecida.'
+}
+
+function formatAppointmentHuman(iso: string, timezone: string): string | null {
+    try {
+        if (!iso) return null
+        // Aceita ISO com timezone próprio ou datetime "local" + tz explícito.
+        const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)
+        const d = hasTz ? new Date(iso) : new Date(`${iso}${iso.includes('T') ? '' : 'T00:00:00'}`)
+        if (Number.isNaN(d.getTime())) return null
+        const fmt = new Intl.DateTimeFormat('pt-BR', {
+            timeZone: timezone || 'UTC',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        return `${fmt.format(d)} (${timezone})`
+    } catch {
+        return null
+    }
+}
+
+function extractEventLink(result: string): string | undefined {
+    const m = /Link:\s*(\S+)/.exec(result)
+    if (!m) return undefined
+    const v = m[1].trim()
+    return v && v !== 'n/d' ? v : undefined
 }
 
 export function calendarGeminiFunctionDeclarations(): Array<Record<string, unknown>> {

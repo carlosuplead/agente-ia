@@ -132,7 +132,12 @@ export async function POST(request: Request) {
             team_notification_allowlist_phones,
             team_notification_tool_description,
             team_notification_append_transcript,
-            team_notification_template
+            team_notification_template,
+            seller_notification_enabled,
+            seller_notification_uazapi_url,
+            seller_notification_phones,
+            seller_notification_on_appointment,
+            seller_notification_message_template
         } = body
 
         if (
@@ -253,6 +258,41 @@ export async function POST(request: Request) {
         const teamAppendTranscript = team_notification_append_transcript !== false
         const teamTemplate = trimOrNull(team_notification_template)
 
+        // ── Notificação ao vendedor via UAZAPI dedicada ──
+        const sellerOn = seller_notification_enabled === true
+        const sellerUrlRaw = trimOrNull(seller_notification_uazapi_url)
+        const sellerUrl = sellerUrlRaw ? sellerUrlRaw.replace(/\/+$/, '') : null
+        if (sellerUrl) {
+            try {
+                // eslint-disable-next-line no-new
+                new URL(sellerUrl)
+            } catch {
+                return NextResponse.json(
+                    { error: 'URL UAZAPI inválida (ex. https://atendsoft.uazapi.com).' },
+                    { status: 400 }
+                )
+            }
+        }
+        const sellerPhonesText =
+            typeof seller_notification_phones === 'string' ? seller_notification_phones.trim() : ''
+        const sellerPhonesStore = sellerPhonesText ? sellerPhonesText : null
+        if (sellerOn) {
+            if (!sellerUrl) {
+                return NextResponse.json(
+                    { error: 'Notificação ao vendedor ativa: indica a URL da UAZAPI.' },
+                    { status: 400 }
+                )
+            }
+            if (!hasValidAllowlistEntry(sellerPhonesText)) {
+                return NextResponse.json(
+                    { error: 'Notificação ao vendedor ativa: indica pelo menos um telefone.' },
+                    { status: 400 }
+                )
+            }
+        }
+        const sellerOnAppt = seller_notification_on_appointment !== false
+        const sellerTemplate = trimOrNull(seller_notification_message_template)
+
         const rows = await sql.unsafe(
             `INSERT INTO ${sch}.ai_agent_config (
                singleton_key, enabled, provider, model, temperature, system_prompt, max_messages_per_conversation,
@@ -266,9 +306,11 @@ export async function POST(request: Request) {
                team_notification_enabled, team_notification_allowlist_phones,
                team_notification_tool_description, team_notification_append_transcript,
                team_notification_template,
+               seller_notification_enabled, seller_notification_uazapi_url, seller_notification_phones,
+               seller_notification_on_appointment, seller_notification_message_template,
                updated_at
              )
-             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, now())
+             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, now())
              ON CONFLICT (singleton_key) DO UPDATE SET
                enabled = EXCLUDED.enabled,
                provider = EXCLUDED.provider,
@@ -311,6 +353,11 @@ export async function POST(request: Request) {
                team_notification_tool_description = EXCLUDED.team_notification_tool_description,
                team_notification_append_transcript = EXCLUDED.team_notification_append_transcript,
                team_notification_template = EXCLUDED.team_notification_template,
+               seller_notification_enabled = EXCLUDED.seller_notification_enabled,
+               seller_notification_uazapi_url = EXCLUDED.seller_notification_uazapi_url,
+               seller_notification_phones = EXCLUDED.seller_notification_phones,
+               seller_notification_on_appointment = EXCLUDED.seller_notification_on_appointment,
+               seller_notification_message_template = EXCLUDED.seller_notification_message_template,
                updated_at = now()
              RETURNING *`,
             [
@@ -354,7 +401,12 @@ export async function POST(request: Request) {
                 teamAllowStore,
                 teamNotifyDesc,
                 teamAppendTranscript,
-                teamTemplate
+                teamTemplate,
+                sellerOn,
+                sellerUrl,
+                sellerPhonesStore,
+                sellerOnAppt,
+                sellerTemplate
             ]
         )
 
@@ -443,6 +495,23 @@ export async function POST(request: Request) {
                 const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
                 await sql.unsafe(
                     `UPDATE ${sch}.ai_agent_config SET elevenlabs_api_key = $1, updated_at = now() WHERE singleton_key = true`,
+                    [stored]
+                )
+            }
+        }
+
+        // ── Token UAZAPI da notificação ao vendedor (encriptado se WORKSPACE_LLM_KEYS_SECRET) ──
+        if ('seller_notification_uazapi_token' in body) {
+            const v = body.seller_notification_uazapi_token
+            if (v === null) {
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET seller_notification_uazapi_token = NULL, updated_at = now() WHERE singleton_key = true`,
+                    []
+                )
+            } else if (typeof v === 'string' && v.trim()) {
+                const stored = encryptWorkspaceLlmKeyIfConfigured(v.trim())
+                await sql.unsafe(
+                    `UPDATE ${sch}.ai_agent_config SET seller_notification_uazapi_token = $1, updated_at = now() WHERE singleton_key = true`,
                     [stored]
                 )
             }

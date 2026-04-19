@@ -15,7 +15,10 @@ export type AiConfigFieldErrors = Partial<
         | 'followupSteps'
         | 'cfgChunkMax'
         | 'cfgTestAllowlist'
-        | 'cfgTeamNotifyAllowlist',
+        | 'cfgTeamNotifyAllowlist'
+        | 'cfgSellerNotifyUrl'
+        | 'cfgSellerNotifyToken'
+        | 'cfgSellerNotifyPhones',
         string
     >
 >
@@ -38,6 +41,10 @@ export function validateAiConfigForm(input: {
     cfgTestAllowlist: string
     cfgTeamNotify: boolean
     cfgTeamNotifyAllowlist: string
+    cfgSellerNotify: boolean
+    cfgSellerNotifyUrl: string
+    cfgSellerNotifyTokenSet: boolean
+    cfgSellerNotifyPhones: string
 }): { ok: true } | { ok: false; errors: AiConfigFieldErrors } {
     const errors: AiConfigFieldErrors = {}
 
@@ -101,6 +108,27 @@ export function validateAiConfigForm(input: {
     if (input.cfgTeamNotify && !hasValidAllowlistEntry(input.cfgTeamNotifyAllowlist)) {
         errors.cfgTeamNotifyAllowlist =
             'Notificações à equipa: indica pelo menos um número válido (um por linha ou separados por vírgula).'
+    }
+
+    if (input.cfgSellerNotify) {
+        const url = input.cfgSellerNotifyUrl.trim()
+        if (!url) {
+            errors.cfgSellerNotifyUrl = 'Indica a URL da UAZAPI (ex. https://atendsoft.uazapi.com).'
+        } else {
+            try {
+                // eslint-disable-next-line no-new
+                new URL(url)
+            } catch {
+                errors.cfgSellerNotifyUrl = 'URL inválida.'
+            }
+        }
+        if (!input.cfgSellerNotifyTokenSet) {
+            errors.cfgSellerNotifyToken = 'Cola o token UAZAPI (é guardado cifrado).'
+        }
+        if (!hasValidAllowlistEntry(input.cfgSellerNotifyPhones)) {
+            errors.cfgSellerNotifyPhones =
+                'Indica pelo menos um telefone do vendedor (um por linha ou separados por vírgula).'
+        }
     }
 
     if (input.cfgFollowup) {

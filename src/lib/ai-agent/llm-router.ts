@@ -615,7 +615,7 @@ async function callAnthropicWithTools(
                 (tc.name === CALENDAR_SUGGEST_SLOTS_TOOL || tc.name === CALENDAR_CREATE_EVENT_TOOL)
             ) {
                 try {
-                    toolContent = await executeCalendarToolCall(tc.name, args, meta.googleCalendar, context)
+                    toolContent = await executeCalendarToolCall(tc.name, args, meta.googleCalendar, context, config)
                 } catch (e) {
                     toolContent = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
                 }
@@ -836,7 +836,8 @@ async function callGeminiWithTools(
                             call.name,
                             (call.args || {}) as Record<string, unknown>,
                             meta.googleCalendar,
-                            context
+                            context,
+                            config
                         )
                     } catch (e) {
                         result = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
@@ -1147,7 +1148,7 @@ async function callOpenAIWithTools(
                         } catch {
                             raw = {}
                         }
-                        toolContent = await executeCalendarToolCall(fnName, raw, meta.googleCalendar, context)
+                        toolContent = await executeCalendarToolCall(fnName, raw, meta.googleCalendar, context, config)
                     } catch (e) {
                         toolContent = `Erro na Agenda Google: ${e instanceof Error ? e.message : String(e)}`
                     }

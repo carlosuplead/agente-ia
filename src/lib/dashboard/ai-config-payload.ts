@@ -51,6 +51,13 @@ export type AiConfigFormSnapshotInput = {
     cfgTeamNotifyDesc: string
     cfgTeamNotifyAppendTranscript: boolean
     cfgTeamNotifyTemplate: string
+    cfgSellerNotify: boolean
+    cfgSellerNotifyUrl: string
+    cfgSellerNotifyTokenInput: string
+    cfgClearSellerNotifyToken: boolean
+    cfgSellerNotifyPhones: string
+    cfgSellerNotifyOnAppt: boolean
+    cfgSellerNotifyTemplate: string
 }
 
 export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
@@ -111,7 +118,17 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         team_notification_allowlist_phones: i.cfgTeamNotifyAllowlist.trim() || null,
         team_notification_tool_description: i.cfgTeamNotifyDesc.trim() || null,
         team_notification_append_transcript: i.cfgTeamNotifyAppendTranscript,
-        team_notification_template: i.cfgTeamNotifyTemplate?.trim() || null
+        team_notification_template: i.cfgTeamNotifyTemplate?.trim() || null,
+        seller_notification_enabled: i.cfgSellerNotify,
+        seller_notification_uazapi_url: i.cfgSellerNotifyUrl?.trim() || null,
+        seller_notification_phones: i.cfgSellerNotifyPhones?.trim() || null,
+        seller_notification_on_appointment: i.cfgSellerNotifyOnAppt,
+        seller_notification_message_template: i.cfgSellerNotifyTemplate?.trim() || null
+    }
+    if (i.cfgClearSellerNotifyToken) {
+        out.seller_notification_uazapi_token = null
+    } else if (i.cfgSellerNotifyTokenInput?.trim()) {
+        out.seller_notification_uazapi_token = i.cfgSellerNotifyTokenInput.trim()
     }
     if (i.cfgClearOpenaiKey) {
         out.openai_api_key = null

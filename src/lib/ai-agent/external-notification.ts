@@ -15,7 +15,7 @@ import { decryptWorkspaceLlmKeyIfNeeded } from '@/lib/crypto/workspace-llm-keys'
  */
 
 const DEFAULT_TEMPLATE = [
-    '🟢 Agenda criada com sucesso.',
+    '🟢 {etapa}',
     '',
     '👤 Lead: {nome}',
     '📱 Telefone: {telefone}',
@@ -25,7 +25,7 @@ const DEFAULT_TEMPLATE = [
     '{resumo}'
 ].join('\n')
 
-export type SellerNotificationEvent = 'appointment_created'
+export type SellerNotificationEvent = 'appointment_created' | 'handoff_requested'
 
 export type SellerNotificationPayload = {
     /** Rótulo do evento (ex. "Agendamento confirmado"). */
@@ -42,6 +42,8 @@ export type SellerNotificationPayload = {
     leadEmail?: string
     /** Link do evento (Google Calendar). */
     eventLink?: string
+    /** Motivo declarado pela IA quando pediu handoff (placeholder {motivo}). */
+    handoffReason?: string
 }
 
 function splitPhones(raw: string | null | undefined): string[] {
@@ -85,13 +87,15 @@ function buildMessageBody(
         resumo: payload.summary || '—',
         vendedor: payload.seller || '—',
         link: payload.eventLink || '',
-        etapa: payload.stageLabel || 'Agendamento confirmado',
+        etapa: payload.stageLabel || 'Notificação',
+        motivo: payload.handoffReason || '—',
         // Aliases em inglês para quem preferir
         name: context.contactName || '—',
         phone: context.contactPhone || '—',
         appointment: payload.appointmentAt || '—',
         summary: payload.summary || '—',
-        title: payload.eventTitle || '—'
+        title: payload.eventTitle || '—',
+        reason: payload.handoffReason || '—'
     }
     return renderTemplate(template, data).trim()
 }
@@ -117,6 +121,7 @@ export async function sendSellerNotification(args: {
 
     if (!sellerNotificationLayerOn(config)) return
     if (event === 'appointment_created' && config.seller_notification_on_appointment === false) return
+    if (event === 'handoff_requested' && config.seller_notification_on_handoff === false) return
 
     const url = (config.seller_notification_uazapi_url || '').trim().replace(/\/+$/, '')
     const tokenStored = (config.seller_notification_uazapi_token || '').trim()

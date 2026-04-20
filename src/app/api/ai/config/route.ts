@@ -137,6 +137,7 @@ export async function POST(request: Request) {
             seller_notification_uazapi_url,
             seller_notification_phones,
             seller_notification_on_appointment,
+            seller_notification_on_handoff,
             seller_notification_message_template
         } = body
 
@@ -291,6 +292,7 @@ export async function POST(request: Request) {
             }
         }
         const sellerOnAppt = seller_notification_on_appointment !== false
+        const sellerOnHandoff = seller_notification_on_handoff !== false
         const sellerTemplate = trimOrNull(seller_notification_message_template)
 
         const rows = await sql.unsafe(
@@ -307,10 +309,10 @@ export async function POST(request: Request) {
                team_notification_tool_description, team_notification_append_transcript,
                team_notification_template,
                seller_notification_enabled, seller_notification_uazapi_url, seller_notification_phones,
-               seller_notification_on_appointment, seller_notification_message_template,
+               seller_notification_on_appointment, seller_notification_on_handoff, seller_notification_message_template,
                updated_at
              )
-             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, now())
+             VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, now())
              ON CONFLICT (singleton_key) DO UPDATE SET
                enabled = EXCLUDED.enabled,
                provider = EXCLUDED.provider,
@@ -357,6 +359,7 @@ export async function POST(request: Request) {
                seller_notification_uazapi_url = EXCLUDED.seller_notification_uazapi_url,
                seller_notification_phones = EXCLUDED.seller_notification_phones,
                seller_notification_on_appointment = EXCLUDED.seller_notification_on_appointment,
+               seller_notification_on_handoff = EXCLUDED.seller_notification_on_handoff,
                seller_notification_message_template = EXCLUDED.seller_notification_message_template,
                updated_at = now()
              RETURNING *`,
@@ -406,6 +409,7 @@ export async function POST(request: Request) {
                 sellerUrl,
                 sellerPhonesStore,
                 sellerOnAppt,
+                sellerOnHandoff,
                 sellerTemplate
             ]
         )

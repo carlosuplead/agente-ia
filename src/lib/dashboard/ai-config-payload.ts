@@ -57,6 +57,7 @@ export type AiConfigFormSnapshotInput = {
     cfgClearSellerNotifyToken: boolean
     cfgSellerNotifyPhones: string
     cfgSellerNotifyOnAppt: boolean
+    cfgSellerNotifyOnHandoff: boolean
     cfgSellerNotifyTemplate: string
 }
 
@@ -125,6 +126,7 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         seller_notification_uazapi_url: i.cfgSellerNotifyUrl?.trim() || null,
         seller_notification_phones: i.cfgSellerNotifyPhones?.trim() || null,
         seller_notification_on_appointment: i.cfgSellerNotifyOnAppt,
+        seller_notification_on_handoff: i.cfgSellerNotifyOnHandoff,
         seller_notification_message_template: i.cfgSellerNotifyTemplate?.trim() || null
     }
     if (i.cfgClearSellerNotifyToken) {

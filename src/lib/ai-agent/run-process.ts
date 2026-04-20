@@ -6,6 +6,7 @@ import type { LLMResponse } from '@/lib/ai-agent/types'
 import { parseMessageForWhatsApp } from '@/lib/ai-agent/format-for-whatsapp'
 import { splitAiResponseForChunks, type AiChunkSplitMode } from '@/lib/ai-agent/split-ai-response'
 import { setFollowupAnchorForConversation } from '@/lib/ai-agent/followup-anchor'
+import { sendSellerNotification } from '@/lib/ai-agent/external-notification'
 import { getProviderForWorkspace } from '@/lib/whatsapp/factory'
 import type { AiAgentConfig } from './types'
 import { shouldAcceptInboundForTestMode } from '@/lib/ai-agent/test-mode-allowlist'
@@ -764,6 +765,22 @@ export async function runAiProcess(
             `UPDATE ${sch}.ai_conversations SET status = 'handed_off', handoff_reason = $2 WHERE id = $1::uuid`,
             [conversationId, response.handoffReason ?? null]
         )
+
+        // Fire-and-forget: notifica o vendedor/equipa via UAZAPI dedicada. A
+        // própria sendSellerNotification verifica se o gatilho está ligado
+        // (seller_notification_on_handoff) e se o layer está configurado.
+        void sendSellerNotification({
+            config,
+            context,
+            event: 'handoff_requested',
+            payload: {
+                stageLabel: 'Atendimento transferido para humano',
+                handoffReason: response.handoffReason ?? undefined,
+                summary: response.handoffReason ?? undefined
+            }
+        }).catch(e => {
+            console.error('[run-process] sendSellerNotification (handoff) failed', e)
+        })
     } else {
         const { data: incRows, error: incErr } = await supabase.rpc('increment_ai_conversation_if_under_cap', {
             p_tenant: workspace_slug,

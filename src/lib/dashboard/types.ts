@@ -71,6 +71,7 @@ export type AiConfigRow = {
     seller_notification_uazapi_token_set?: boolean
     seller_notification_phones?: string | null
     seller_notification_on_appointment?: boolean
+    seller_notification_on_handoff?: boolean
     seller_notification_message_template?: string | null
 }
 

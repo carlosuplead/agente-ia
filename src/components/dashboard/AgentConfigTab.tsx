@@ -894,194 +894,234 @@ export function AgentConfigTab() {
                         )}
                     </div>
 
-                    {/* ── Card 7: Notificações à Equipa ── */}
+                    {/* ── Card 7: Notificações para humanos (unificado) ── */}
                     <div className="card">
                         <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
                             <span className="card-header-icon card-header-icon--green" aria-hidden="true"><Bell size={18} /></span>
-                            <span className="card-title">Notificações à Equipa</span>
+                            <span className="card-title">Notificações para humanos</span>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            O agente pode enviar alertas por WhatsApp para a equipa quando necessário.
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 20 }}>
+                            Configure como a equipa ou o vendedor são avisados quando algo importante acontece —
+                            agendamento confirmado, pedido de atendimento humano ou qualquer marco que queira sinalizar.
                         </p>
-                        <div className="checkbox-row" style={{ marginBottom: 16 }}>
-                            <input
-                                id="cfg-team-notify"
-                                type="checkbox"
-                                checked={d.cfgTeamNotify}
-                                onChange={e => d.setCfgTeamNotify(e.target.checked)}
-                            />
-                            <label htmlFor="cfg-team-notify">Ativar notificações</label>
-                        </div>
-                        {d.cfgTeamNotify && (
-                            <>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-team-notify-allow">Números da equipa</label>
-                                    <textarea
-                                        id="cfg-team-notify-allow"
-                                        className="input"
-                                        rows={3}
-                                        value={d.cfgTeamNotifyAllowlist}
-                                        onChange={e => d.setCfgTeamNotifyAllowlist(e.target.value)}
-                                        placeholder="Um número por linha (ex. +5511999999999)"
-                                        aria-invalid={!!err.cfgTeamNotifyAllowlist}
-                                        aria-describedby={err.cfgTeamNotifyAllowlist ? 'err-cfg-team-notify-allow' : undefined}
-                                    />
-                                    <FieldError id="err-cfg-team-notify-allow" message={err.cfgTeamNotifyAllowlist} />
-                                </div>
-                                <div className="checkbox-row" style={{ marginBottom: 12 }}>
-                                    <input
-                                        id="cfg-team-notify-transcript"
-                                        type="checkbox"
-                                        checked={d.cfgTeamNotifyAppendTranscript}
-                                        onChange={e => d.setCfgTeamNotifyAppendTranscript(e.target.checked)}
-                                    />
-                                    <label htmlFor="cfg-team-notify-transcript">Incluir trecho da conversa na notificação</label>
-                                </div>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-team-notify-desc">Quando notificar (instrução para a IA)</label>
-                                    <textarea
-                                        id="cfg-team-notify-desc"
-                                        className="input"
-                                        rows={2}
-                                        value={d.cfgTeamNotifyDesc}
-                                        onChange={e => d.setCfgTeamNotifyDesc(e.target.value)}
-                                        placeholder="Ex.: notificar quando o cliente pedir para falar com humano..."
-                                    />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-team-notify-template">
-                                        Modelo da mensagem (template)
-                                    </label>
-                                    <textarea
-                                        id="cfg-team-notify-template"
-                                        className="input textarea"
-                                        rows={6}
-                                        value={d.cfgTeamNotifyTemplate ?? ''}
-                                        onChange={e => d.setCfgTeamNotifyTemplate(e.target.value)}
-                                        placeholder={'Exemplo de formato:\n\nNovo lead qualificado:\nNome: {nome}\nTelefone: {telefone}\nInteresse: {interesse}\nResumo: {resumo_conversa}'}
-                                    />
-                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-                                        Instrua a IA sobre como formatar a notificação. Use campos como {'{nome}'}, {'{telefone}'}, etc.
-                                        A IA preencherá os dados automaticamente a partir da conversa.
-                                    </p>
-                                </div>
-                            </>
-                        )}
-                    </div>
 
-                    {/* ── Card 8: Notificação ao Vendedor (UAZAPI dedicada) ── */}
-                    <div className="card">
-                        <div className="card-header-with-icon" style={{ marginBottom: 16 }}>
-                            <span className="card-header-icon card-header-icon--green" aria-hidden="true"><Bell size={18} /></span>
-                            <span className="card-title">Notificação ao Vendedor (UAZAPI dedicada)</span>
+                        {/* ── A) Alertas internos da equipa (mesmo WhatsApp do cliente) ── */}
+                        <div
+                            style={{
+                                padding: '16px',
+                                border: '1px solid var(--border-subtle, #e5e7eb)',
+                                borderRadius: 8,
+                                marginBottom: 16,
+                                background: 'var(--surface-subtle, #fafafa)'
+                            }}
+                        >
+                            <h4 style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600 }}>
+                                Alertas à equipa (pelo mesmo WhatsApp que atende o cliente)
+                            </h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 0, marginBottom: 12 }}>
+                                A IA pode enviar alertas à sua equipa pelo mesmo número que fala com o cliente, quando
+                                o contexto da conversa indicar. Útil para avisos pontuais e ad hoc.
+                            </p>
+                            <div className="checkbox-row" style={{ marginBottom: 12 }}>
+                                <input
+                                    id="cfg-team-notify"
+                                    type="checkbox"
+                                    checked={d.cfgTeamNotify}
+                                    onChange={e => d.setCfgTeamNotify(e.target.checked)}
+                                />
+                                <label htmlFor="cfg-team-notify">Ativar alertas à equipa</label>
+                            </div>
+                            {d.cfgTeamNotify && (
+                                <>
+                                    <div className="input-group" style={{ marginBottom: 12 }}>
+                                        <label className="input-label" htmlFor="cfg-team-notify-allow">Números da equipa</label>
+                                        <textarea
+                                            id="cfg-team-notify-allow"
+                                            className="input"
+                                            rows={3}
+                                            value={d.cfgTeamNotifyAllowlist}
+                                            onChange={e => d.setCfgTeamNotifyAllowlist(e.target.value)}
+                                            placeholder="Um número por linha (ex. +5511999999999)"
+                                            aria-invalid={!!err.cfgTeamNotifyAllowlist}
+                                            aria-describedby={err.cfgTeamNotifyAllowlist ? 'err-cfg-team-notify-allow' : undefined}
+                                        />
+                                        <FieldError id="err-cfg-team-notify-allow" message={err.cfgTeamNotifyAllowlist} />
+                                    </div>
+                                    <div className="checkbox-row" style={{ marginBottom: 12 }}>
+                                        <input
+                                            id="cfg-team-notify-transcript"
+                                            type="checkbox"
+                                            checked={d.cfgTeamNotifyAppendTranscript}
+                                            onChange={e => d.setCfgTeamNotifyAppendTranscript(e.target.checked)}
+                                        />
+                                        <label htmlFor="cfg-team-notify-transcript">Incluir trecho da conversa na notificação</label>
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 12 }}>
+                                        <label className="input-label" htmlFor="cfg-team-notify-desc">Quando notificar (instrução para a IA)</label>
+                                        <textarea
+                                            id="cfg-team-notify-desc"
+                                            className="input"
+                                            rows={2}
+                                            value={d.cfgTeamNotifyDesc}
+                                            onChange={e => d.setCfgTeamNotifyDesc(e.target.value)}
+                                            placeholder="Ex.: notificar quando o cliente pedir para falar com humano..."
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label className="input-label" htmlFor="cfg-team-notify-template">
+                                            Modelo da mensagem
+                                        </label>
+                                        <textarea
+                                            id="cfg-team-notify-template"
+                                            className="input textarea"
+                                            rows={6}
+                                            value={d.cfgTeamNotifyTemplate ?? ''}
+                                            onChange={e => d.setCfgTeamNotifyTemplate(e.target.value)}
+                                            placeholder={'Exemplo de formato:\n\nNovo lead qualificado:\nNome: {nome}\nTelefone: {telefone}\nInteresse: {interesse}\nResumo: {resumo_conversa}'}
+                                        />
+                                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                            Indique à IA como formatar a notificação. Use campos como {'{nome}'}, {'{telefone}'}, etc. —
+                                            a IA preenche a partir da conversa.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>
-                            Usa uma instância UAZAPI separada (outro número) para avisar automaticamente o vendedor assim que um
-                            agendamento é criado na Google Agenda. Não interfere com o WhatsApp que atende o cliente.
-                        </p>
-                        <div className="checkbox-row" style={{ marginBottom: 16 }}>
-                            <input
-                                id="cfg-seller-notify"
-                                type="checkbox"
-                                checked={d.cfgSellerNotify}
-                                onChange={e => d.setCfgSellerNotify(e.target.checked)}
-                            />
-                            <label htmlFor="cfg-seller-notify">Ativar notificação ao vendedor</label>
-                        </div>
-                        {d.cfgSellerNotify && (
-                            <>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-seller-notify-url">URL da UAZAPI</label>
-                                    <input
-                                        id="cfg-seller-notify-url"
-                                        className="input"
-                                        type="text"
-                                        placeholder="https://atendsoft.uazapi.com"
-                                        value={d.cfgSellerNotifyUrl}
-                                        onChange={e => d.setCfgSellerNotifyUrl(e.target.value)}
-                                        aria-invalid={!!err.cfgSellerNotifyUrl}
-                                        aria-describedby={err.cfgSellerNotifyUrl ? 'err-cfg-seller-notify-url' : undefined}
-                                    />
-                                    <FieldError id="err-cfg-seller-notify-url" message={err.cfgSellerNotifyUrl} />
-                                </div>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-seller-notify-token">
-                                        Token UAZAPI {d.aiConfig?.seller_notification_uazapi_token_set
-                                            ? <span style={{ fontSize: 12, color: 'var(--success)' }}>(guardado ✓)</span>
-                                            : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>(não guardado)</span>}
-                                    </label>
-                                    <input
-                                        id="cfg-seller-notify-token"
-                                        className="input"
-                                        type="password"
-                                        autoComplete="new-password"
-                                        placeholder={d.aiConfig?.seller_notification_uazapi_token_set
-                                            ? 'Cola um novo token para substituir'
-                                            : 'Cola o token da instância UAZAPI dedicada'}
-                                        value={d.cfgSellerNotifyTokenInput}
-                                        onChange={e => {
-                                            d.setCfgSellerNotifyTokenInput(e.target.value)
-                                            if (e.target.value) d.setCfgClearSellerNotifyToken(false)
-                                        }}
-                                        aria-invalid={!!err.cfgSellerNotifyToken}
-                                        aria-describedby={err.cfgSellerNotifyToken ? 'err-cfg-seller-notify-token' : undefined}
-                                    />
-                                    <FieldError id="err-cfg-seller-notify-token" message={err.cfgSellerNotifyToken} />
-                                    {d.aiConfig?.seller_notification_uazapi_token_set && (
-                                        <div className="checkbox-row" style={{ marginTop: 8 }}>
+
+                        {/* ── B) Aviso automático ao vendedor (número separado) ── */}
+                        <div
+                            style={{
+                                padding: '16px',
+                                border: '1px solid var(--border-subtle, #e5e7eb)',
+                                borderRadius: 8,
+                                background: 'var(--surface-subtle, #fafafa)'
+                            }}
+                        >
+                            <h4 style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600 }}>
+                                Aviso automático ao vendedor (por um número separado)
+                            </h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 0, marginBottom: 12 }}>
+                                Usa um número dedicado para avisar automaticamente o vendedor em marcos definidos —
+                                sem interferir com a conversa do cliente. Pode ligar um ou mais gatilhos abaixo.
+                            </p>
+                            <div className="checkbox-row" style={{ marginBottom: 12 }}>
+                                <input
+                                    id="cfg-seller-notify"
+                                    type="checkbox"
+                                    checked={d.cfgSellerNotify}
+                                    onChange={e => d.setCfgSellerNotify(e.target.checked)}
+                                />
+                                <label htmlFor="cfg-seller-notify">Ativar avisos automáticos</label>
+                            </div>
+                            {d.cfgSellerNotify && (
+                                <>
+                                    <div className="input-group" style={{ marginBottom: 12 }}>
+                                        <label className="input-label" htmlFor="cfg-seller-notify-url">URL do canal</label>
+                                        <input
+                                            id="cfg-seller-notify-url"
+                                            className="input"
+                                            type="text"
+                                            placeholder="https://atendsoft.uazapi.com"
+                                            value={d.cfgSellerNotifyUrl}
+                                            onChange={e => d.setCfgSellerNotifyUrl(e.target.value)}
+                                            aria-invalid={!!err.cfgSellerNotifyUrl}
+                                            aria-describedby={err.cfgSellerNotifyUrl ? 'err-cfg-seller-notify-url' : undefined}
+                                        />
+                                        <FieldError id="err-cfg-seller-notify-url" message={err.cfgSellerNotifyUrl} />
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 12 }}>
+                                        <label className="input-label" htmlFor="cfg-seller-notify-token">
+                                            Token do canal {d.aiConfig?.seller_notification_uazapi_token_set
+                                                ? <span style={{ fontSize: 12, color: 'var(--success)' }}>(guardado ✓)</span>
+                                                : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>(não guardado)</span>}
+                                        </label>
+                                        <input
+                                            id="cfg-seller-notify-token"
+                                            className="input"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            placeholder={d.aiConfig?.seller_notification_uazapi_token_set
+                                                ? 'Cole um novo token para substituir'
+                                                : 'Cole o token do canal dedicado'}
+                                            value={d.cfgSellerNotifyTokenInput}
+                                            onChange={e => {
+                                                d.setCfgSellerNotifyTokenInput(e.target.value)
+                                                if (e.target.value) d.setCfgClearSellerNotifyToken(false)
+                                            }}
+                                            aria-invalid={!!err.cfgSellerNotifyToken}
+                                            aria-describedby={err.cfgSellerNotifyToken ? 'err-cfg-seller-notify-token' : undefined}
+                                        />
+                                        <FieldError id="err-cfg-seller-notify-token" message={err.cfgSellerNotifyToken} />
+                                        {d.aiConfig?.seller_notification_uazapi_token_set && (
+                                            <div className="checkbox-row" style={{ marginTop: 8 }}>
+                                                <input
+                                                    id="cfg-seller-notify-token-clear"
+                                                    type="checkbox"
+                                                    checked={d.cfgClearSellerNotifyToken}
+                                                    onChange={e => d.setCfgClearSellerNotifyToken(e.target.checked)}
+                                                />
+                                                <label htmlFor="cfg-seller-notify-token-clear">Apagar token guardado ao gravar</label>
+                                            </div>
+                                        )}
+                                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                            O token é cifrado antes de ser guardado.
+                                        </p>
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 12 }}>
+                                        <label className="input-label" htmlFor="cfg-seller-notify-phones">Números a avisar</label>
+                                        <textarea
+                                            id="cfg-seller-notify-phones"
+                                            className="input"
+                                            rows={3}
+                                            value={d.cfgSellerNotifyPhones}
+                                            onChange={e => d.setCfgSellerNotifyPhones(e.target.value)}
+                                            placeholder="Um por linha (ex. +5531993665469)"
+                                            aria-invalid={!!err.cfgSellerNotifyPhones}
+                                            aria-describedby={err.cfgSellerNotifyPhones ? 'err-cfg-seller-notify-phones' : undefined}
+                                        />
+                                        <FieldError id="err-cfg-seller-notify-phones" message={err.cfgSellerNotifyPhones} />
+                                    </div>
+
+                                    <div style={{ marginBottom: 12 }}>
+                                        <p style={{ fontSize: 13, fontWeight: 600, margin: '8px 0' }}>Gatilhos</p>
+                                        <div className="checkbox-row" style={{ marginBottom: 8 }}>
                                             <input
-                                                id="cfg-seller-notify-token-clear"
+                                                id="cfg-seller-notify-on-appt"
                                                 type="checkbox"
-                                                checked={d.cfgClearSellerNotifyToken}
-                                                onChange={e => d.setCfgClearSellerNotifyToken(e.target.checked)}
+                                                checked={d.cfgSellerNotifyOnAppt}
+                                                onChange={e => d.setCfgSellerNotifyOnAppt(e.target.checked)}
                                             />
-                                            <label htmlFor="cfg-seller-notify-token-clear">Apagar token guardado ao gravar</label>
+                                            <label htmlFor="cfg-seller-notify-on-appt">Quando a IA criar um agendamento na Google Agenda</label>
                                         </div>
-                                    )}
-                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-                                        O token é cifrado com <code>WORKSPACE_LLM_KEYS_SECRET</code> antes de ir para a base de dados.
-                                    </p>
-                                </div>
-                                <div className="input-group" style={{ marginBottom: 12 }}>
-                                    <label className="input-label" htmlFor="cfg-seller-notify-phones">Telefones a notificar</label>
-                                    <textarea
-                                        id="cfg-seller-notify-phones"
-                                        className="input"
-                                        rows={3}
-                                        value={d.cfgSellerNotifyPhones}
-                                        onChange={e => d.setCfgSellerNotifyPhones(e.target.value)}
-                                        placeholder="Um por linha (ex. +5531993665469)"
-                                        aria-invalid={!!err.cfgSellerNotifyPhones}
-                                        aria-describedby={err.cfgSellerNotifyPhones ? 'err-cfg-seller-notify-phones' : undefined}
-                                    />
-                                    <FieldError id="err-cfg-seller-notify-phones" message={err.cfgSellerNotifyPhones} />
-                                </div>
-                                <div className="checkbox-row" style={{ marginBottom: 12 }}>
-                                    <input
-                                        id="cfg-seller-notify-on-appt"
-                                        type="checkbox"
-                                        checked={d.cfgSellerNotifyOnAppt}
-                                        onChange={e => d.setCfgSellerNotifyOnAppt(e.target.checked)}
-                                    />
-                                    <label htmlFor="cfg-seller-notify-on-appt">Notificar quando a IA criar um agendamento</label>
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label" htmlFor="cfg-seller-notify-template">Template da mensagem</label>
-                                    <textarea
-                                        id="cfg-seller-notify-template"
-                                        className="input textarea"
-                                        rows={8}
-                                        value={d.cfgSellerNotifyTemplate}
-                                        onChange={e => d.setCfgSellerNotifyTemplate(e.target.value)}
-                                        placeholder={'🟢 Agenda criada com sucesso.\n\n👤 Lead: {nome}\n📱 Telefone: {telefone}\n🗓️ Agendamento: {agendamento}\n\n📝 Resumo:\n{resumo}'}
-                                    />
-                                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
-                                        Placeholders disponíveis: {'{nome}'}, {'{telefone}'}, {'{email}'}, {'{agendamento}'}, {'{titulo}'}, {'{resumo}'}, {'{vendedor}'}, {'{link}'}, {'{etapa}'}.
-                                        Se deixar em branco, é usado um modelo padrão.
-                                    </p>
-                                </div>
-                            </>
-                        )}
+                                        <div className="checkbox-row">
+                                            <input
+                                                id="cfg-seller-notify-on-handoff"
+                                                type="checkbox"
+                                                checked={d.cfgSellerNotifyOnHandoff}
+                                                onChange={e => d.setCfgSellerNotifyOnHandoff(e.target.checked)}
+                                            />
+                                            <label htmlFor="cfg-seller-notify-on-handoff">Quando a IA transferir o atendimento para um humano</label>
+                                        </div>
+                                    </div>
+
+                                    <div className="input-group">
+                                        <label className="input-label" htmlFor="cfg-seller-notify-template">Modelo da mensagem</label>
+                                        <textarea
+                                            id="cfg-seller-notify-template"
+                                            className="input textarea"
+                                            rows={8}
+                                            value={d.cfgSellerNotifyTemplate}
+                                            onChange={e => d.setCfgSellerNotifyTemplate(e.target.value)}
+                                            placeholder={'🟢 {etapa}\n\n👤 Lead: {nome}\n📱 Telefone: {telefone}\n🗓️ Agendamento: {agendamento}\n\n📝 Resumo:\n{resumo}'}
+                                        />
+                                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                            Campos disponíveis: {'{nome}'}, {'{telefone}'}, {'{email}'}, {'{agendamento}'}, {'{titulo}'}, {'{resumo}'}, {'{vendedor}'}, {'{link}'}, {'{etapa}'}, {'{motivo}'}.
+                                            Se deixar em branco, é usado um modelo padrão.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     {/* ── Card 9: Integração N8N ── */}

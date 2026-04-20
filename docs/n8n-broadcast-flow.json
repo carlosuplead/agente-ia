@@ -1,0 +1,265 @@
+{
+  "name": "agente-ia — Disparos (central)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agente-ia-disparos",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000001",
+      "name": "Webhook (dispatch)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-800, 0],
+      "webhookId": "agente-ia-disparos"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida a assinatura X-Platform-Signature (HMAC SHA-256 sobre o body bruto) com\n// o segredo partilhado N8N_WEBHOOK_SECRET (configurado nas Credenciais do n8n\n// como \"Header Auth\" OU, nesta versão minimalista, aqui no Code via env).\n//\n// O ideal é guardar o segredo em Credentials do n8n; para simplicidade, este\n// fluxo lê de uma variável `SHARED_SECRET` definida em Settings → Variables.\n\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst rawBody = item.json.body;           // string bruta (rawBody: true)\nconst providedSig = (headers['x-platform-signature'] || '').trim();\n\nconst secret = $vars.SHARED_SECRET || $env.SHARED_SECRET;\nif (!secret) {\n  throw new Error('SHARED_SECRET não está configurado nas variáveis do n8n');\n}\n\nconst expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');\nconst ok = providedSig.length === expected.length &&\n  crypto.timingSafeEqual(Buffer.from(providedSig, 'utf8'), Buffer.from(expected, 'utf8'));\n\nif (!ok) {\n  return [{ json: { __invalid_signature: true } }];\n}\n\nconst parsed = JSON.parse(rawBody);\n// Devolve os items um-a-um (para o SplitInBatches seguinte iterar)\nreturn parsed.items.map(it => ({\n  json: {\n    dispatch_id: parsed.dispatch_id,\n    callback_url: parsed.callback.url,\n    signature_header: parsed.callback.signature_header,\n    ...it\n  }\n}));\n"
+      },
+      "id": "a1000000-0000-0000-0000-000000000002",
+      "name": "Validar HMAC + explodir items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.__invalid_signature }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000003",
+      "name": "Assinatura inválida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-320, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'Invalid signature' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000004",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-80, -200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, accepted: true } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000005",
+      "name": "Responder 202 (aceite)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000006",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.provider }}",
+              "rightValue": "official",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000007",
+      "name": "Provider = official?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $json.credentials.meta_phone_number_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.credentials.meta_access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone_e164_digits }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"{{ $json.message.template_name }}\",\n    \"language\": { \"code\": \"{{ $json.message.template_language }}\" },\n    \"components\": {{ JSON.stringify($json.message.template_components || []) }}\n  }\n}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": false,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000008",
+      "name": "Meta Cloud → enviar template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Constrói o body do callback a partir da resposta da Meta e assina-o.\nconst crypto = require('crypto');\nconst secret = $vars.SHARED_SECRET || $env.SHARED_SECRET;\nif (!secret) throw new Error('SHARED_SECRET em falta');\n\nconst input = $input.first().json;\n// O HTTP anterior pode vir como { messages: [{ id }] } (sucesso) ou { error: {...} } (falha)\nconst metaResp = input.body || input;\nconst meta = metaResp;\n\nconst previousItem = $node['Loop Over Items'].json;\n\nlet status = 'failed';\nlet whatsapp_message_id = null;\nlet error = null;\n\nif (meta && meta.messages && Array.isArray(meta.messages) && meta.messages[0] && meta.messages[0].id) {\n  status = 'sent';\n  whatsapp_message_id = meta.messages[0].id;\n} else if (meta && meta.error) {\n  error = meta.error.message || JSON.stringify(meta.error);\n} else {\n  error = 'Resposta Meta inesperada: ' + JSON.stringify(meta).slice(0, 300);\n}\n\nconst callbackBody = JSON.stringify({\n  queue_item_id: previousItem.queue_item_id,\n  dispatch_id: previousItem.dispatch_id,\n  status,\n  whatsapp_message_id,\n  error\n});\n\nconst signature = crypto.createHmac('sha256', secret).update(callbackBody).digest('hex');\n\nreturn [{\n  json: {\n    callback_url: previousItem.callback_url,\n    signature_header: previousItem.signature_header,\n    signature,\n    callback_body: callbackBody\n  }\n}];\n"
+      },
+      "id": "a1000000-0000-0000-0000-000000000009",
+      "name": "Preparar callback (Meta)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "={{ $json.signature_header }}",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.callback_body }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000010",
+      "name": "Callback → plataforma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Provider não suportado nesta versão → callback \"failed\" para a plataforma\n// desistir do item (e não ficar stuck em \"sending\").\nconst crypto = require('crypto');\nconst secret = $vars.SHARED_SECRET || $env.SHARED_SECRET;\nif (!secret) throw new Error('SHARED_SECRET em falta');\n\nconst previousItem = $input.first().json;\nconst callbackBody = JSON.stringify({\n  queue_item_id: previousItem.queue_item_id,\n  dispatch_id: previousItem.dispatch_id,\n  status: 'failed',\n  whatsapp_message_id: null,\n  error: `Provider '${previousItem.provider}' ainda não suportado no fluxo n8n — usar worker directo.`\n});\nconst signature = crypto.createHmac('sha256', secret).update(callbackBody).digest('hex');\n\nreturn [{\n  json: {\n    callback_url: previousItem.callback_url,\n    signature_header: previousItem.signature_header,\n    signature,\n    callback_body: callbackBody\n  }\n}];\n"
+      },
+      "id": "a1000000-0000-0000-0000-000000000011",
+      "name": "Callback (provider não suportado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 120]
+    }
+  ],
+  "connections": {
+    "Webhook (dispatch)": {
+      "main": [[{ "node": "Validar HMAC + explodir items", "type": "main", "index": 0 }]]
+    },
+    "Validar HMAC + explodir items": {
+      "main": [[{ "node": "Assinatura inválida?", "type": "main", "index": 0 }]]
+    },
+    "Assinatura inválida?": {
+      "main": [
+        [{ "node": "Responder 401", "type": "main", "index": 0 }],
+        [{ "node": "Responder 202 (aceite)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Responder 202 (aceite)": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [{ "node": "Provider = official?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Provider = official?": {
+      "main": [
+        [{ "node": "Meta Cloud → enviar template", "type": "main", "index": 0 }],
+        [{ "node": "Callback (provider não suportado)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Meta Cloud → enviar template": {
+      "main": [[{ "node": "Preparar callback (Meta)", "type": "main", "index": 0 }]]
+    },
+    "Preparar callback (Meta)": {
+      "main": [[{ "node": "Callback → plataforma", "type": "main", "index": 0 }]]
+    },
+    "Callback → plataforma": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    },
+    "Callback (provider não suportado)": {
+      "main": [[{ "node": "Callback → plataforma", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "Fluxo central: recebe batch da plataforma agente-ia, valida HMAC, itera contactos, envia template via Meta Cloud com credenciais do workspace (passadas no payload) e devolve status por item ao callback da plataforma.",
+    "templateCredsSetupCompleted": false
+  }
+}

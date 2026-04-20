@@ -94,7 +94,9 @@ export type AiAgentConfig = {
     seller_notification_phones?: string | null
     /** Disparar ao criar agendamento Google Calendar (default true). */
     seller_notification_on_appointment?: boolean
-    /** Template de mensagem. Placeholders: {nome}, {telefone}, {email}, {agendamento}, {resumo}, {vendedor}. */
+    /** Disparar quando a IA transferir o atendimento para humano — handoff (default true). */
+    seller_notification_on_handoff?: boolean
+    /** Template de mensagem. Placeholders: {nome}, {telefone}, {email}, {agendamento}, {resumo}, {vendedor}, {motivo}. */
     seller_notification_message_template?: string | null
 }
 

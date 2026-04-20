@@ -75,6 +75,7 @@ function applyAiConfigToForm(
         setCfgClearSellerNotifyToken: (v: boolean) => void
         setCfgSellerNotifyPhones: (v: string) => void
         setCfgSellerNotifyOnAppt: (v: boolean) => void
+        setCfgSellerNotifyOnHandoff: (v: boolean) => void
         setCfgSellerNotifyTemplate: (v: string) => void
         setCfgAnthropicKeyInput: (v: string) => void
         setCfgClearAnthropicKey: (v: boolean) => void
@@ -144,6 +145,7 @@ function applyAiConfigToForm(
     setters.setCfgClearSellerNotifyToken(false)
     setters.setCfgSellerNotifyPhones(merged.seller_notification_phones ?? '')
     setters.setCfgSellerNotifyOnAppt(merged.seller_notification_on_appointment !== false)
+    setters.setCfgSellerNotifyOnHandoff(merged.seller_notification_on_handoff !== false)
     setters.setCfgSellerNotifyTemplate(merged.seller_notification_message_template ?? '')
 }
 
@@ -290,6 +292,7 @@ export function useDashboardController() {
     const [cfgClearSellerNotifyToken, setCfgClearSellerNotifyToken] = useState(false)
     const [cfgSellerNotifyPhones, setCfgSellerNotifyPhones] = useState('')
     const [cfgSellerNotifyOnAppt, setCfgSellerNotifyOnAppt] = useState(true)
+    const [cfgSellerNotifyOnHandoff, setCfgSellerNotifyOnHandoff] = useState(true)
     const [cfgSellerNotifyTemplate, setCfgSellerNotifyTemplate] = useState('')
 
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
@@ -390,6 +393,7 @@ export function useDashboardController() {
             cfgClearSellerNotifyToken,
             cfgSellerNotifyPhones,
             cfgSellerNotifyOnAppt,
+            cfgSellerNotifyOnHandoff,
             cfgSellerNotifyTemplate,
             cfgVertexProject,
             cfgVertexLocation,
@@ -447,6 +451,7 @@ export function useDashboardController() {
             cfgClearSellerNotifyToken,
             cfgSellerNotifyPhones,
             cfgSellerNotifyOnAppt,
+            cfgSellerNotifyOnHandoff,
             cfgSellerNotifyTemplate,
             cfgVertexProject,
             cfgVertexLocation,
@@ -684,6 +689,7 @@ export function useDashboardController() {
             setCfgClearSellerNotifyToken,
             setCfgSellerNotifyPhones,
             setCfgSellerNotifyOnAppt,
+            setCfgSellerNotifyOnHandoff,
             setCfgSellerNotifyTemplate,
             setCfgAnthropicKeyInput,
             setCfgClearAnthropicKey,
@@ -1472,6 +1478,8 @@ export function useDashboardController() {
         setCfgSellerNotifyPhones,
         cfgSellerNotifyOnAppt,
         setCfgSellerNotifyOnAppt,
+        cfgSellerNotifyOnHandoff,
+        setCfgSellerNotifyOnHandoff,
         cfgSellerNotifyTemplate,
         setCfgSellerNotifyTemplate,
         newN8nToolRow,

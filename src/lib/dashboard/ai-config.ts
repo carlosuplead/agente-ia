@@ -54,6 +54,7 @@ export const AI_CONFIG_FALLBACK: AiConfigRow = {
     seller_notification_uazapi_token_set: false,
     seller_notification_phones: null,
     seller_notification_on_appointment: true,
+    seller_notification_on_handoff: true,
     seller_notification_message_template: null
 }
 

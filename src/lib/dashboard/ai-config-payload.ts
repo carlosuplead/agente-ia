@@ -98,7 +98,9 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         ai_followup_prompt: i.cfgFollowupPrompt?.trim() || null,
         ai_followup_steps: i.cfgFollowup
             ? i.cfgFollowupSteps
-                  .filter(r => r.message.trim())
+                  // Com prompt IA definido, passos sem mensagem fixa são válidos (IA gera).
+                  // Sem prompt IA, só passos com mensagem fixa fazem sentido.
+                  .filter(r => r.message.trim() || (i.cfgFollowupPrompt ?? '').trim())
                   .map(r => ({
                       amount: r.amount,
                       unit: r.unit,

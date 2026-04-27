@@ -244,7 +244,24 @@ function buildSystemInstructions(
 
     const chunkOn = config.ai_chunk_messages_enabled === true
     const chunkLinesMode = config.ai_chunk_split_mode === 'lines'
+
+    // Data/hora atual em PT-BR (timezone São Paulo). Injetado no topo para a IA
+    // saber sempre o "hoje", evitando alucinações de datas (ex: agendar em 2024).
+    const now = new Date()
+    const dateLine = now.toLocaleString('pt-BR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo'
+    })
+    const contextoTemporal = `CONTEXTO TEMPORAL (atualizado a cada mensagem): Agora é ${dateLine} (horário de Brasília). Use esta data como referência absoluta para qualquer agendamento, "amanhã", "próxima semana", etc. Nunca invente datas — sempre baseie-se nesta.`
+
     const parts = [
+        contextoTemporal,
+        '',
         config.system_prompt || 'Você é um assistente virtual. Seja cordial e objetivo.',
         '',
         handoffOn

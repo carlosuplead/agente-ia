@@ -13,7 +13,7 @@ export const calendarToolsPromptBlock = `Ferramentas Google Agenda (só disponí
 
 export const calendarSuggestSlotsDescription = `Lista horários livres na Google Agenda do negócio para recomendar ao cliente. Parâmetros: range_start_date e range_end_date (YYYY-MM-DD), timezone (IANA), slot_duration_minutos (ex. 30), max_sugestões (1–20), horário_início e horário_fim do expediente (HH:mm, ex. 09:00 e 18:00).`
 
-export const calendarCreateEventDescription = `Cria um evento na Google Agenda após confirmação explícita do horário pelo cliente. Parâmetros: titulo, inicio_iso e fim_iso (ISO 8601 com timezone ou local claro), timezone (IANA se as datas forem ambíguas), descricao_opcional (texto extra; o sistema acrescenta dados do contacto).`
+export const calendarCreateEventDescription = `Cria um evento na Google Agenda após confirmação explícita do horário pelo cliente. Parâmetros: titulo, inicio_iso e fim_iso (ISO 8601 com timezone ou local claro), timezone (IANA se as datas forem ambíguas), descricao_opcional (texto extra; o sistema acrescenta dados do contacto), email_cliente (opcional — email do lead capturado no chat; será adicionado como convidado e o Google envia convite por email automaticamente; emails fixos da equipa são adicionados pelo backend).`
 
 export type GoogleCalendarMeta = {
     refreshToken: string
@@ -55,12 +55,28 @@ export async function executeCalendarToolCall(
         const contactLine = `Contacto WhatsApp: ${context.contactName} (${context.contactPhone})`
         const description = [extra, contactLine].filter(Boolean).join('\n\n')
         if (!title) return 'Erro: titulo é obrigatório.'
+
+        // Junta email do cliente (vindo da IA) + lista fixa do workspace (config).
+        const attendees: string[] = []
+        const clientEmailRaw =
+            (args.email_cliente ?? args.attendee_email ?? args.client_email ?? args.email) || ''
+        const clientEmail = typeof clientEmailRaw === 'string' ? clientEmailRaw.trim() : ''
+        if (clientEmail) attendees.push(clientEmail)
+        const defaultsRaw = config?.google_calendar_default_attendees || ''
+        if (defaultsRaw && typeof defaultsRaw === 'string') {
+            for (const e of defaultsRaw.split(/[\n,;]+/)) {
+                const email = e.trim()
+                if (email) attendees.push(email)
+            }
+        }
+
         const result = await createCalendarEvent(calendar.refreshToken, calendar.calendarId, {
             title,
             startDatetime: start,
             endDatetime: end,
             timezone: tz,
-            description
+            description,
+            attendees
         })
 
         // Fire-and-forget: notifica o vendedor via UAZAPI dedicada quando o
@@ -159,7 +175,8 @@ export function calendarGeminiFunctionDeclarations(): Array<Record<string, unkno
                     start_datetime: { type: SchemaType.STRING, description: 'Início ISO 8601' },
                     end_datetime: { type: SchemaType.STRING, description: 'Fim ISO 8601' },
                     timezone: { type: SchemaType.STRING, description: 'Fuso IANA' },
-                    description: { type: SchemaType.STRING, description: 'Notas opcionais (o contacto é anexado automaticamente)' }
+                    description: { type: SchemaType.STRING, description: 'Notas opcionais (o contacto é anexado automaticamente)' },
+                    email_cliente: { type: SchemaType.STRING, description: 'Email do cliente capturado na conversa (opcional). Será adicionado como convidado e o Google envia convite automaticamente.' }
                 },
                 required: ['title', 'start_datetime', 'end_datetime', 'timezone']
             }
@@ -201,7 +218,8 @@ export function calendarOpenAiTools(): ChatCompletionTool[] {
                         start_datetime: { type: 'string' },
                         end_datetime: { type: 'string' },
                         timezone: { type: 'string' },
-                        description: { type: 'string' }
+                        description: { type: 'string' },
+                        email_cliente: { type: 'string', description: 'Email do cliente capturado na conversa (opcional). Será adicionado como convidado.' }
                     },
                     required: ['title', 'start_datetime', 'end_datetime', 'timezone']
                 }

@@ -129,6 +129,8 @@ export type CreateEventParams = {
     endDatetime: string
     timezone: string
     description?: string
+    /** Lista de emails para convidar (Google envia convite por email automaticamente). */
+    attendees?: string[]
 }
 
 export async function createCalendarEvent(
@@ -150,10 +152,22 @@ export async function createCalendarEvent(
     }
     if (end <= start) return 'Erro: o fim do evento deve ser depois do início.'
 
+    // Normaliza e desduplica attendees (case-insensitive, RFC-5322 simples).
+    const attendeeList = Array.isArray(p.attendees) ? p.attendees : []
+    const attendeesNormalized = Array.from(
+        new Set(
+            attendeeList
+                .map(e => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+                .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+        )
+    ).map(email => ({ email }))
+
     const auth = createCalendarOAuth2(refreshToken)
     const cal = google.calendar({ version: 'v3', auth })
     const res = await cal.events.insert({
         calendarId,
+        // Faz o Google enviar email de convite a todos os attendees automaticamente.
+        sendUpdates: attendeesNormalized.length > 0 ? 'all' : 'none',
         requestBody: {
             summary: p.title.trim().slice(0, 500),
             description: p.description?.trim() || undefined,
@@ -164,12 +178,17 @@ export async function createCalendarEvent(
             end: {
                 dateTime: end.setZone(zone).toFormat("yyyy-LL-dd'T'HH:mm:ss"),
                 timeZone: zone
-            }
+            },
+            attendees: attendeesNormalized.length > 0 ? attendeesNormalized : undefined
         }
     })
     const id = res.data.id || ''
     const htmlLink = res.data.htmlLink || ''
-    return `Evento criado na Google Agenda (id: ${id}). Link: ${htmlLink || 'n/d'}`
+    const attendeeNote =
+        attendeesNormalized.length > 0
+            ? ` Convidados: ${attendeesNormalized.map(a => a.email).join(', ')}.`
+            : ''
+    return `Evento criado na Google Agenda (id: ${id}).${attendeeNote} Link: ${htmlLink || 'n/d'}`
 }
 
 export async function fetchGoogleAccountEmail(accessToken: string): Promise<string | null> {

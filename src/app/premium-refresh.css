@@ -1,0 +1,374 @@
+/* ========================================================================
+   PREMIUM REFRESH — Nocturnal Architect (2026-04-30)
+   Tipografia, gradientes, depth, focus polidos. Aplicado por cima do tema
+   existente para ganhar acabamento premium sem quebrar componentes.
+   ======================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+:root {
+    /* Tipografia */
+    --font-display: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    /* Refinamentos visuais */
+    --gradient-primary: linear-gradient(135deg, #6366f1 0%, #4f8dff 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #5658e6 0%, #3b7ef0 100%);
+    --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+    --shadow-elev: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+    --shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.04);
+    --shadow-glow-primary: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+[data-theme="dark"] {
+    --gradient-primary: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #a5adff 0%, #818cf8 100%);
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-elev: 0 4px 16px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.5), 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+html, body {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6,
+.card-title, .stats-number, .display-text {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 700;
+}
+
+code, pre, .inline-code {
+    font-family: var(--font-mono);
+}
+
+/* ========== CARDS — depth via shift + subtle elevation ========== */
+.card {
+    border-radius: 14px;
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-elev);
+}
+
+.card-title {
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+}
+
+/* ========== BUTTONS — gradient primary + softer secondary ========== */
+.btn {
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+    font-family: var(--font-body);
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    color: #ffffff;
+    box-shadow:
+        0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--gradient-primary-hover);
+    transform: translateY(-1px);
+    box-shadow:
+        0 6px 20px color-mix(in srgb, var(--accent) 40%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.btn-secondary {
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    box-shadow: var(--shadow-elev);
+}
+
+[data-theme="dark"] .btn-secondary {
+    background: var(--surface-card);
+}
+
+.btn-compact {
+    padding: 6px 12px;
+    font-size: 12.5px;
+    border-radius: 8px;
+}
+
+/* ========== INPUTS — focus glow polido ========== */
+.input,
+.input.select,
+textarea.input {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: var(--font-body);
+    font-size: 14px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.input:hover:not(:disabled):not(:focus) {
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.input:focus,
+.input:focus-visible,
+.input.select:focus,
+textarea.input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--shadow-glow-primary);
+    background: var(--surface);
+}
+
+[data-theme="dark"] .input,
+[data-theme="dark"] textarea.input,
+[data-theme="dark"] .input.select {
+    background: var(--surface-secondary);
+    border-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+[data-theme="dark"] .input:focus {
+    background: var(--surface-card);
+}
+
+.input-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.005em;
+    margin-bottom: 6px;
+}
+
+.input-hint {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-top: 6px;
+}
+
+/* ========== STATUS BADGES — mais polidos ========== */
+.status-badge {
+    font-weight: 600;
+    font-size: 12px;
+    padding: 4px 11px;
+    letter-spacing: 0.01em;
+    border: 1px solid transparent;
+}
+
+.status-badge.connected {
+    background: color-mix(in srgb, var(--green) 10%, transparent);
+    color: var(--green);
+    border-color: color-mix(in srgb, var(--green) 25%, transparent);
+}
+
+.status-badge.disconnected {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+    border-color: color-mix(in srgb, var(--red) 25%, transparent);
+}
+
+.status-badge.connecting {
+    background: color-mix(in srgb, var(--orange) 12%, transparent);
+    color: var(--orange);
+    border-color: color-mix(in srgb, var(--orange) 30%, transparent);
+}
+
+/* ========== ICON CHIPS no card-header ========== */
+.card-header-icon {
+    border-radius: 11px;
+    width: 38px;
+    height: 38px;
+}
+
+.card-header-icon--blue {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.card-header-icon--green {
+    background: color-mix(in srgb, var(--green) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--green) 25%, transparent);
+}
+
+.card-header-icon--orange {
+    background: color-mix(in srgb, var(--orange) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--orange) 25%, transparent);
+}
+
+.card-header-icon--purple {
+    background: color-mix(in srgb, var(--purple) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--purple) 25%, transparent);
+}
+
+.card-header-icon--red {
+    background: color-mix(in srgb, var(--red) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
+}
+
+/* ========== TABS — barra horizontal mais elegante ========== */
+.disparos-tab {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    padding: 10px 16px;
+    border-radius: 10px;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.disparos-tab:hover:not(.disparos-tab--active) {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.disparos-tab--active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+}
+
+/* ========== STATS CARDS (KPIs no topo) ========== */
+.disparos-stat-card,
+.stat-card {
+    border-radius: 14px;
+    padding: 18px 20px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.disparos-stat-card:hover,
+.stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-elev);
+}
+
+/* ========== Inline code chip ========== */
+.inline-code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    padding: 1px 7px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ========== Sidebar links polidos ========== */
+.nav-item {
+    border-radius: 10px;
+    transition: background 0.18s ease, color 0.18s ease;
+    font-weight: 500;
+}
+
+.nav-item:hover:not(.nav-item--active) {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.nav-item--active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* ========== Tabela ========== */
+.table th {
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.table tr {
+    transition: background 0.15s ease;
+}
+
+.table tr:hover td {
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+/* ========== Toast ========== */
+.toast {
+    border-radius: 12px;
+    box-shadow: var(--shadow-pop);
+    border: 1px solid var(--border);
+    font-weight: 500;
+}
+
+/* ========== Dark theme refinements ========== */
+[data-theme="dark"] .card {
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: var(--surface-card);
+}
+
+[data-theme="dark"] .card:hover {
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+[data-theme="dark"] body {
+    background:
+        radial-gradient(1200px 600px at 90% -10%, color-mix(in srgb, var(--accent) 8%, transparent) 0%, transparent 50%),
+        radial-gradient(900px 500px at 0% 30%, color-mix(in srgb, var(--purple) 6%, transparent) 0%, transparent 50%),
+        var(--bg);
+    background-attachment: fixed;
+}
+
+/* ========== Scroll bar premium ========== */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+    background-clip: content-box;
+}
+
+/* ========== Animações subtis ========== */
+@keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card,
+.disparos-stat-card,
+.stat-card {
+    animation: fade-in-up 0.25s ease-out;
+}
+
+/* ========== End Premium Refresh ========== */

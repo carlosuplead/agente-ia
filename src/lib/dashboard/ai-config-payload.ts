@@ -59,6 +59,7 @@ export type AiConfigFormSnapshotInput = {
     cfgSellerNotifyOnAppt: boolean
     cfgSellerNotifyOnHandoff: boolean
     cfgSellerNotifyTemplate: string
+    cfgGoogleCalendarDefaultAttendees: string
 }
 
 export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
@@ -127,7 +128,8 @@ export function buildAiConfigPostBody(i: AiConfigFormSnapshotInput) {
         seller_notification_phones: i.cfgSellerNotifyPhones?.trim() || null,
         seller_notification_on_appointment: i.cfgSellerNotifyOnAppt,
         seller_notification_on_handoff: i.cfgSellerNotifyOnHandoff,
-        seller_notification_message_template: i.cfgSellerNotifyTemplate?.trim() || null
+        seller_notification_message_template: i.cfgSellerNotifyTemplate?.trim() || null,
+        google_calendar_default_attendees: i.cfgGoogleCalendarDefaultAttendees?.trim() || null
     }
     if (i.cfgClearSellerNotifyToken) {
         out.seller_notification_uazapi_token = null

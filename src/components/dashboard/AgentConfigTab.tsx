@@ -871,6 +871,25 @@ export function AgentConfigTab() {
                                                 </select>
                                             )}
                                         </div>
+
+                                        {/* Convidados padrão nos eventos criados pela IA */}
+                                        <div className="input-group" style={{ marginTop: 16 }}>
+                                            <label className="input-label" htmlFor="google-default-attendees">
+                                                Convidados fixos nos eventos
+                                            </label>
+                                            <textarea
+                                                id="google-default-attendees"
+                                                className="input"
+                                                rows={2}
+                                                value={d.cfgGoogleCalendarDefaultAttendees}
+                                                onChange={e => d.setCfgGoogleCalendarDefaultAttendees(e.target.value)}
+                                                placeholder="vendedor@empresa.com, gestor@empresa.com"
+                                                disabled={d.busy || !d.canGoogleCalendarConnect}
+                                            />
+                                            <p className="input-hint">
+                                                Emails (vírgula, ponto-e-vírgula ou nova linha) que vão como convidados em <strong>todos</strong> os eventos criados pela IA. O email do cliente capturado na conversa é juntado automaticamente. O Google envia convite por email a todos com o link do evento.
+                                            </p>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

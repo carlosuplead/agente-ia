@@ -77,6 +77,7 @@ function applyAiConfigToForm(
         setCfgSellerNotifyOnAppt: (v: boolean) => void
         setCfgSellerNotifyOnHandoff: (v: boolean) => void
         setCfgSellerNotifyTemplate: (v: string) => void
+        setCfgGoogleCalendarDefaultAttendees: (v: string) => void
         setCfgAnthropicKeyInput: (v: string) => void
         setCfgClearAnthropicKey: (v: boolean) => void
         setCfgVertexProject: (v: string) => void
@@ -147,6 +148,7 @@ function applyAiConfigToForm(
     setters.setCfgSellerNotifyOnAppt(merged.seller_notification_on_appointment !== false)
     setters.setCfgSellerNotifyOnHandoff(merged.seller_notification_on_handoff !== false)
     setters.setCfgSellerNotifyTemplate(merged.seller_notification_message_template ?? '')
+    setters.setCfgGoogleCalendarDefaultAttendees(merged.google_calendar_default_attendees ?? '')
 }
 
 const dashboardTabIds: DashboardTab[] = [
@@ -294,6 +296,7 @@ export function useDashboardController() {
     const [cfgSellerNotifyOnAppt, setCfgSellerNotifyOnAppt] = useState(true)
     const [cfgSellerNotifyOnHandoff, setCfgSellerNotifyOnHandoff] = useState(true)
     const [cfgSellerNotifyTemplate, setCfgSellerNotifyTemplate] = useState('')
+    const [cfgGoogleCalendarDefaultAttendees, setCfgGoogleCalendarDefaultAttendees] = useState('')
 
     const selectedWs = workspaces.find(w => w.slug === selectedSlug)
 
@@ -395,6 +398,7 @@ export function useDashboardController() {
             cfgSellerNotifyOnAppt,
             cfgSellerNotifyOnHandoff,
             cfgSellerNotifyTemplate,
+            cfgGoogleCalendarDefaultAttendees,
             cfgVertexProject,
             cfgVertexLocation,
             cfgVertexSaJson
@@ -453,6 +457,7 @@ export function useDashboardController() {
             cfgSellerNotifyOnAppt,
             cfgSellerNotifyOnHandoff,
             cfgSellerNotifyTemplate,
+            cfgGoogleCalendarDefaultAttendees,
             cfgVertexProject,
             cfgVertexLocation,
             cfgVertexSaJson
@@ -691,6 +696,7 @@ export function useDashboardController() {
             setCfgSellerNotifyOnAppt,
             setCfgSellerNotifyOnHandoff,
             setCfgSellerNotifyTemplate,
+            setCfgGoogleCalendarDefaultAttendees,
             setCfgAnthropicKeyInput,
             setCfgClearAnthropicKey,
             setCfgElevenApiKeyInput,
@@ -1482,6 +1488,8 @@ export function useDashboardController() {
         setCfgSellerNotifyOnHandoff,
         cfgSellerNotifyTemplate,
         setCfgSellerNotifyTemplate,
+        cfgGoogleCalendarDefaultAttendees,
+        setCfgGoogleCalendarDefaultAttendees,
         newN8nToolRow,
         newFollowupStepRow
     }

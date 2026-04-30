@@ -73,6 +73,8 @@ export type AiConfigRow = {
     seller_notification_on_appointment?: boolean
     seller_notification_on_handoff?: boolean
     seller_notification_message_template?: string | null
+    /** Lista fixa de emails (separados por vírgula/ponto-e-vírgula/nova linha) que serão sempre adicionados como convidados nos eventos criados pela IA. */
+    google_calendar_default_attendees?: string | null
 }
 
 export type MessageRow = {

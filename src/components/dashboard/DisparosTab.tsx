@@ -191,6 +191,9 @@ export function DisparosTab() {
     const [scheduledLocal, setScheduledLocal] = useState('')
     const [maxSendsPerDay, setMaxSendsPerDay] = useState('')
     const [sendTimezone, setSendTimezone] = useState('Europe/Lisbon')
+    /** Lista de chaves extras detectadas nos contactos (para personalização do template). */
+    const [extraFieldKeys, setExtraFieldKeys] = useState<string[]>([])
+    const componentsTextareaRef = useRef<HTMLTextAreaElement>(null)
 
     // Quick send form
     const [quickMessage, setQuickMessage] = useState('')
@@ -229,6 +232,41 @@ export function DisparosTab() {
             setTplLoading(false)
         }
     }, [slug, isOfficial])
+
+    /** Carrega quais colunas extras os contactos têm (para inserir como variáveis nos templates). */
+    const loadExtraFields = useCallback(async () => {
+        if (!slug) { setExtraFieldKeys([]); return }
+        try {
+            const res = await fetch(
+                `/api/workspace/contacts/extra-fields?workspace_slug=${encodeURIComponent(slug)}`,
+                { credentials: 'include' }
+            )
+            const j = await res.json().catch(() => ({}))
+            setExtraFieldKeys(Array.isArray(j.fields) ? j.fields : [])
+        } catch {
+            setExtraFieldKeys([])
+        }
+    }, [slug])
+
+    /** Insere `{{var:nome_coluna}}` no textarea de componentes JSON na posição do cursor. */
+    const insertVariableToken = useCallback((key: string) => {
+        const ta = componentsTextareaRef.current
+        const token = `{{var:${key}}}`
+        if (!ta) {
+            setComponentsJson(v => (v && v !== '[]' ? v : `[{"type":"body","parameters":[{"type":"text","text":"${token}"}]}]`))
+            return
+        }
+        const start = ta.selectionStart ?? ta.value.length
+        const end = ta.selectionEnd ?? ta.value.length
+        const next = ta.value.slice(0, start) + token + ta.value.slice(end)
+        setComponentsJson(next)
+        // re-foca e posiciona cursor depois do token inserido
+        setTimeout(() => {
+            ta.focus()
+            const pos = start + token.length
+            ta.setSelectionRange(pos, pos)
+        }, 0)
+    }, [])
 
     const loadContacts = useCallback(async () => {
         if (!slug) {
@@ -275,11 +313,11 @@ export function DisparosTab() {
     const refreshAll = useCallback(async () => {
         setLoading(true)
         try {
-            await Promise.all([loadTemplates(), loadContacts(), loadBroadcasts()])
+            await Promise.all([loadTemplates(), loadContacts(), loadBroadcasts(), loadExtraFields()])
         } finally {
             setLoading(false)
         }
-    }, [loadTemplates, loadContacts, loadBroadcasts])
+    }, [loadTemplates, loadContacts, loadBroadcasts, loadExtraFields])
 
     useEffect(() => {
         void refreshAll()
@@ -389,7 +427,7 @@ export function DisparosTab() {
                 message: `Importação concluída: ${up} contacto(s) guardados.${errN ? ` ${errN} avisos.` : ''}`,
                 variant: errN ? 'error' : 'success'
             })
-            await loadContacts()
+            await Promise.all([loadContacts(), loadExtraFields()])
         } finally {
             setImporting(false)
             // small delay so users see the 100% flash before it disappears
@@ -1106,17 +1144,71 @@ export function DisparosTab() {
                                         Componentes (JSON)
                                     </label>
                                     <textarea
+                                        ref={componentsTextareaRef}
                                         id="bc-comp"
                                         className="input"
-                                        rows={3}
+                                        rows={4}
                                         value={componentsJson}
                                         onChange={e => setComponentsJson(e.target.value)}
                                         disabled={!canManage || loading}
-                                        placeholder='[{"type":"body","parameters":[{"type":"text","text":"João"}]}]'
+                                        placeholder='[{"type":"body","parameters":[{"type":"text","text":"{{var:nome}}"}]}]'
                                     />
                                     <p className="input-hint">
                                         Se o template não tiver variáveis, deixe <code className="inline-code">[]</code>.
+                                        Para personalizar por contacto, usa <code className="inline-code">{`{{var:nome_da_coluna}}`}</code> — o valor é substituído por contacto a partir do CSV/XLSX importado.
                                     </p>
+
+                                    {/* Variable picker — colunas detectadas nos contactos */}
+                                    {(extraFieldKeys.length > 0 || true) && (
+                                        <div
+                                            style={{
+                                                marginTop: 8,
+                                                padding: 10,
+                                                border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+                                                borderRadius: 8,
+                                                background: 'color-mix(in srgb, var(--accent) 5%, transparent)'
+                                            }}
+                                        >
+                                            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                                                Variáveis disponíveis (clica para inserir):
+                                            </div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                {/* Atalhos universais — sempre disponíveis (vêm do contacto) */}
+                                                {['nome', 'telefone'].map(k => (
+                                                    <button
+                                                        key={`builtin-${k}`}
+                                                        type="button"
+                                                        className="btn btn-secondary"
+                                                        style={{ padding: '3px 9px', fontSize: 12 }}
+                                                        onClick={() => insertVariableToken(k)}
+                                                        disabled={!canManage || loading}
+                                                        title={`Insere {{var:${k}}}`}
+                                                    >
+                                                        {`{{var:${k}}}`}
+                                                    </button>
+                                                ))}
+                                                {/* Colunas detectadas no CSV importado */}
+                                                {extraFieldKeys.map(k => (
+                                                    <button
+                                                        key={`extra-${k}`}
+                                                        type="button"
+                                                        className="btn btn-secondary"
+                                                        style={{ padding: '3px 9px', fontSize: 12 }}
+                                                        onClick={() => insertVariableToken(k)}
+                                                        disabled={!canManage || loading}
+                                                        title={`Insere {{var:${k}}}`}
+                                                    >
+                                                        {`{{var:${k}}}`}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {extraFieldKeys.length === 0 && (
+                                                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
+                                                    Para mais variáveis: importa um CSV/XLSX com colunas extras (ex: <code className="inline-code">pedido</code>, <code className="inline-code">valor</code>) — aparecerão aqui automaticamente.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="input-group" style={{ marginBottom: 12 }}>

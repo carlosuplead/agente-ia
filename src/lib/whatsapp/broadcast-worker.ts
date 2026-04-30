@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
 import { sendTemplateMessage, type TemplateMessageComponent } from '@/lib/meta/templates'
+import { applyVariablesToComponents } from '@/lib/whatsapp/template-variables'
 
 const DEFAULT_BATCH = 5
 const DEFAULT_DELAY_MS = 1500
@@ -137,10 +138,14 @@ export async function processBroadcastQueueBatch(
         }
 
         const sch = quotedSchema(item.workspace_slug)
-        const contacts = await sql.unsafe(`SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`, [
-            item.contact_id
-        ])
-        const phone = (contacts[0] as { phone?: string } | undefined)?.phone
+        const contacts = await sql.unsafe(
+            `SELECT phone, name, extra_fields FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
+            [item.contact_id]
+        )
+        const contact = contacts[0] as
+            | { phone?: string; name?: string; extra_fields?: Record<string, unknown> }
+            | undefined
+        const phone = contact?.phone
         if (!phone) {
             await failQueueItem(supabase, item, 'Contacto sem telefone')
             processed++
@@ -148,7 +153,10 @@ export async function processBroadcastQueueBatch(
             continue
         }
 
-        const components = normalizeComponents(b.template_components)
+        const components = applyVariablesToComponents(
+            normalizeComponents(b.template_components),
+            { name: contact?.name, phone, extra_fields: contact?.extra_fields }
+        )
 
         try {
             const result = await sendTemplateMessage({

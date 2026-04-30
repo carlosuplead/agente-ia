@@ -7,7 +7,13 @@ import * as XLSX from 'xlsx'
 const MAX_ROWS = 5000
 const MAX_ERRORS_RETURNED = 50
 
-type ParsedRow = { phone: string; name: string; lineNum: number }
+type ParsedRow = {
+    phone: string
+    name: string
+    lineNum: number
+    /** Colunas extras detectadas (lowercase, sem acentos). Usado para variáveis em broadcasts. */
+    extras: Record<string, string>
+}
 
 // Aliases conhecidos para auto-detect das colunas (case-insensitive, sem acentos).
 const PHONE_ALIASES = [
@@ -56,6 +62,17 @@ function detectColumns(firstRow: unknown[]): { phoneIdx: number; nameIdx: number
 function parseRows(rows: unknown[][]): ParsedRow[] {
     if (rows.length === 0) return []
     const { phoneIdx, nameIdx, hasHeader } = detectColumns(rows[0] as unknown[])
+    // Mapeia o índice de cada coluna "extra" -> nome canônico (lowercase, sem acentos).
+    // Quando há header, usamos os nomes do header. Sem header, geramos col_3, col_4, ...
+    const headerRow = rows[0] as unknown[]
+    const extraColumnNames: Record<number, string> = {}
+    for (let i = 0; i < headerRow.length; i++) {
+        if (i === phoneIdx || i === nameIdx) continue
+        const rawName = hasHeader ? normalizeHeader(String(headerRow[i] ?? '')) : `col_${i + 1}`
+        const cleaned = rawName.replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+        if (cleaned) extraColumnNames[i] = cleaned
+    }
+
     const out: ParsedRow[] = []
     const startIdx = hasHeader ? 1 : 0
     for (let i = startIdx; i < rows.length; i++) {
@@ -66,7 +83,16 @@ function parseRows(rows: unknown[][]): ParsedRow[] {
         const phone = normalizePhone(phoneRaw)
         if (!phone) continue
         const name = String(nameRaw ?? '').trim().slice(0, 500) || 'Sem nome'
-        out.push({ phone, name, lineNum: i + 1 })
+
+        const extras: Record<string, string> = {}
+        for (const [idxStr, key] of Object.entries(extraColumnNames)) {
+            const v = row[Number(idxStr)]
+            if (v === undefined || v === null) continue
+            const text = String(v).trim()
+            if (text) extras[key] = text.slice(0, 500)
+        }
+
+        out.push({ phone, name, lineNum: i + 1, extras })
     }
     return out
 }
@@ -203,9 +229,13 @@ export async function POST(request: Request) {
 
             try {
                 await sql.unsafe(
-                    `INSERT INTO ${sch}.contacts (phone, name) VALUES ($1, $2)
-                     ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()`,
-                    [row.phone, row.name]
+                    `INSERT INTO ${sch}.contacts (phone, name, extra_fields)
+                     VALUES ($1, $2, $3::jsonb)
+                     ON CONFLICT (phone) DO UPDATE
+                       SET name = EXCLUDED.name,
+                           extra_fields = COALESCE(contacts.extra_fields, '{}'::jsonb) || EXCLUDED.extra_fields,
+                           updated_at = NOW()`,
+                    [row.phone, row.name, JSON.stringify(row.extras || {})]
                 )
                 upserted++
             } catch (e) {

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTenantSql, quotedSchema } from '@/lib/db/tenant-sql'
+import { applyVariablesToComponents } from '@/lib/whatsapp/template-variables'
 
 /**
  * Dispatcher n8n-first: em vez de chamar Meta/UAZAPI directamente, empacota
@@ -192,9 +193,12 @@ async function failItem(
     }
 }
 
-function normalizeComponents(raw: unknown): unknown {
+function normalizeComponents(raw: unknown): import('@/lib/meta/templates').TemplateMessageComponent[] {
     if (!raw || !Array.isArray(raw)) return []
-    return raw
+    return raw.filter(
+        (c): c is import('@/lib/meta/templates').TemplateMessageComponent =>
+            typeof c === 'object' && c !== null && typeof (c as { type?: unknown }).type === 'string'
+    )
 }
 
 export async function dispatchBatchToN8n(
@@ -282,10 +286,13 @@ export async function dispatchBatchToN8n(
         // Contact phone (per-tenant schema)
         const sch = quotedSchema(item.workspace_slug)
         const contacts = await sql.unsafe(
-            `SELECT phone FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
+            `SELECT phone, name, extra_fields FROM ${sch}.contacts WHERE id = $1::uuid LIMIT 1`,
             [item.contact_id]
         )
-        const rawPhone = (contacts[0] as { phone?: string } | undefined)?.phone?.trim()
+        const contact = contacts[0] as
+            | { phone?: string; name?: string; extra_fields?: Record<string, unknown> }
+            | undefined
+        const rawPhone = contact?.phone?.trim()
         if (!rawPhone) {
             await failItem(supabase, item, 'Contacto sem telefone')
             errors.push(`${item.id}: Contacto sem telefone`)
@@ -297,6 +304,11 @@ export async function dispatchBatchToN8n(
             errors.push(`${item.id}: Telefone inválido`)
             continue
         }
+
+        const personalizedComponents = applyVariablesToComponents(
+            normalizeComponents(broadcast.template_components),
+            { name: contact?.name, phone: rawPhone, extra_fields: contact?.extra_fields }
+        )
 
         payloadItems.push({
             queue_item_id: item.id,
@@ -313,7 +325,7 @@ export async function dispatchBatchToN8n(
                 kind: 'template',
                 template_name: broadcast.template_name,
                 template_language: broadcast.template_language,
-                template_components: normalizeComponents(broadcast.template_components)
+                template_components: personalizedComponents
             }
         })
         claimedItems.push(item)

@@ -21,12 +21,41 @@ import {
     Zap
 } from 'lucide-react'
 
+type MetaTplComponent = {
+    type?: string  // HEADER | BODY | FOOTER | BUTTONS
+    format?: string  // TEXT | IMAGE | VIDEO | DOCUMENT
+    text?: string
+    buttons?: Array<{ type?: string; text?: string; url?: string; phone_number?: string }>
+    example?: { body_text?: string[][]; header_text?: string[] }
+}
+
 type MetaTpl = {
     id?: string
     name: string
     language?: string
     status?: string
     category?: string
+    components?: MetaTplComponent[]
+}
+
+/** Extrai todos os números de variáveis (`{{1}}`, `{{2}}`...) de um texto. */
+function extractTemplateVarNumbers(text: string | undefined | null): number[] {
+    if (!text) return []
+    const found = new Set<number>()
+    for (const m of String(text).matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+        const n = parseInt(m[1], 10)
+        if (Number.isFinite(n) && n > 0) found.add(n)
+    }
+    return Array.from(found).sort((a, b) => a - b)
+}
+
+/** Cor de fundo da pill conforme categoria do template. */
+function categoryStyle(category?: string): { bg: string; color: string; label: string } {
+    const c = String(category || '').toUpperCase()
+    if (c === 'MARKETING') return { bg: 'rgba(168,85,247,.15)', color: '#a855f7', label: 'Marketing' }
+    if (c === 'AUTHENTICATION') return { bg: 'rgba(245,158,11,.15)', color: '#f59e0b', label: 'Autenticação' }
+    if (c === 'UTILITY') return { bg: 'rgba(16,185,129,.15)', color: '#10b981', label: 'Utilidade' }
+    return { bg: 'rgba(111,127,160,.15)', color: '#6f7fa0', label: c || '—' }
 }
 
 type ContactRow = { id: string; phone: string; name: string; avatar_url?: string | null }
@@ -333,6 +362,40 @@ export function DisparosTab() {
         if (isOfficial) setLayoutPreview(false)
     }, [isOfficial])
 
+    /**
+     * Auto-popula o JSON de Componentes quando o utilizador escolhe um template.
+     * Detecta as variáveis ({{1}}, {{2}}…) usadas no header/body/footer e cria
+     * a estrutura de parameters correspondente, pré-preenchida com `{{var:nome}}`
+     * (que depois é substituído por contacto). Não sobrescreve se o user já tiver
+     * editado manualmente para algo diferente de `[]`.
+     */
+    useEffect(() => {
+        if (!tplKey) return
+        if (componentsJson.trim() && componentsJson.trim() !== '[]') return  // user já mexeu — não sobrescrever
+        const [tname, tlang] = tplKey.split('||')
+        const tpl = templates.find(t => t.name === tname && (t.language || 'pt_BR') === tlang)
+        if (!tpl?.components) return
+        const out: Array<{ type: string; parameters: Array<{ type: 'text'; text: string }> }> = []
+        for (const c of tpl.components) {
+            const ctype = String(c.type || '').toLowerCase()
+            if (!['header', 'body', 'footer'].includes(ctype)) continue
+            const nums = extractTemplateVarNumbers(c.text)
+            if (nums.length === 0) continue
+            const parameters = nums.map((_, idx) => ({
+                type: 'text' as const,
+                // Por defeito, primeira var = nome do contacto, restantes ficam vazias
+                text: idx === 0 ? '{{var:nome}}' : ''
+            }))
+            out.push({ type: ctype, parameters })
+        }
+        if (out.length > 0) {
+            setComponentsJson(JSON.stringify(out, null, 2))
+        } else {
+            setComponentsJson('[]')
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tplKey, templates])
+
     function toggleContact(id: string) {
         setSelectedIds(prev => {
             const n = new Set(prev)
@@ -609,6 +672,32 @@ export function DisparosTab() {
     const displayBroadcasts = broadcasts.length > 0 ? broadcasts : layoutPreview ? PREVIEW_BROADCASTS : []
 
     const approvedOptions = displayTemplates.filter(t => String(t.status || '').toUpperCase() === 'APPROVED')
+
+    /** Template atualmente seleccionado (para preview). */
+    const selectedTpl = (() => {
+        if (!tplKey) return null
+        const [name, lang] = tplKey.split('||')
+        return approvedOptions.find(t => t.name === name && (t.language || 'pt_BR') === lang) || null
+    })()
+
+    /** Helpers que extraem texto por tipo de componente do template selecionado. */
+    function selectedTplPart(type: 'HEADER' | 'BODY' | 'FOOTER'): MetaTplComponent | null {
+        if (!selectedTpl?.components) return null
+        return selectedTpl.components.find(c => String(c.type || '').toUpperCase() === type) || null
+    }
+    function selectedTplButtons(): Array<{ type?: string; text?: string }> {
+        if (!selectedTpl?.components) return []
+        const btn = selectedTpl.components.find(c => String(c.type || '').toUpperCase() === 'BUTTONS')
+        return Array.isArray(btn?.buttons) ? btn!.buttons! : []
+    }
+    /** Coleta números de variáveis usados em header+body+footer. */
+    function selectedTplVarNumbers(): { header: number[]; body: number[]; footer: number[] } {
+        return {
+            header: extractTemplateVarNumbers(selectedTplPart('HEADER')?.text),
+            body: extractTemplateVarNumbers(selectedTplPart('BODY')?.text),
+            footer: extractTemplateVarNumbers(selectedTplPart('FOOTER')?.text)
+        }
+    }
     const actionsLive = isOfficial && canManage
 
     const contactPages = Math.max(1, Math.ceil(contactsTotal / CONTACT_PAGE) || 1)
@@ -1138,6 +1227,125 @@ export function DisparosTab() {
                                         })}
                                     </select>
                                 </div>
+
+                                {/* Preview do template selecionado */}
+                                {selectedTpl && (
+                                    <div
+                                        style={{
+                                            margin: '0 0 14px',
+                                            padding: 14,
+                                            border: '1px solid var(--border-color, #2a3f6b)',
+                                            borderRadius: 10,
+                                            background: 'color-mix(in srgb, var(--accent) 4%, transparent)'
+                                        }}
+                                    >
+                                        {/* Header com nome, idioma e categoria */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 700, fontSize: 14 }}>{selectedTpl.name}</span>
+                                            <span
+                                                style={{
+                                                    fontSize: 11,
+                                                    padding: '2px 8px',
+                                                    borderRadius: 100,
+                                                    background: 'rgba(111,127,160,.15)',
+                                                    color: 'var(--text-secondary)',
+                                                    fontFamily: 'ui-monospace, monospace'
+                                                }}
+                                            >
+                                                {selectedTpl.language || 'pt_BR'}
+                                            </span>
+                                            {(() => {
+                                                const cat = categoryStyle(selectedTpl.category)
+                                                return (
+                                                    <span
+                                                        style={{
+                                                            fontSize: 11,
+                                                            padding: '2px 8px',
+                                                            borderRadius: 100,
+                                                            background: cat.bg,
+                                                            color: cat.color,
+                                                            fontWeight: 600
+                                                        }}
+                                                    >
+                                                        {cat.label}
+                                                    </span>
+                                                )
+                                            })()}
+                                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 100, background: 'rgba(16,185,129,.15)', color: '#10b981' }}>
+                                                ✓ Aprovado
+                                            </span>
+                                        </div>
+
+                                        {/* Mockup tipo bolha WhatsApp */}
+                                        <div
+                                            style={{
+                                                background: 'linear-gradient(180deg, #d9fdd3 0%, #c8f7c5 100%)',
+                                                color: '#111',
+                                                padding: '10px 14px',
+                                                borderRadius: 12,
+                                                borderTopLeftRadius: 4,
+                                                fontSize: 13.5,
+                                                lineHeight: 1.55,
+                                                whiteSpace: 'pre-wrap',
+                                                fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                                                maxWidth: 540,
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                            }}
+                                        >
+                                            {selectedTplPart('HEADER')?.text && (
+                                                <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                                                    {selectedTplPart('HEADER')!.text}
+                                                </div>
+                                            )}
+                                            {selectedTplPart('BODY')?.text && (
+                                                <div>{selectedTplPart('BODY')!.text}</div>
+                                            )}
+                                            {selectedTplPart('FOOTER')?.text && (
+                                                <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                                                    {selectedTplPart('FOOTER')!.text}
+                                                </div>
+                                            )}
+                                            {selectedTplButtons().length > 0 && (
+                                                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,.12)' }}>
+                                                    {selectedTplButtons().map((b, i) => (
+                                                        <div key={i} style={{
+                                                            color: '#0066cc',
+                                                            fontSize: 13,
+                                                            textAlign: 'center',
+                                                            padding: '4px 8px',
+                                                            background: 'rgba(0,102,204,.08)',
+                                                            borderRadius: 6
+                                                        }}>
+                                                            {b.text || '(botão)'}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Resumo das variáveis detectadas */}
+                                        {(() => {
+                                            const v = selectedTplVarNumbers()
+                                            const total = v.header.length + v.body.length + v.footer.length
+                                            if (total === 0) {
+                                                return (
+                                                    <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                        Este template não tem variáveis. Vai enviar a mensagem igual para todos os contactos.
+                                                    </p>
+                                                )
+                                            }
+                                            const parts: string[] = []
+                                            if (v.header.length) parts.push(`${v.header.length} no header`)
+                                            if (v.body.length) parts.push(`${v.body.length} no body`)
+                                            if (v.footer.length) parts.push(`${v.footer.length} no footer`)
+                                            return (
+                                                <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                    Variáveis detectadas: <strong>{total}</strong> ({parts.join(', ')}). Já preenchi o JSON abaixo com placeholders — substitui por <code className="inline-code">{`{{var:coluna}}`}</code> ou texto fixo.
+                                                </p>
+                                            )
+                                        })()}
+                                    </div>
+                                )}
 
                                 <div className="input-group" style={{ marginBottom: 12 }}>
                                     <label className="input-label" htmlFor="bc-comp">

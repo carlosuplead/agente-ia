@@ -98,6 +98,8 @@ export type AiAgentConfig = {
     seller_notification_on_handoff?: boolean
     /** Template de mensagem. Placeholders: {nome}, {telefone}, {email}, {agendamento}, {resumo}, {vendedor}, {motivo}. */
     seller_notification_message_template?: string | null
+    /** Lista fixa de emails (separados por vírgula/ponto-e-vírgula/nova linha) que serão sempre adicionados como convidados nos eventos criados pela IA. O email do cliente capturado na conversa é juntado a esta lista. */
+    google_calendar_default_attendees?: string | null
 }
 
 export type VoiceDeliveryRecord = {

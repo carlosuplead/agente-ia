@@ -23,7 +23,8 @@
     "openai": "^4.85.0",
     "postgres": "^3.4.8",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/luxon": "^3.7.1",

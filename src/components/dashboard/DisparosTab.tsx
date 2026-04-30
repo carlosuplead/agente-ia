@@ -711,12 +711,42 @@ export function DisparosTab() {
                         </div>
                     </div>
 
+                    {/* Padrão aceito (instruções claras) */}
+                    <div
+                        style={{
+                            padding: '12px 14px',
+                            margin: '0 0 12px',
+                            border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+                            borderRadius: 8,
+                            background: 'color-mix(in srgb, var(--accent) 6%, transparent)',
+                            fontSize: 13,
+                            lineHeight: 1.55,
+                            color: 'var(--text-primary)'
+                        }}
+                    >
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                            Formato aceite (CSV, XLSX, XLS, ODS)
+                        </div>
+                        <div style={{ marginBottom: 6 }}>
+                            Tens de ter pelo menos uma coluna de telefone. O sistema reconhece automaticamente colunas chamadas:
+                            {' '}<code>telefone</code>, <code>phone</code>, <code>celular</code>, <code>whatsapp</code>, <code>numero</code>, <code>contato</code>.
+                            Coluna de nome (opcional): <code>nome</code>, <code>name</code>, <code>cliente</code>, <code>lead</code>.
+                        </div>
+                        <div style={{ marginBottom: 6 }}>
+                            <strong>Telefones aceites:</strong> qualquer formatação com 9 a 15 dígitos. Ex:
+                            {' '}<code>+5521987654321</code>, <code>5521987654321</code>, <code>(21) 98765-4321</code>, <code>21987654321</code>.
+                        </div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                            Sem header? Põe o telefone na 1ª coluna e o nome na 2ª — funciona na mesma.
+                        </div>
+                    </div>
+
                     {/* Import actions */}
                     <div className="disparos-actions-bar">
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            accept=".csv,text/csv,.xlsx,.xls,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet"
                             style={{ display: 'none' }}
                             onChange={onPickImportFile}
                         />

@@ -845,7 +845,7 @@ export function AtividadeTab() {
                                     {/* Handoff */}
                                     {selectedRun.meta.extras.handoff?.triggered && (
                                         <div style={{ marginBottom: 16, padding: '10px 12px', background: 'color-mix(in srgb, var(--orange, #f59e0b) 10%, transparent)', borderRadius: 8, fontSize: 13, color: 'var(--orange, #f59e0b)' }}>
-                                            <strong>🔄 Handoff acionado</strong>
+                                            <strong>Handoff acionado</strong>
                                             {selectedRun.meta.extras.handoff.reason && (
                                                 <div style={{ marginTop: 4, fontSize: 12 }}>
                                                     Motivo: {selectedRun.meta.extras.handoff.reason}

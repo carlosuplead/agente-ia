@@ -18,7 +18,10 @@ import {
     Play,
     Pause,
     XCircle,
-    Zap
+    Zap,
+    Smartphone,
+    BadgeCheck,
+    AlertCircle
 } from 'lucide-react'
 
 type MetaTplComponent = {
@@ -730,8 +733,9 @@ export function DisparosTab() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <h2>Disparos</h2>
                             {isConnected && (
-                                <span className={`status-badge ${isOfficial ? 'connected' : 'connecting'}`} style={{ fontSize: 11, padding: '2px 10px' }}>
-                                    {isOfficial ? '⚡ API Oficial Meta' : '🔌 Número Pessoal'}
+                                <span className={`status-badge ${isOfficial ? 'connected' : 'connecting'}`} style={{ fontSize: 11, padding: '4px 11px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    {isOfficial ? <BadgeCheck size={13} /> : <Smartphone size={13} />}
+                                    {isOfficial ? 'API Oficial Meta' : 'Número Pessoal'}
                                 </span>
                             )}
                             {!isConnected && (
